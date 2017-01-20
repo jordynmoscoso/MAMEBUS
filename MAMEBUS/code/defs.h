@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "nsode.h"
 
@@ -82,6 +83,9 @@ typedef struct paramdata
     bool read;
 }
 paramdata;
+
+// Vertical stretching function
+real stretch_ROMS (real sigma, real h_c, real theta_s, real theta_b, real h_b);
 
 // To define input parameters
 void setParam (paramdata * params, uint idx, char * name, char * type, void * pvar, bool read);
