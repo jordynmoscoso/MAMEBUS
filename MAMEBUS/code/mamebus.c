@@ -388,15 +388,19 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
  * Surface structure function for the modified Ferrari et al. (2008) boundary layer parameterization. Aligns the slope used
  * to calculate the eddy streamfunction and symmetric diffusion tensor with the ocean surface as the surface is approached.
  *
+ * z is the current vertical position
+ * h_sml is the surface mixed layer thickness
+ * _lambda is the reciprocal of the vertical eddy lengthscale at the SML base, and defines the vertical derivative of G at the SML base
+ *
  */
-real surfStructFun (real z, real h_sml, real lambda)
+real surfStructFun (real z, real h_sml, real _lambda)
 {
   real G = 1.0;
 
   if (z > -h_sml)
   {
-    G = -z/h_sml;
-//    G = -(1+h_sml/lambda)*SQUARE(z/h_sml) - (2+h_sml/lambda)*(z/h_sml);
+    //G = -z/h_sml;
+    G = -(1+h_sml*_lambda)*SQUARE(z/h_sml) - (2+h_sml*_lambda)*(z/h_sml);
   }
   
   return G;
@@ -491,7 +495,7 @@ void calcSlopes (     const real        t,
   real G_sml, G_bbl, G_slope;
   real z;
   real d2b_dz2;
-  real lambda_sml,lambda_bbl;
+  real _lambda_sml, _lambda_bbl;
   
 #pragma parallel
   
@@ -516,9 +520,9 @@ void calcSlopes (     const real        t,
       // Buoyancy gradient at SML base
       db_dz_sml = db_dz[k_sml[j]]*wp_sml[j] + db_dz[k_sml[j]+1]*wn_sml[j];
 
-      // Calculate vertical eddy length scale at SML base
+      // Calculate reciprocal of vertical eddy length scale at SML base
       d2b_dz2 = (db_dz[k_sml[j]+1]-db_dz[k_sml[j]]) / (ZZ_psi[j][k_sml[j]+1]-ZZ_psi[j][k_sml[j]]);
-      lambda_sml = - d2b_dz2 / db_dz_sml;
+      _lambda_sml = - d2b_dz2 / db_dz_sml;
     }
     if (use_bbl)
     {
@@ -537,7 +541,7 @@ void calcSlopes (     const real        t,
       if (use_sml && (z > -Hsml))
       {
         // TODO calculate lambda
-        G_sml = surfStructFun(z,Hsml,lambda_sml);
+        G_sml = surfStructFun(z,Hsml,_lambda_sml);
         Sgm_psi[j][k] = - G_sml * db_dx[k] / db_dz_sml;
       }
       else if (use_bbl && (z < -hb_psi[j] + Hbbl))
