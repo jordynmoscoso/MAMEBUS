@@ -1,38 +1,48 @@
 %%%
 %%% createRunScript.m
 %%%
-%%% Convenience function to create a run script for the Overturning code.
+%%% Convenience function to create a run script for the MAMEBUS code.
 %%%
-function createRunScript (sub_dir,run_name,exec_name,use_cluster,walltime,parallel_run)
+%%% local_home_dir - Directory in which to put the run on the local system
+%%% run_name - Name for the folder containing the run files
+%%% exec_name - Name of the MAMEBUS executable
+%%% use_cluster - Set true to set up scripts to run on a remote cluster
+%%% cluster_username - User login name for the cluster
+%%% cluster_address - Cluster DNS identifier (e.g. stampede.tacc.xsede.org)
+%%% cluster_home_dir - Directory into which the run directory should be
+%%%                    copied on the remote cluster
+%%% walltime - Max. execution time on the remote cluster
+%%% 
+%%% 
+%%%
+function createRunScript (local_home_dir,run_name,exec_name, ...
+                          use_cluster,cluster_username,cluster_address, ...
+                          cluster_home_dir,walltime)
 
-  %%% File/directory names
-  local_home_dir = fullfile(pwd,'../runs');
-  local_sub_dir = fullfile(local_home_dir,sub_dir);
-  local_run_dir = fullfile(local_sub_dir,run_name);
-  cluster_home_dir = '~/MAMEBUS/runs/';  %%% N.B. THIS NEEDS TO BE SPECIFIED IF EXECUTING ON A COMPUTING CLUSTER
-  cluster_sub_dir = fullfile(cluster_home_dir,sub_dir);
-  cluster_run_dir = fullfile(cluster_sub_dir,run_name);  
-  pbsfname = 'pbs_run';
-  pbsdirname = fullfile(local_run_dir,pbsfname);
+  %%% File/directory names      
+  local_run_dir = fullfile(local_home_dir,run_name);
+  pbsfname = fullfile(local_run_dir,'pbs_run');
   upfname = fullfile(local_run_dir,'upload.sh');
   downfname = fullfile(local_run_dir,'download.sh');
   cleanfname = fullfile(local_run_dir,'clean.sh');
   sfname = fullfile(local_run_dir,'run.sh');
+  
+  %%% Copy code files over
+  if (~copyfile('../code/*',local_run_dir))
+    error(['Could not copy code files to ',local_run_dir]);
+  end
   
   %%% Create a script file to run the code
   sfid = fopen(sfname,'w');
   if (sfid == -1)
     error(['Could not open ',sfname]);
   end    
-  if (use_cluster)
-    run_str = [fullfile(cluster_home_dir,'../code/',strtrim(exec_name)),' ',run_name,'_in ','.\n'];
-  else
-    run_str = [fullfile(local_home_dir,'../code/',strtrim(exec_name)),' ',run_name,'_in ','.\n'];
-  end
+  run_str = ['./',strtrim(exec_name),' ',run_name,'_in ','.\n']; 
     
   %%% If we're using the cluster, create a PBS run script
-  if (use_cluster && ~parallel_run)     
+  if (use_cluster)     
   
+    %%% TODO this needs to be edited
     pbsstr = strcat( ...
       '#!/bin/bash -f\n', ...
       '#PBS -l nodes=1 \n', ...
@@ -83,15 +93,15 @@ function createRunScript (sub_dir,run_name,exec_name,use_cluster,walltime,parall
     fprintf(sfid,['qsub ',pbsfname,' > output.txt']);
     
     %%% Create the PBS run script
-    pbsfid = fopen(pbsdirname,'w');
+    pbsfid = fopen(pbsfname,'w');
     if (pbsfid == -1)
-      error(['Could not open ',pbsdirname]);
+      error(['Could not open ',pbsfname]);
     end
     fprintf(pbsfid,pbsstr);
     fclose(pbsfid);
     
     %%% Create a file to upload the run to the cluster    
-    upstr = ['scp -r ',fullfile('..',run_name),' astewart@ardbeg.gps.caltech.edu:',cluster_sub_dir];
+    upstr = ['scp -r ',fullfile('..',run_name),' ',strtrim(cluster_username),'@',strtrim(cluster_address),':',strtrim(cluster_home_dir)];
     upfid = fopen(upfname,'w');
     if (upfid == -1)
       error(['Could not open ',upfname]);
@@ -100,7 +110,7 @@ function createRunScript (sub_dir,run_name,exec_name,use_cluster,walltime,parall
     fclose(upfid);
     
     %%% Create a file to download the run from the cluster
-    downstr = ['scp -r astewart@ardbeg.gps.caltech.edu:',cluster_run_dir,' ../'];
+    downstr = ['scp -r ',strtrim(cluster_username),'@',strtrim(cluster_address),':',strtrim(cluster_home_dir),'/',strtrim(run_name),' ../'];
     downfid = fopen(downfname,'w');
     if (downfid == -1)
       error(['Could not open ',downfname]);

@@ -8,7 +8,6 @@
   *
   */
 #include <time.h>
-#include <math.h>
 
 #include "rktvd.h"
 #include "defs.h"
@@ -16,7 +15,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 20
+#define NPARAMS 25
 
 
 
@@ -34,9 +33,13 @@ int Ntot = 0;
 // Physical parameters
 real Lx = 0;
 real Lz = 0;
-real Kconv0 = 1000;
+real Kconv0 = 10;
 real rho0 = 1e3;
 real f0 = 1e-4;
+bool use_sml = true;
+bool use_bbl = true;
+real Hsml = 50.0;
+real Hbbl = 50.0;
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
@@ -49,29 +52,36 @@ real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
 
 // Numerical parameters
-real sigma = 1.4;       // Kurganov-Tadmor minmod-limiting parameter
-bool limSlopes = true;  // Use Cox slope limiting
-real Smax = 0.002;       // Max isopycnal slope
-const int idx_buoy = 0; // Index of buoyancy variable in list of tracers
+real sigma = 1.4;         // Kurganov-Tadmor minmod-limiting parameter
+bool limSlopes = false;    // Use Cox slope limiting
+real Smax = 0.1;        // Max isopycnal slope
+const int idx_buoy = 0;   // Index of buoyancy variable in list of tracers
+
+// Grid parameters
+real h_c = 1e16;
+real theta_s = 0;
+real theta_b = 0;
 
 // Grid spacings
+real ds = 0;
 real dx = 0;
 real _dx = 0;
 real _2dx = 0;
 real dxsq = 0;
-real dt_dzsq = 0;
-real * dz_phi = NULL;
-real * dz_psi = NULL;
-real * _dz_phi = NULL;
-real * _dz_psi = NULL;
-real * _2dz_phi = NULL;
-real * _2dz_psi = NULL;
-real * dzsq_phi = NULL;
-real * dzsq_psi = NULL;
-real * hb_phi = NULL;
+real * sigma_phi = NULL;  // Stretched coordinate grids
+real * sigma_psi = NULL;
+real ** _dz_phi = NULL;   // Grid spacings
+real ** _2dz_phi = NULL;
+real ** _dzsq_psi = NULL;
+real ** _dz_w = NULL;
+real ** _dzsq_w = NULL;
+real ** dz_u = NULL;
+real ** _dz_u = NULL;
+real * hb_phi = NULL;     // Ocean depths and bottom slope
 real * hb_psi = NULL;
 real * sb_phi = NULL;
 real * sb_psi = NULL;
+real ** ZZ_phi = NULL;    // Depth grids
 real ** ZZ_psi = NULL;
 real ** ZZ_u = NULL;
 real ** ZZ_w = NULL;
@@ -86,6 +96,10 @@ const uint method_t = METHOD_RKTVD2;
 const uint method_s = METHOD_KT;
 
 // Output filenames
+static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
+static const char OUTN_ZZ_PSI[] = "ZZ_PSI";
+static const char OUTN_ZZ_U[] = "ZZ_U";
+static const char OUTN_ZZ_W[] = "ZZ_W";
 static const char OUTN_PSIM[] = "PSIM";
 static const char OUTN_PSIE[] = "PSIE";
 static const char OUTN_PSIR[] = "PSIR";
@@ -99,6 +113,8 @@ real ** HHx = NULL;           // Hyperbolic tracer fluxes
 real ** HHz = NULL;
 real ** PPx = NULL;           // Parabolic tracer fluxes
 real ** PPz = NULL;
+real ** FFx = NULL;           // Diabatic surface/bottom boundary layer fluxes
+real ** FFz = NULL;
 real ** psi_r = NULL;         // Residual streamfunction
 real ** u_r = NULL;
 real ** w_r = NULL;
@@ -110,10 +126,10 @@ real ** phi_xp = NULL;        // Extrapolated tracer values on cell faces
 real ** phi_xm = NULL;
 real ** phi_zp = NULL;
 real ** phi_zm = NULL;
-real ** ss_psi = NULL;        // Isopycnal slope
-real ** ss_u = NULL;
-real ** ss_w = NULL;
-real * impl_A = NULL;        // Implicit diffusion solver arrays
+real ** Sgm_psi = NULL;       // Isopycnal slope (for residual streamfunction)
+real ** Siso_u = NULL;
+real ** Siso_w = NULL;
+real * impl_A = NULL;         // Implicit diffusion solver arrays
 real * impl_B = NULL;
 real * impl_C = NULL;
 real * impl_D = NULL;
@@ -123,6 +139,16 @@ real ** Kgm_w = NULL;
 real ** Kiso_u = NULL;        // Isopycnal diffusivity
 real ** Kiso_w = NULL;
 real ** Kdia_w = NULL;        // Diapycnal diffusivity
+
+// Boundary layer work arrays
+uint * k_sml = NULL;
+real * wn_sml = NULL;
+real * wp_sml = NULL;
+uint * k_bbl = NULL;
+real * wn_bbl = NULL;
+real * wp_bbl = NULL;
+real * db_dx = NULL;
+real * db_dz = NULL;
 
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
@@ -137,7 +163,6 @@ real ** Kdia_w = NULL;        // Diapycnal diffusivity
 // TODO ened to add surface bottom BLs
 // TODO need to add meridional pressure gradient term here
 // TODO solve diffusion equation to calculate u and v through water column
-// TODO need to add sigma coordinates
 
 
 /**
@@ -150,6 +175,7 @@ real ** Kdia_w = NULL;        // Diapycnal diffusivity
 void calcPsim (const real t, real ** buoy, real ** psi_m)
 {
   int j,k;
+  real z;
   
   // Zero streamfunction at top/bottom boundaries
   for (j = 0; j < Nx+1; j ++)
@@ -166,12 +192,23 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
   
 #pragma parallel
   
-  // Current implementation: mean streamfunction and eddy diffusivity are depth-independent
+  // Current implementation: uniform horizontal velocity in SML and BBL
   for (j = 1; j < Nx; j ++)
   {
     for (k = 1; k < Nz; k ++)
     {
+      z = ZZ_psi[j][k];
+      
       psi_m[j][k] = tau[j]/(rho0*f0);
+      
+      if (use_sml && (z > -Hsml))
+      {
+        psi_m[j][k] *= (-z/Hsml);
+      }
+      if (use_bbl && (z < -hb_psi[j] + Hbbl))
+      {
+        psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
+      }
     }
   }
   
@@ -304,7 +341,7 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
 {
   int j,k;
   
-  // Current implementation takes constant Kiso and adds
+  // Current implementation takes constant Kdia and adds
   // a large diffusivity where the water column is statically
   // unstable
   
@@ -338,53 +375,238 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
 
 
 
+
+
+
+
+
+// TODO upgrade these to Ferrari et al form
+
+/**
+ * surfStructFun
+ *
+ * Surface structure function for the modified Ferrari et al. (2008) boundary layer parameterization. Aligns the slope used
+ * to calculate the eddy streamfunction and symmetric diffusion tensor with the ocean surface as the surface is approached.
+ *
+ * z is the current vertical position
+ * h_sml is the surface mixed layer thickness
+ * _lambda is the reciprocal of the vertical eddy lengthscale at the SML base, and defines the vertical derivative of G at the SML base
+ *
+ */
+real surfStructFun (real z, real h_sml, real _lambda)
+{
+  real G = 1.0;
+
+  if (z > -h_sml)
+  {
+    //G = -z/h_sml;
+    G = -(1+h_sml*_lambda)*SQUARE(z/h_sml) - (2+h_sml*_lambda)*(z/h_sml);
+  }
+  
+  return G;
+}
+
+
+/**
+ * botStructFun
+ *
+ * Bottom structure function for the modified Ferrari et al. (2008) boundary layer parameterization. Reduces the effective
+ * slope used to calculate the eddy streamfunction to zero at the ocean bed.
+ *
+ */
+real botStructFun (real z, real h_bbl, real h_b, real lambda)
+{
+  real G = 1.0;
+  
+  if (z < h_b + h_bbl)
+  {
+    G = (z+h_b)/h_bbl;
+  }
+  
+  return G;
+}
+
+
+/**
+ * slopeStructFun
+ *
+ * Slope structure function for the modified Ferrari et al. (2008) boundary layer parameterization. Aligns the effective
+ * slope for the symmetric diffusion tensor with the ocean bed as the ocean bed is approached.
+ *
+ */
+real slopeStructFun (real z, real h_bbl, real h_b)
+{
+  real G = 1.0;
+  
+  if (z < h_b + h_bbl)
+  {
+    G = (z+h_b)/h_bbl;
+  }
+  
+  return G;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// TODO need to handle the case in which -Hsml < -h_b+Hbbl, i.e. in which BLs overlap
+
 /**
  *
  * calcSlopes
  *
  * Calculates isopycnal slopes everywhere. The result is stored in
- * ss_psi (psi-gridpoints), ss_u (u-gridpoints) and ss_w (w-gridpoints).
+ * Sgm_psi (psi-gridpoints), Siso_u (u-gridpoints) and Siso_w (w-gridpoints).
+ *
+ * In the top and bottom boundary layers, the slopes are replaced
+ * by effective slopes
+ *   Sgm_psi -> S_e
+ *   Siso_u,Siso_w -> S'_e
+ * where S_e approaches zero at the boundary (so that the GM streamfunction
+ * vanishes there) and S'_e approaches the top or bottom slope at the boundary,
+ * ensuring that the eddy residual tracer flux is oriented parallel to the 
+ * boundary.
  *
  */
-void calcSlopes (const real t, real ** buoy, real ** ss_psi, real ** ss_u, real ** ss_w)
+void calcSlopes (     const real        t,
+                      real **           buoy,
+                      real **           Sgm_psi,
+                      real **           Siso_u,
+                      real **           Siso_w)
 {
   int j,k;
-  
-  // Zero isopycnal slope on the boundaries
-  // N.B. THESE SHOULD NEVER BE USED
-  for (k = 0; k < Nz+1; k ++)
-  {
-    ss_psi[0][k] = 0;
-    ss_psi[Nx][k] = 0;
-  }
-  for (j = 0; j < Nx+1; j ++)
-  {
-    ss_psi[j][0] = 0;
-    ss_psi[j][Nz] = 0;
-  }
+  real db_dz_sml, db_dz_bbl;
+  real G_sml, G_bbl, G_slope;
+  real z;
+  real d2b_dz2;
+  real _lambda_sml, _lambda_bbl;
   
 #pragma parallel
   
-  // Calculate isopycnal slope everywhere
+  // Calculate the effective isopycnal slope S_e everywhere
   for (j = 1; j < Nx; j ++)
   {
+    // Calculate horizontal and vertical buoyancy gradients in (x,z) space
     for (k = 1; k < Nz; k ++)
     {
-      // Calculate slope on psi-gridpoints
-      ss_psi[j][k] = - ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx )
-                     / ( (buoy[j][k]-buoy[j][k-1])*_dz_phi[j] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_phi[j-1] )
-                     + (-ZZ_psi[j][k]/hb_psi[j]) * sb_psi[j];
+      db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
+      db_dx[k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+      db_dx[k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+    }
+    db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
+    db_dx[0] = 0; // Here we just set then so that they are defined
+    db_dz[Nz] = 0;
+    db_dx[Nz] = 0;
+    
+    // Calculate vertical gradients at SML base and BBL top
+    if (use_sml)
+    {
+      // Buoyancy gradient at SML base
+      db_dz_sml = db_dz[k_sml[j]]*wp_sml[j] + db_dz[k_sml[j]+1]*wn_sml[j];
+
+      // Calculate reciprocal of vertical eddy length scale at SML base
+      d2b_dz2 = (db_dz[k_sml[j]+1]-db_dz[k_sml[j]]) / (ZZ_psi[j][k_sml[j]+1]-ZZ_psi[j][k_sml[j]]);
+      _lambda_sml = - d2b_dz2 / db_dz_sml;
+    }
+    if (use_bbl)
+    {
+      // Buoyancy gradient at BBL top
+      db_dz_bbl = db_dz[k_bbl[j]]*wn_bbl[j] + db_dz[k_bbl[j]-1]*wp_bbl[j];
       
-      // Cox slope-limiting.
-      if (limSlopes)
+      // TODO
+      lambda_bbl = 0;
+    }
+    
+    // Construct effective isopycnal slope
+    for (k = 1; k < Nz; k ++)
+    {
+      z = ZZ_psi[j][k];
+      
+      if (use_sml && (z > -Hsml))
       {
-        if (ss_psi[j][k] > Smax)
+        // TODO calculate lambda
+        G_sml = surfStructFun(z,Hsml,_lambda_sml);
+        Sgm_psi[j][k] = - G_sml * db_dx[k] / db_dz_sml;
+      }
+      else if (use_bbl && (z < -hb_psi[j] + Hbbl))
+      {
+        G_bbl = botStructFun(z,Hbbl,hb_psi[j],lambda_bbl);
+        Sgm_psi[j][k] = - G_bbl * db_dx[k] / db_dz_sml;
+      }
+      else
+      {
+        // Calculate slope on psi-gridpoints
+        Sgm_psi[j][k] = - db_dx[k] / db_dz[k];
+        
+        // TODO replace with exponential taper - see Griffies (2004)
+        // Cox slope-limiting.
+        if (limSlopes)
         {
-          ss_psi[j][k] = Smax;
+          if (Sgm_psi[j][k] > Smax)
+          {
+            Sgm_psi[j][k] = Smax;
+          }
+          if (Sgm_psi[j][k] < -Smax)
+          {
+            Sgm_psi[j][k] = -Smax;
+          }
         }
-        if (ss_psi[j][k] < -Smax)
+      }
+    }
+  }
+  
+  // Isopycnal slope on the boundaries
+  // N.B. THESE SHOULD NEVER BE USED
+  // except to set the slope on u and w points below
+  for (k = 1; k < Nz; k ++)
+  {
+    Sgm_psi[0][k] = Sgm_psi[1][k];
+    Sgm_psi[Nx][k] = Sgm_psi[Nx-1][k];
+  }
+  for (j = 1; j < Nx; j ++)
+  {
+    Sgm_psi[j][0] = Sgm_psi[j][1];
+    Sgm_psi[j][Nz] = Sgm_psi[j][Nz-1];
+  }
+  Sgm_psi[0][0] = Sgm_psi[1][1];
+  Sgm_psi[0][Nz] = Sgm_psi[1][Nz-1];
+  Sgm_psi[Nx][0] = Sgm_psi[Nx-1][1];
+  Sgm_psi[Nx][Nz] = Sgm_psi[Nx-1][Nz-1];
+  
+#pragma parallel
+  
+  // Calculate modified effective slope S'_e on u-gridpoints
+  for (j = 0; j < Nx+1; j ++)
+  {
+    for (k = 0; k < Nz; k ++)
+    {
+      // Interpolate S_e
+      Siso_u[j][k] = 0.5*(Sgm_psi[j][k+1] + Sgm_psi[j][k]);
+      
+      // Augment to calculate modified effective slope S'_e
+      if (use_bbl)
+      {
+        z = ZZ_u[j][k];
+        if (z < -hb_psi[j] + Hbbl)
         {
-          ss_psi[j][k] = -Smax;
+          G_slope = slopeStructFun(z,Hbbl,hb_psi[j]);
+          Siso_u[j][k] += (1-G_slope)*sb_psi[j];
         }
       }
     }
@@ -392,28 +614,24 @@ void calcSlopes (const real t, real ** buoy, real ** ss_psi, real ** ss_u, real 
   
 #pragma parallel
   
-  // Slopes on u-gridpoints
-  for (j = 0; j < Nx+1; j ++)
-  {
-    for (k = 1; k < Nz-1; k ++)
-    {
-      ss_u[j][k] = 0.5*(ss_psi[j][k+1] + ss_psi[j][k]);
-    }
-    ss_u[j][0] = ss_psi[j][1];
-    ss_u[j][Nz-1] = ss_psi[j][Nz-1];
-  }
-  
-#pragma parallel
-  
-  // Slopes on w-gridpoints
+  // Calculate modified effective slope S'_e on w-gridpoints
   for (k = 0; k < Nz+1; k ++)
   {
-    ss_w[0][k] = ss_psi[1][k];
-    ss_w[Nx-1][k] = ss_psi[Nx-1][k];
-    
-    for (j = 1; j < Nx-1; j ++)
+    for (j = 0; j < Nx; j ++)
     {
-      ss_w[j][k] = 0.5*(ss_psi[j+1][k] + ss_psi[j][k]);
+      // Interpolate S_e
+      Siso_w[j][k] = 0.5*(Sgm_psi[j+1][k] + Sgm_psi[j][k]);
+      
+      // Augment to calculate modified effective slope S'_e
+      if (use_bbl)
+      {
+        z = ZZ_w[j][k];
+        if (z < -hb_phi[j] + Hbbl)
+        {
+          G_slope = slopeStructFun(z,Hbbl,hb_phi[j]);
+          Siso_w[j][k] += (1-G_slope)*sb_phi[j];
+        }
+      }
     }
   }
   
@@ -436,13 +654,31 @@ void calcSlopes (const real t, real ** buoy, real ** ss_psi, real ** ss_u, real 
 
 
 
+
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+
 /**
  * calcPsie
  *
  * Calculates the eddy streamfunction from the mean buoyancy field.
  *
  */
-void calcPsie (const real t, real ** buoy, real ** Kgm_psi, real ** ss_psi, real ** psi_e)
+void calcPsie (const real t, real ** buoy, real ** Kgm_psi, real ** Sgm_psi, real ** psi_e)
 {
   int j,k;
   
@@ -466,8 +702,7 @@ void calcPsie (const real t, real ** buoy, real ** Kgm_psi, real ** ss_psi, real
   {
     for (k = 1; k < Nz; k ++)
     {
-      // Calculate eddy streamfunction
-      psi_e[j][k] = Kgm_psi[j][k]*ss_psi[j][k];
+      psi_e[j][k] = Kgm_psi[j][k]*Sgm_psi[j][k];
     }
   }
   
@@ -521,7 +756,7 @@ void calcPsir (real ** psi_m, real ** psi_e, real ** psi_r, real ** u_r, real **
     for (j = 0; j < Nx+1; j ++)
     {
       // x-velocity
-      u_r[j][k] = - (psi_r[j][k+1]-psi_r[j][k]) * _dz_psi[j];
+      u_r[j][k] = - (psi_r[j][k+1]-psi_r[j][k]) * _dz_u[j][k];
     }
   }
   
@@ -645,14 +880,15 @@ void do_adv_diff (  const real    t,
                     real **       w_r,
                     real **       Kiso_u,
                     real **       Kiso_w,
-                    real **       ss_u,
-                    real **       ss_w)
+                    real **       Siso_u,
+                    real **       Siso_w)
 {
   /// Looping variables
   int j,k;
   
   // True isopycnal slope, relative to sigma coordinates
-  real s_true = 0;
+  real Siso_true = 0;
+  real z;
   
   /////////////////////////////////////////////////////
   ///// Arrays used by the Kurganov-Tadmor scheme /////
@@ -663,17 +899,13 @@ void do_adv_diff (  const real    t,
     // Near-boundary derivatives
     for (j = 0; j < Nx; j ++)
     {
-      dphi_dz[j][0] = (phi[j][1]-phi[j][0]) * _dz_phi[j];
-      dphi_dz[j][Nz-1] = (phi[j][Nz-1]-phi[j][Nz-2]) * _dz_phi[j];
-//      dphi_dz[j][0] = 0;
-//      dphi_dz[j][Nz-1] = 0;
+      dphi_dz[j][0] = (phi[j][1]-phi[j][0]) * _dz_w[j][1];
+      dphi_dz[j][Nz-1] = (phi[j][Nz-1]-phi[j][Nz-2]) * _dz_w[j][Nz-1];
     }
     for (k = 0; k < Nz; k ++)
     {
       dphi_dx[0][k] = (phi[1][k]-phi[0][k]) * _dx;
       dphi_dx[Nx-1][k] = (phi[Nx-1][k]-phi[Nx-2][k]) * _dx;
-//      dphi_dx[0][k] = 0;
-//      dphi_dx[Nx-1][k] = 0;
     }
     
 #pragma parallel
@@ -696,9 +928,9 @@ void do_adv_diff (  const real    t,
     {
       for (k = 1; k < Nz-1; k ++)
       {
-        dphi_dz[j][k] = minmod( sigma * (phi[j][k+1]-phi[j][k]) * _dz_phi[j],
-                               (phi[j][k+1]-phi[j][k-1]) * _2dz_phi[j],
-                               sigma * (phi[j][k]-phi[j][k-1]) * _dz_phi[j]  );
+        dphi_dz[j][k] = minmod( sigma * (phi[j][k+1]-phi[j][k]) * _dz_w[j][k+1],
+                               (phi[j][k+1]-phi[j][k-1]) * _2dz_phi[j][k],
+                               sigma * (phi[j][k]-phi[j][k-1]) * _dz_w[j][k]  );
       }
     }
   
@@ -721,8 +953,8 @@ void do_adv_diff (  const real    t,
     {
       for (k = 1; k < Nz; k ++)
       {
-        phi_zm[j][k] = phi[j][k-1] + 0.5*dz_phi[j]*dphi_dz[j][k-1];
-        phi_zp[j][k] = phi[j][k] - 0.5*dz_phi[j]*dphi_dz[j][k];
+        phi_zm[j][k] = phi[j][k-1] + (ZZ_w[j][k]-ZZ_phi[j][k-1])*dphi_dz[j][k-1];
+        phi_zp[j][k] = phi[j][k] + (ZZ_w[j][k]-ZZ_phi[j][k])*dphi_dz[j][k];
       }
     }
   }
@@ -743,24 +975,27 @@ void do_adv_diff (  const real    t,
     HHx[Nx][k] = 0;
     PPx[0][k] = 0;
     PPx[Nx][k] = 0;
+    FFx[0][k] = 0;
+    FFx[Nx][k] = 0;
     
     for (j = 1; j < Nx; j ++)
     {
-      // Only needed if isopycnal mixing is to be performed
-      if (!is_buoy)
-      {
-        // True isopycnal slope defines direction of isopycnal mixing in sigma coordinates
-        s_true = (ss_u[j][k] + ZZ_u[j][k]*sb_psi[j]/hb_psi[j]);
-      }
+      // Current depth
+      z = ZZ_u[j][k];
+      
+      // True isopycnal slope defines direction of isopycnal mixing in sigma coordinates
+      Siso_true = Siso_u[j][k] - (ZZ_phi[j][k]-ZZ_phi[j-1][k])*_dx;
       
       // Flux calculation depends on spatial discretisation method
       switch (method_s)
       {
         case METHOD_CENTERED:
         {
+          // Hyperbolic fluxes
           HHx[j][k] = u_r[j][k] * 0.5*(phi[j][k]+phi[j+1][k]);
           
-          if (is_buoy)
+          // Parabolic fluxes
+          if ( is_buoy && (!use_sml || (z < -Hsml)) && (!use_bbl || (z > -hb_psi[j]+Hbbl)) )
           {
             PPx[j][k] = 0;
           }
@@ -770,18 +1005,18 @@ void do_adv_diff (  const real    t,
             
             if (k == 0)
             {
-              PPx[j][k] += Kiso_u[j][k] * s_true
-                              * 0.5 * ( (phi[j][k+1]-phi[j][k])*_dz_phi[j] + (phi[j-1][k+1]-phi[j-1][k])*_dz_phi[j-1] );
+              PPx[j][k] += Kiso_u[j][k] * Siso_true
+                              * 0.5 * ( (phi[j][k+1]-phi[j][k])*_dz_w[j][k+1] + (phi[j-1][k+1]-phi[j-1][k])*_dz_w[j-1][k+1] );
             }
             else if (k == Nz-1)
             {
-              PPx[j][k] += Kiso_u[j][k] * s_true
-                              * 0.5 * ( (phi[j][k]-phi[j][k-1])*_dz_phi[j] + (phi[j-1][k]-phi[j-1][k-1])*_dz_phi[j-1] );
+              PPx[j][k] += Kiso_u[j][k] * Siso_true
+                              * 0.5 * ( (phi[j][k]-phi[j][k-1])*_dz_w[j][k] + (phi[j-1][k]-phi[j-1][k-1])*_dz_w[j-1][k] );
             }
             else
             {
-              PPx[j][k] += Kiso_u[j][k] * s_true
-                              * 0.5 * ( (phi[j][k+1]-phi[j][k-1])*_2dz_phi[j] + (phi[j-1][k+1]-phi[j-1][k-1])*_2dz_phi[j-1] );
+              PPx[j][k] += Kiso_u[j][k] * Siso_true
+                              * 0.5 * ( (phi[j][k+1]-phi[j][k-1])*_2dz_phi[j][k] + (phi[j-1][k+1]-phi[j-1][k-1])*_2dz_phi[j-1][k] );
             }
           }
           
@@ -789,10 +1024,12 @@ void do_adv_diff (  const real    t,
         }
         case METHOD_KT:
         {
+          // Hyperbolic fluxes
           HHx[j][k] = 0.5*( u_r[j][k]*(phi_xm[j][k]+phi_xp[j][k])
                            - fabs(u_r[j][k])*(phi_xp[j][k]-phi_xm[j][k]) );
           
-          if (is_buoy)
+          // Parabolic fluxes
+          if ( is_buoy && (!use_sml || (z < -Hsml)) && (!use_bbl || (z > -hb_psi[j]+Hbbl)) )
           {
             PPx[j][k] = 0;
           }
@@ -800,8 +1037,10 @@ void do_adv_diff (  const real    t,
           {
             PPx[j][k] = Kiso_u[j][k] * (
                           (phi[j][k]-phi[j-1][k]) * _dx
-                        + (ss_u[j][k] + ZZ_u[j][k]*sb_psi[j]/hb_psi[j]) * 0.5*(dphi_dz[j][k]+dphi_dz[j-1][k]) );
+                        + (Siso_u[j][k] + ZZ_u[j][k]*sb_psi[j]/hb_psi[j]) * 0.5*(dphi_dz[j][k]+dphi_dz[j-1][k]) );
           }
+          
+          // Boundary layer fluxes
           
           break;
         }
@@ -814,8 +1053,8 @@ void do_adv_diff (  const real    t,
       
       // Using sigma coordinates introduces a factor of hb in the fluxes. This is divided
       // out after the flux divergence is taken
-      HHx[j][k] *= hb_psi[j];
-      PPx[j][k] *= hb_psi[j];
+      HHx[j][k] *= dz_u[j][k];
+      PPx[j][k] *= dz_u[j][k];
     }
   }
 
@@ -825,21 +1064,21 @@ void do_adv_diff (  const real    t,
   for (j = 0; j < Nx; j ++)
   {
     // No flux across boundaries
-    HHz[j][Nz] = 0;
-    PPz[j][Nz] = 0;
     HHz[j][0] = 0;
+    HHz[j][Nz] = 0;
     PPz[j][0] = 0;
+    PPz[j][Nz] = 0;
+    FFz[j][0] = 0;
+    FFz[j][Nz] = 0;
     
     // Interior gridpoints
     for (k = 1; k < Nz; k ++)
     {
+      // Current depth
+      z = ZZ_w[j][k];
       
-      // Only needed if isopycnal mixing is to be performed
-      if (!is_buoy)
-      {
-        // True isopycnal slope defines direction of isopycnal mixing in sigma coordinates
-        s_true = (ss_w[j][k] + ZZ_w[j][k]*sb_phi[j]/hb_phi[j]);
-      }
+      // True isopycnal slope defines direction of isopycnal mixing in sigma coordinates
+      Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
       
       // Flux calculation depends on spatial discretisation method
       switch (method_s)
@@ -848,27 +1087,27 @@ void do_adv_diff (  const real    t,
         {
           HHz[j][k] = w_r[j][k] * 0.5*(phi[j][k-1]+phi[j][k]);
           
-          if (is_buoy)
+          if ( is_buoy && (!use_sml || (z < -Hsml)) && (!use_bbl || (z > -hb_phi[j]+Hbbl)) )
           {
             PPz[j][k] = 0;
           }
           else
           {
-            PPz[j][k] = (Kiso_w[j][k]*s_true*s_true) * (phi[j][k]-phi[j][k-1]) * _dz_phi[j];
+            PPz[j][k] = (Kiso_w[j][k]*Siso_true*Siso_true) * (phi[j][k]-phi[j][k-1]) * _dz_w[j][k];
 
             if (j == 0)
             {
-              PPz[j][k] += Kiso_w[j][k]*s_true
+              PPz[j][k] += Kiso_w[j][k]*Siso_true
                               * 0.5*(phi[j+1][k]-phi[j][k]+phi[j+1][k-1]-phi[j][k-1]) * _dx;
             }
             else if (j == Nx-1)
             {
-              PPz[j][k] += Kiso_w[j][k]*s_true
+              PPz[j][k] += Kiso_w[j][k]*Siso_true
                               * 0.5*(phi[j][k]-phi[j-1][k]+phi[j][k-1]-phi[j-1][k-1]) * _dx;
             }
             else
             {
-              PPz[j][k] += Kiso_w[j][k]*s_true
+              PPz[j][k] += Kiso_w[j][k]*Siso_true
                               * 0.5*(phi[j+1][k]-phi[j-1][k]+phi[j+1][k-1]-phi[j-1][k-1]) * _2dx;
             }
           }
@@ -880,15 +1119,16 @@ void do_adv_diff (  const real    t,
           HHz[j][k] = 0.5*( w_r[j][k]*(phi_zm[j][k]+phi_zp[j][k])
                            - fabs(w_r[j][k])*(phi_zp[j][k]-phi_zm[j][k]) );
           
-          if (is_buoy)
+          // Parabolic fluxes
+          if ( is_buoy && (!use_sml || (z < -Hsml)) && (!use_bbl || (z > -hb_phi[j]+Hbbl)) )
           {
             PPz[j][k] = 0;
           }
           else
           {
-            PPz[j][k] = Kiso_w[j][k] * s_true *
+            PPz[j][k] = Kiso_w[j][k] * Siso_true *
                         (
-                          s_true * (phi[j][k]-phi[j][k-1]) * _dz_phi[j]
+                          Siso_true * (phi[j][k]-phi[j][k-1]) * _dz_w[j][k]
                         + 0.5*(dphi_dx[j][k]+dphi_dx[j][k-1])
                         );
           }
@@ -915,11 +1155,13 @@ void do_adv_diff (  const real    t,
   {
     for (k = 0; k < Nz; k ++)
     {
-      // Add hyperbolic and parabolic fluxes
-      dphi_dt[j][k] +=  ( (HHx[j][k] - HHx[j+1][k]) * _dx / hb_phi[j]
-                        + (HHz[j][k] - HHz[j][k+1]) * _dz_phi[j]
-                        + (PPx[j+1][k] - PPx[j][k]) * _dx / hb_phi[j]
-                        + (PPz[j][k+1] - PPz[j][k]) * _dz_phi[j] );
+      // Add fluxes
+      dphi_dt[j][k] += ( - (HHx[j+1][k] - HHx[j][k]) * _dx * _dz_phi[j][k] // Hyperbolic fluxes
+                         - (HHz[j][k+1] - HHz[j][k]) * _dz_phi[j][k]
+                         + (PPx[j+1][k] - PPx[j][k]) * _dx * _dz_phi[j][k] // Parabolic fluxes
+                         + (PPz[j][k+1] - PPz[j][k]) * _dz_phi[j][k]
+                         - (FFx[j+1][k] - FFx[j][k]) * _dx * _dz_phi[j][k] // Diabatic BL fluxes
+                         - (FFz[j][k+1] - FFz[j][k]) * _dz_phi[j][k] );
     }
   }
  
@@ -953,7 +1195,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
   bool is_buoy = false;
   
   // True isopycnal slope, relative to sigma coordinates
-  real s_true = 0;
+  real Sgm_true = 0;
+  real Siso_true = 0;
   
   // For CFL calculations
   real cfl_dt = 0;
@@ -985,11 +1228,11 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
   calcKiso(t,buoy,Kiso_u,Kiso_w);
   
   // Calculate isopycnal slopes
-  calcSlopes(t,buoy,ss_psi,ss_u,ss_w);
+  calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
   
   // Calculate mean and eddy components of overturning streamfunction
   calcPsim(t,buoy,psi_m);
-  calcPsie(t,buoy,Kgm_psi,ss_psi,psi_e);
+  calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
   
   // Compute residual streamfunction and velocities
   calcPsir(psi_m,psi_e,psi_r,u_r,w_r);
@@ -1007,7 +1250,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
       is_buoy = false;
     }
     
-    do_adv_diff(t,phi[i],dphi_dt[i],is_buoy,u_r,w_r,Kiso_u,Kiso_w,ss_u,ss_w);
+    do_adv_diff(t,phi[i],dphi_dt[i],is_buoy,u_r,w_r,Kiso_u,Kiso_w,Siso_u,Siso_w);
   }
   
   // Add tendency due to biogeochemistry
@@ -1051,12 +1294,14 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
 #pragma parallel
   
   // For z-fluxes
+  // N.B. Carefully chosen indices so that we can calculate diffusive CFLs
+  // associated with Kgm and Kiso (almost) everywhere.
   for (j = 0; j < Nx; j ++)
   {
     for (k = 0; k <= Nz; k ++)
     {
       // Max advecting velocity
-      w_dz = fabs(w_r[j][k]) * _dz_phi[j];
+      w_dz = fabs(w_r[j][k]) * _dz_w[j][k];
       if (w_dz > w_dz_max)
       {
         w_dz_max = w_dz;
@@ -1067,14 +1312,21 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
       // stability follows a diffusive scaling rather than an advective one.
       // We therefore take the maximum of Kgm and Kiso here. This CFL constraint
       // (i.e. pseudo-vertical diffusivity) tends to be the limiting one.
-      s_true = (ss_w[j][k] + ZZ_w[j][k]*sb_phi[j]/hb_phi[j]);
-      zdiff_dzsq = fmax(Kiso_w[j][k],Kgm_w[j][k])*SQUARE(s_true) / dzsq_phi[j];
+      
+      // "true" slopes in x/sigma coordinates, i.e. slopes relative to grid coordinates
+      Sgm_true = j>0 ? Sgm_psi[j][k] - (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx : 0; // Basically just skips j==0 case
+      Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
+
+      // N.B. Indexing here is slightly off for the GM component, but good enough for a CFL estimate
+      zdiff_dzsq = fmax( Kiso_w[j][k]*SQUARE(Siso_true)*_dzsq_w[j][k], Kgm_psi[j][k]*SQUARE(Sgm_true)*_dzsq_psi[j][k] );
       if (zdiff_dzsq > zdiff_dzsq_max)
       {
         zdiff_dzsq_max = zdiff_dzsq;
       }
     }
   }
+  
+
   
   // Calculate CFL criteria
   cfl_u = 0.5*dx/u_max;
@@ -1190,7 +1442,6 @@ void do_impl_diff (real t, real dt, real *** phi)
 #pragma parallel
 
   // Solve for each column
-  dt_dzsq = dt*_dz_phi[j]*_dz_phi[j];
   for (j = 0; j < Nx; j ++)
   {
     // Solve for each tracer
@@ -1199,8 +1450,8 @@ void do_impl_diff (real t, real dt, real *** phi)
       // Implicit vertical diffusion coefficients
       for (k = 0; k < Nz; k ++)
       {
-        impl_A[k] = k == 0 ? 0 : - Kdia_w[j][k] * dt_dzsq;
-        impl_C[k] = k == Nz-1 ? 0 : - Kdia_w[j][k+1] * dt_dzsq;
+        impl_A[k] = k == 0 ? 0 : - Kdia_w[j][k] * dt * _dz_w[j][k] * _dz_phi[j][k];
+        impl_C[k] = k == Nz-1 ? 0 : - Kdia_w[j][k+1] * dt * _dz_w[j][k+1] * _dz_phi[j][k];
         impl_B[k] = 1 - impl_A[k] - impl_C[k];
         impl_D[k] = phi[i][j][k];
       }
@@ -1211,6 +1462,85 @@ void do_impl_diff (real t, real dt, real *** phi)
   }
   
 }
+
+
+
+
+
+/**
+ *
+ * writeModelGrid
+ *
+ * Writes model vertical grid to output files. Returns false if there was a write error,
+ * or true if the write was successful.
+ *
+ */
+bool writeModelGrid (real ** ZZ_phi, real ** ZZ_psi, real ** ZZ_u, real ** ZZ_w, char * outdir)
+{
+  char outfile[MAX_PARAMETER_FILENAME_LENGTH];
+  FILE * outfd = NULL;
+  
+  // Write depths on phi-points
+  strcpy(outfile,outdir);
+  strcat(outfile,"/");
+  strcat(outfile,OUTN_ZZ_PHI);
+  strcat(outfile,".dat");
+  outfd = fopen(outfile,"w");
+  if (outfd == NULL)
+  {
+    fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+    return false;
+  }
+  printMatrix(outfd,ZZ_phi,Nx,Nz);
+  fclose(outfd);
+  
+  // Write depths on psi-points
+  strcpy(outfile,outdir);
+  strcat(outfile,"/");
+  strcat(outfile,OUTN_ZZ_PSI);
+  strcat(outfile,".dat");
+  outfd = fopen(outfile,"w");
+  if (outfd == NULL)
+  {
+    fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+    return false;
+  }
+  printMatrix(outfd,ZZ_psi,Nx+1,Nz+1);
+  fclose(outfd);
+  
+  // Write depths on u-points
+  strcpy(outfile,outdir);
+  strcat(outfile,"/");
+  strcat(outfile,OUTN_ZZ_U);
+  strcat(outfile,".dat");
+  outfd = fopen(outfile,"w");
+  if (outfd == NULL)
+  {
+    fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+    return false;
+  }
+  printMatrix(outfd,ZZ_u,Nx+1,Nz);
+  fclose(outfd);
+  
+  // Write depths on w-points
+  strcpy(outfile,outdir);
+  strcat(outfile,"/");
+  strcat(outfile,OUTN_ZZ_W);
+  strcat(outfile,".dat");
+  outfd = fopen(outfile,"w");
+  if (outfd == NULL)
+  {
+    fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+    return false;
+  }
+  printMatrix(outfd,ZZ_w,Nx,Nz+1);
+  fclose(outfd);
+  
+  return true;
+}
+
+
+
 
 
 
@@ -1242,9 +1572,9 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
   // Calculate residual streamfunction
   buoy = phi[idx_buoy];
   calcKgm(t,buoy,Kgm_psi,Kgm_u,Kgm_w);
-  calcSlopes(t,buoy,ss_psi,ss_u,ss_w);
+  calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
   calcPsim(t,buoy,psi_m);
-  calcPsie(t,buoy,Kgm_psi,ss_psi,psi_e);
+  calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
   calcPsir(psi_m,psi_e,psi_r,u_r,w_r);
 
   // Loop over tracers
@@ -1282,7 +1612,7 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
   if (outfd == NULL)
   {
     fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-    return -1;
+    return false;
   }
   printMatrix(outfd,psi_r,Nx+1,Nz+1);
   fclose(outfd);
@@ -1365,8 +1695,6 @@ void printUsage (void)
         "  cflFrac            CFL number. The time step dt will be chosen at each\n"
         "                     iteration such that dt=cfl*dt_max, where dt_max is the\n"
         "                     estimated maximum stable time step. Must be >0.\n"
-        "  targetRes          Target L2 error between successive iterations. The\n"
-        "                     calculation will stop when this condition is met.\n"
         "  maxTime            Maximum time for the integration, in\n"
         "                     case the target residual is not achieved.\n"
         "  monitorFrequency   Frequency with which to write out iteration data. If\n"
@@ -1375,10 +1703,24 @@ void printUsage (void)
         "                     Optional, default is 0, must be >= 0.\n"
         "  f0                 Reference Coriolis parameter.\n"
         "                     Optional, default is 10^{-4} rad/s, must be =/= 0.\n"
-        "  rho0               Reference density.\n"
-        "                     Optional, default is 10^3 kg/m^3, must be > 0.\n"
-        "                     Must be >= 0. Optional, default is 0.\n"
-        "  initFile           File containing an Ntracers x Nx x Nz array of initial\n"
+        "  h_c                Depth parameter controlling the range of depths over\n"
+        "                     which the vertical coordinate the coordinate is\n"
+        "                     approximately aligned with geopotentials.\n"
+        "                     Must be >0. Default is 1e16 (pure sigma coordinate).\n"
+        "  theta_s            Surface sigma coordinate stretching parameter,\n"
+        "                     defined `meaningfully' between 0 and 10.\n"
+        "                     Default is 0 (no surface stretching).\n"
+        "  theta_b            Bottom sigma coordinate stretching parameter,\n"
+        "                     defined `meaningfully' between 0 and 4.\n"
+        "  Hsml               Depth of the surface mixed layer. Must be >=0.\n"
+        "                     If equal to 0 then no SML is imposed\n"
+        "  Hbbl               Depth of the bottom boundary layer. Must be >=0.\n"
+        "                     If equal to 0 then no BBL is imposed\n"
+        "  targetResFile      File containing an Ntracs x 1 vector of target L2\n"
+        "                     errors between successive iterations. The\n"
+        "                     calculation will stop when this condition is met\n"
+        "                     for all tracers.\n"
+        "  initFile           File containing an Ntracs x Nx x Nz array of initial\n"
         "                     tracer values over the whole domain.\n"
         "                     Optional, default is 0 everywhere.\n"
         "  topogFile          File containing an Nx+1 x 1 array of ocean depths\n"
@@ -1506,6 +1848,11 @@ int main (int argc, char ** argv)
   setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
   setParam(params,paramcntr++,"f0","%lf",&f0,true);
   setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
+  setParam(params,paramcntr++,"h_c","%le",&h_c,true);
+  setParam(params,paramcntr++,"theta_s","%lf",&theta_s,true);
+  setParam(params,paramcntr++,"theta_b","%lf",&theta_b,true);
+  setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
+  setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
   setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,false);
   setParam(params,paramcntr++,"initFile","%s",initFile,false);
   setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
@@ -1574,6 +1921,7 @@ int main (int argc, char ** argv)
         (cflFrac <= 0.0) ||
         (rho0 <= 0.0) ||
         (f0 == 0.0) ||
+        (h_c <= 0.0) ||
         (strlen(targetResFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(initFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(topogFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
@@ -1593,6 +1941,7 @@ int main (int argc, char ** argv)
   Ntot = Ntracs*Nx*Nz;
 
   // Calculate grid spacings
+  ds = 1.0/Nz;
   dx = Lx/Nx;
   _dx = 1/dx;
   _2dx = 1/(2*dx);
@@ -1643,19 +1992,21 @@ int main (int argc, char ** argv)
   MATALLOC3(T_relax,Ntracs,Nx,Nz);
   
   // Grid vectors
-  VECALLOC(dz_phi,Nx);
-  VECALLOC(_dz_phi,Nx);
-  VECALLOC(_2dz_phi,Nx);
-  VECALLOC(dzsq_phi,Nx);
-  VECALLOC(dz_psi,Nx+1);
-  VECALLOC(_dz_psi,Nx+1);
-  VECALLOC(_2dz_psi,Nx+1);
-  VECALLOC(dzsq_psi,Nx+1);
+  VECALLOC(sigma_phi,Nz);
+  VECALLOC(sigma_psi,Nz+1);
+  MATALLOC(_dz_phi,Nx,Nz);
+  MATALLOC(_2dz_phi,Nx,Nz);
+  MATALLOC(_dzsq_psi,Nx+1,Nz+1);
+  MATALLOC(_dz_w,Nx,Nz+1);
+  MATALLOC(_dzsq_w,Nx,Nz+1);
+  MATALLOC(dz_u,Nx+1,Nz);
+  MATALLOC(_dz_u,Nx+1,Nz);
   VECALLOC(hb_phi,Nx);
   VECALLOC(hb_psi,Nx+1);
   VECALLOC(sb_phi,Nx);
   VECALLOC(sb_psi,Nx+1);
   MATALLOC(ZZ_psi,Nx+1,Nz+1);
+  MATALLOC(ZZ_phi,Nx,Nz);
   MATALLOC(ZZ_u,Nx+1,Nz);
   MATALLOC(ZZ_w,Nx,Nz+1);
   
@@ -1667,6 +2018,8 @@ int main (int argc, char ** argv)
   MATALLOC(HHz,Nx,Nz+1);
   MATALLOC(PPx,Nx+1,Nz);
   MATALLOC(PPz,Nx,Nz+1);
+  MATALLOC(FFx,Nx+1,Nz);
+  MATALLOC(FFz,Nx,Nz+1);
   MATALLOC(psi_r,Nx+1,Nz+1);
   MATALLOC(u_r,Nx+1,Nz);
   MATALLOC(w_r,Nx,Nz+1);
@@ -1678,9 +2031,9 @@ int main (int argc, char ** argv)
   MATALLOC(phi_xm,Nx+1,Nz);
   MATALLOC(phi_zp,Nx,Nz+1);
   MATALLOC(phi_zm,Nx,Nz+1);
-  MATALLOC(ss_psi,Nx+1,Nz+1);
-  MATALLOC(ss_u,Nx+1,Nz);
-  MATALLOC(ss_w,Nx,Nz+1);
+  MATALLOC(Sgm_psi,Nx+1,Nz+1);
+  MATALLOC(Siso_u,Nx+1,Nz);
+  MATALLOC(Siso_w,Nx,Nz+1);
   VECALLOC(impl_A,Nz);
   VECALLOC(impl_B,Nz);
   VECALLOC(impl_C,Nz);
@@ -1691,6 +2044,16 @@ int main (int argc, char ** argv)
   MATALLOC(Kiso_u,Nx+1,Nz);
   MATALLOC(Kiso_w,Nx,Nz+1);
   MATALLOC(Kdia_w,Nx,Nz+1);
+  
+  // Boundary layer work arrays
+  k_sml = malloc((Nx+1)*sizeof(uint));
+  VECALLOC(wn_sml,Nx+1);
+  VECALLOC(wp_sml,Nx+1);
+  k_bbl = malloc((Nx+1)*sizeof(uint));
+  VECALLOC(wn_bbl,Nx+1);
+  VECALLOC(wp_bbl,Nx+1);
+  VECALLOC(db_dx,Nz+1);
+  VECALLOC(db_dz,Nz+1);
   
   /////////////////////////////////
   ///// END MEMORY ALLOCATION /////
@@ -1839,7 +2202,17 @@ int main (int argc, char ** argv)
   ///// BEGIN GRID SETUP /////
   ////////////////////////////
   
-  // Grids on phi-points
+  // Sigma coordinates
+  for (k = 0; k < Nz; k ++)
+  {
+    sigma_phi[k] = -1 + (k+0.5)*ds;
+  }
+  for (k = 0; k < Nz+1; k ++)
+  {
+    sigma_psi[k] = -1 + k*ds;
+  }
+  
+  // Water column depths on phi-points
   for (j = 0; j < Nx; j ++)
   {
     // Topographic depth on phi-gridpoints
@@ -1847,15 +2220,9 @@ int main (int argc, char ** argv)
     
     // Topographic slope on phi-gridpoints
     sb_phi[j] =  - (hb_in[j+2]-hb_in[j]) * _2dx; // Note +1 offset because hb_in has length Nx+2
-    
-    // Grid spacing vectors on phi-gridpoints
-    dz_phi[j] = hb_phi[j]/Nz;
-    _dz_phi[j] = 1/dz_phi[j];
-    _2dz_phi[j] = 1/(2*dz_phi[j]);
-    dzsq_phi[j] = dz_phi[j]*dz_phi[j];
   }
   
-  // Grids on psi-points
+  // Water column depths on psi-points
   for (j = 0; j < Nx+1; j ++)
   {
     // Topographic depth on psi-gridpoints
@@ -1863,26 +2230,32 @@ int main (int argc, char ** argv)
     
     // Topographic slope on psi-gridpoints
     sb_psi[j] =  - (hb_in[j+1]-hb_in[j]) * _dx;
+  }
 
-    // Grid spacing vectors on psi-gridpoints
-    dz_psi[j] = hb_psi[j]/Nz;
-    _dz_psi[j] = 1/dz_psi[j];
-    _2dz_psi[j] = 1/(2*dz_psi[j]);
-    dzsq_psi[j] = dz_psi[j]*dz_psi[j];
-   
-    // True depths at psi-points
-    for (k = 0; k < Nz+1; k ++)
+  // True depths at phi-points
+  for (j = 0; j < Nx; j ++)
+  {
+    for (k = 0; k < Nz; k ++)
     {
-      ZZ_psi[j][k] = -hb_psi[j] + k*dz_psi[j];
+      ZZ_phi[j][k] = stretch_ROMS(sigma_phi[k],h_c,theta_s,theta_b,hb_phi[j]);
     }
   }
   
+  // True depths at psi-points
+  for (j = 0; j < Nx+1; j ++)
+  {
+    for (k = 0; k < Nz+1; k ++)
+    {
+      ZZ_psi[j][k] = stretch_ROMS(sigma_psi[k],h_c,theta_s,theta_b,hb_psi[j]);
+    }
+  }
+
   // True depths at u-points
   for (j = 0; j < Nx+1; j ++)
   {
     for (k = 0; k < Nz; k ++)
     {
-      ZZ_u[j][k] = -hb_psi[j] + (k+0.5)*dz_psi[j];
+      ZZ_u[j][k] = stretch_ROMS(sigma_phi[k],h_c,theta_s,theta_b,hb_psi[j]);
     }
   }
 
@@ -1891,10 +2264,165 @@ int main (int argc, char ** argv)
   {
     for (k = 0; k < Nz+1; k ++)
     {
-      ZZ_w[j][k] = -hb_phi[j] + k*dz_phi[j];
+      ZZ_w[j][k] = stretch_ROMS(sigma_psi[k],h_c,theta_s,theta_b,hb_phi[j]);
     }
   }
+  
+  // Grid spacings on phi-points
+  for (j = 0; j < Nx; j ++)
+  {
+    for (k = 0; k < Nz; k ++)
+    {
+      _dz_phi[j][k] = 1/(ZZ_w[j][k+1]-ZZ_w[j][k]);
 
+      if ((k == 0) || (k == Nz-1))
+      {
+        _2dz_phi[j][k] = 0.5*_dz_phi[j][k];       // Should never be used
+      }
+      else
+      {
+        _2dz_phi[j][k] = 1/(ZZ_phi[j][k+1] - ZZ_phi[j][k-1]);
+      }
+    }
+  }
+  
+  // Grid spacings on u-points
+  for (j = 0; j < Nx+1; j ++)
+  {
+    for (k = 0; k < Nz; k ++)
+    {
+      dz_u[j][k] = (ZZ_psi[j][k+1]-ZZ_psi[j][k]);
+      _dz_u[j][k] = 1/dz_u[j][k];
+    }
+  }
+  
+  // Grid spacings on w-points
+  for (j = 0; j < Nx; j ++)
+  {
+    for (k = 0; k < Nz+1; k ++)
+    {
+      if (k == 0)
+      {
+        _dz_w[j][k] = 1/(2*(ZZ_phi[j][k]-ZZ_w[j][k]));       // Should never be used
+      }
+      else if (k == Nz)
+      {
+        _dz_w[j][k] = 1/(2*(ZZ_w[j][k]-ZZ_phi[j][k-1]));       // Should never be used
+      }
+      else
+      {
+        _dz_w[j][k] = 1/(ZZ_phi[j][k]-ZZ_phi[j][k-1]);
+      }
+      
+      _dzsq_w[j][k] = SQUARE(_dz_w[j][k]);
+    }
+  }
+  
+  // Grid spacings on psi-points
+  for (j = 0; j < Nx+1; j ++)
+  {
+    for (k = 0; k < Nz+1; k ++)
+    {
+      if (k == 0)
+      {
+        _dzsq_psi[j][k] = SQUARE( 1/(2*(ZZ_u[j][k]-ZZ_psi[j][k])) );       // Should never be used
+      }
+      else if (k == Nz)
+      {
+        _dzsq_psi[j][k] = SQUARE( 1/(2*(ZZ_psi[j][k]-ZZ_u[j][k-1])) );       // Should never be used
+      }
+      else
+      {
+        _dzsq_psi[j][k] = SQUARE( 1/(ZZ_u[j][k]-ZZ_u[j][k-1]) );
+      }
+    }
+  }
+  
+  if (!writeModelGrid(ZZ_phi,ZZ_psi,ZZ_u,ZZ_w,outdir))
+  {
+    fprintf(stderr,"Unable to write model grid");
+    printUsage();
+    return 0;
+  }
+  
+  // For calculating buoyancy gradients at SML base
+  if (use_sml)
+  {
+    for (j = 0; j < Nx+1; j ++)
+    {
+      k_sml[j] = 0; // Default - bottom of the ocean
+      for (k = Nz-1; k >= 0; k --)
+      {
+        if (ZZ_psi[j][k] < -Hsml)
+        {
+          k_sml[j] = k;
+          break;
+        }
+      }
+      // If the SML is shallower than the first vertical grid point,
+      // set the index and weights to calculate db/dz at the first interior
+      // psi-gridpoint
+      if (k_sml[j] == Nz-1)
+      {
+        wp_sml[j] = 1;
+        wn_sml[j] = 0;
+      }
+      // If the SML extends to the very bottom of the ocean, set the linear
+      // interpolation weights to calculate db/dz at the first interior
+      // psi-gridpoint
+      else if (k_sml[j] == 0)
+      {
+        wp_sml[j] = 0;
+        wn_sml[j] = 1;
+      }
+      // Default linear interpolation weights for db/dz at the SML base
+      else
+      {
+        wn_sml[j] = (-Hsml-ZZ_psi[j][k_sml[j]]) / (ZZ_psi[j][k_sml[j]+1]-ZZ_psi[j][k_sml[j]]);
+        wp_sml[j] = 1.0 - wn_sml[j];
+      }
+    }
+  }
+  
+  // For calculating buoyancy gradients at BBL top
+  if (use_bbl)
+  {
+    for (j = 0; j < Nx+1; j ++)
+    {
+      k_bbl[j] = Nz; // Default - top of the ocean
+      for (k = 1; k <= Nz; k ++)
+      {
+        if (ZZ_psi[j][k] > -hb_psi[j] + Hbbl)
+        {
+          k_bbl[j] = k;
+          break;
+        }
+      }
+      // If the BBL occupies the full water column depth
+      // set the index and weights to calculate db/dz at the first interior
+      // psi-gridpoint
+      if (k_bbl[j] == Nz)
+      {
+        wp_bbl[j] = 1;
+        wn_bbl[j] = 0;
+      }
+      // If the BBL is shallower than the bottom grid cell, set the linear
+      // interpolation weights to calculate db/dz at the first interior
+      // psi-gridpoint
+      else if (k_bbl[j] == 1)
+      {
+        wp_bbl[j] = 0;
+        wn_bbl[j] = 1;
+      }
+      // Default linear interpolation weights for db/dz at the BBL top
+      else
+      {
+        wp_bbl[j] = (ZZ_psi[j][k_bbl[j]] - (-hb_psi[j]+Hbbl)) / (ZZ_psi[j][k_bbl[j]] - ZZ_psi[j][k_bbl[j]-1]);
+        wn_bbl[j] = 1.0 - wp_bbl[j];
+      }
+    }
+  }
+  
   //////////////////////////
   ///// END GRID SETUP /////
   //////////////////////////
@@ -2023,7 +2551,7 @@ int main (int argc, char ** argv)
       {
         targetReached = false;
       }
-      
+
       // NaN residual clearly indicates a problem
       if (isnan(res[i]))
       {
