@@ -816,12 +816,12 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real remin_in_box                   // value of remineralization in box
     real irradiance                     // amount of light that penetrates from the surface
     real lk                             // light saturation constant
-    real l_uptake = 0;                  // light dependent uptake rate
-    real uptake = 0;                    // uptake in each grid box
-    real T = 0;                         // Placeholder for Temperature
-    real N = 0;                         // Placeholder for Nitrate
-    real scale_height = 0;              // scale height from 50 to 200 for remineralization (surface to floor)
-    real dz = 0;                        // vertical grid spacing placeholder
+    real l_uptake                       // light dependent uptake rate
+    real uptake                         // uptake in each grid box
+    real T                              // Placeholder for Temperature
+    real N                              // Placeholder for Nitrate
+    real scale_height                   // scale height from 50 to 200 for remineralization (surface to floor)
+    real dz =                           // vertical grid spacing placeholder
     
     // Build temperature dependent uptake
     for (j = 0; j < Nx; j++)
@@ -846,9 +846,9 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             dz = 1/_dz_w[j][k];
             
             phi = (temp_phi - (dz * f) * uptake) / ( 1 + dz/scale_height );
-            remin = -phi / scale_height;
+            remin = - flux / scale_height;
             
-            temp_phi = phi;             // Move to the next vertical grid cell
+            temp_phi = flux;             // Move to the next vertical grid cell
             
             // Return any extra flux of nutrients to bottom grid cell
             if (k == 0)
