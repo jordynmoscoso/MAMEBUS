@@ -69,7 +69,7 @@ function setparams (local_home_dir,run_name)
 %   theta_b = 0; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
    
   %%% Grids  
-  Ntracs = 2; %%% Number of tracers
+  Ntracs = 3; %%% Number of tracers
   Nx = 40; %%% Number of latitudinal grid points 
   Nz = 40; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
@@ -80,7 +80,7 @@ function setparams (local_home_dir,run_name)
   %%% Create tanh-shaped topography
   Xtopog = 200*m1km;
   Ltopog = 25*m1km;
-  Htopog = H-500;  
+  Htopog = H-150;  
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/Ltopog));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);  
@@ -153,6 +153,7 @@ function setparams (local_home_dir,run_name)
   %%% Store tracers in 3D matrix
   phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
   phi_init(2,:,:) = reshape(dtr_init,[1 Nx Nz]);
+  phi_init(3,:,:) = 30*ones(size(phi_init(1,:,:)));  
   
   %%% Write to data file
   initFile = 'initFile.dat';  
@@ -168,8 +169,6 @@ function setparams (local_home_dir,run_name)
   topogFile = 'topog.dat';  
   writeDataFile(fullfile(local_run_dir,topogFile),hb);
   PARAMS = addParameter(PARAMS,'topogFile',topogFile,PARM_STR);  
-  
-  
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Surface wind stress %%%%%
