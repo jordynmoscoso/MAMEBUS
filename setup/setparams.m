@@ -263,11 +263,11 @@ function setparams (local_home_dir,run_name)
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
   phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
-  phi_relax_all(3,:,:) = -ones(1,Nx,Nz);
+%   phi_relax_all(3,:,:) = -ones(size(phi_relax_all(1,:,:)));
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
-  T_relax_all(3,:,:) = -ones(1,Nx,Nz);
+%   T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:)));
 
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
