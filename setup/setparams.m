@@ -141,7 +141,7 @@ function setparams (local_home_dir,run_name)
   Tmax = 20 - 5*XX_tr/Lx;
   Tmin = 0;
   buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
-  
+
   %%% Plot initial buoyancy
   figure(fignum);
   fignum = fignum+1;
@@ -267,7 +267,7 @@ function setparams (local_home_dir,run_name)
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
-%   T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:)));
+%  T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:)));
 
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
