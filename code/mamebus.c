@@ -399,8 +399,8 @@ real surfStructFun (real z, real h_sml, real _lambda)
 
   if (z > -h_sml)
   {
-    //G = -z/h_sml;
-    G = -(1+h_sml*_lambda)*SQUARE(z/h_sml) - (2+h_sml*_lambda)*(z/h_sml);
+    G = -z/h_sml;
+    //G = -(1+h_sml*_lambda)*SQUARE(z/h_sml) - (2+h_sml*_lambda)*(z/h_sml);
   }
   
   return G;
