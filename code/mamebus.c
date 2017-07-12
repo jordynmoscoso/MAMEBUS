@@ -40,7 +40,6 @@ bool use_sml = true;
 bool use_bbl = true;
 real Hsml = 50.0;
 real Hbbl = 50.0;
-real tot_depth = 3000.0;  // Depth of the ocean
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
@@ -154,6 +153,8 @@ real * db_dz = NULL;
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
 ////////////////////////////////
+
+
 
 
 
@@ -494,7 +495,7 @@ void calcSlopes (     const real        t,
     real G_sml, G_bbl, G_slope;
     real z;
     real d2b_dz2;
-    real _lambda_sml, _lambda_bbl;
+    real _lambda_sml, lambda_bbl;
     
 #pragma parallel
     
@@ -529,7 +530,7 @@ void calcSlopes (     const real        t,
             db_dz_bbl = db_dz[k_bbl[j]]*wn_bbl[j] + db_dz[k_bbl[j]-1]*wp_bbl[j];
             
             // TODO
-            _lambda_bbl = 0;
+            lambda_bbl = 0;
         }
         
         // Construct effective isopycnal slope
@@ -545,7 +546,7 @@ void calcSlopes (     const real        t,
             }
             else if (use_bbl && (z < -hb_psi[j] + Hbbl))
             {
-                G_bbl = botStructFun(z,Hbbl,hb_psi[j],_lambda_bbl);
+                G_bbl = botStructFun(z,Hbbl,hb_psi[j],lambda_bbl);
                 Sgm_psi[j][k] = - G_bbl * db_dx[k] / db_dz_sml;
             }
             else
@@ -642,6 +643,35 @@ void calcSlopes (     const real        t,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * calcPsie
  *
@@ -675,7 +705,24 @@ void calcPsie (const real t, real ** buoy, real ** Kgm_psi, real ** Sgm_psi, rea
             psi_e[j][k] = Kgm_psi[j][k]*Sgm_psi[j][k];
         }
     }
+    
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -725,6 +772,16 @@ void calcPsir (real ** psi_m, real ** psi_e, real ** psi_r, real ** u_r, real **
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -781,11 +838,7 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
 
 
 
-/*
- 
- WORKING HERE
- 
- */
+
 
 
 /**
@@ -796,71 +849,72 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
  */
 void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 {
-    int i,j,k;
-
-    // Parameters
-    real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
-    real irr_scaleheight = 30;          // m
-    real a = 0.6;                       // 1/d
-    real b = 1.066;                     // From Sarmiento & Gruber (2006)
-    real c = 1;                         // deg C
-    real f = 0.5;                       // fraction of exported material
-    real monod = 0;                     // nutrient limitation term
-    real alpha = 0.025;                 // d^-1 (W/m^2)^-1
+        int i,j,k;
     
-    // Variables
-    real temp_flux = 0;                      // holder for remin value
-    real flux = 0;                           // flux of remineralized nutrient
-    real t_uptake = 0;                       // temperature dependent uptake rate
-    real remin = 0;                          // remineralization
-    real remin_in_box = 0;                   // value of remineralization in box
-    real irradiance = 0;                     // amount of light that penetrates from the surface
-    real lk = 0;                             // light saturation constant
-    real l_uptake = 0;                       // light dependent uptake rate
-    real uptake = 0;                         // uptake in each grid box
-    real T = 0;                              // Placeholder for Temperature
-    real N = 0;                              // Placeholder for Nitrate
-    real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
-    real dz = 0;                             // vertical grid spacing placeholder
+        // Parameters
+        real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
+        real irr_scaleheight = 30;          // m
+        real a = 0.6;                       // 1/d
+        real b = 1.066;                     // From Sarmiento & Gruber (2006)
+        real c = 1;                         // deg C
+        real f = 0.5;                       // fraction of exported material
+        real monod = 0;                     // nutrient limitation term
+        real alpha = 0.025;                 // d^-1 (W/m^2)^-1
+        real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!!
     
-    // Build temperature dependent uptake
-    for (j = 0; j < Nx; j++)
-    {
-        temp_flux = 0;                  // Set the flux equal to zero at the surface
-        for (k = Nz-1; k >= 0; k--)
+        // Variables
+        real temp_flux = 0;                      // holder for remin value
+        real flux = 0;                           // flux of remineralized nutrient
+        real t_uptake = 0;                       // temperature dependent uptake rate
+        real remin = 0;                          // remineralization
+        real remin_in_box = 0;                   // value of remineralization in box
+        real irradiance = 0;                     // amount of light that penetrates from the surface
+        real lk = 0;                             // light saturation constant
+        real l_uptake = 0;                       // light dependent uptake rate
+        real uptake = 0;                         // uptake in each grid box
+        real T = 0;                              // Placeholder for Temperature
+        real N = 0;                              // Placeholder for Nitrate
+        real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
+        real dz = 0;                             // vertical grid spacing placeholder
+    
+        // Build temperature dependent uptake
+        for (j = 0; j < Nx; j++)
         {
-            // Temperature and Irradiance
-            T = phi[0][j][k];    // temperature in grid box
-            t_uptake = a * pow(b, c * T);    // temperature dependent uptake rate
-            
-            irradiance = irr_0 * exp(ZZ_phi[j][k] / irr_scaleheight);  // value of irradiance
-            lk = t_uptake / alpha;
-            l_uptake = irradiance / sqrt(POW2(irradiance) + POW2(lk));
-            
-            // Uptake and Remineralizaiton
-            N = phi[2][j][k];
-            uptake = (l_uptake * t_uptake) * POW2(N) / (N + monod);
-            remin_in_box = (1-f) * uptake;
-            
-            // Scale Height for Remin
-            scale_height = -(150/tot_depth) * ZZ_phi[j][k] + 50;
-            dz = 1/_dz_phi[j][k];
-            
-            flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
-            remin = - flux / scale_height;
-            
-            temp_flux = flux;             // Move to the next vertical grid cell
-            
-            // Return any extra flux of nutrients to bottom grid cell
-            if (k == 0)
+            temp_flux = 0;                  // Set the flux equal to zero at the surface
+            for (k = Nz-1; k >= 0; k--)
             {
-                remin -= flux / dz;
-                temp_flux = 0;           // Reset flux of nutrients at the surface to zero
+                // Temperature and Irradiance
+                T = phi[0][j][k];    // temperature in grid box
+                t_uptake = a * pow(b, c * T);    // temperature dependent uptake rate
+    
+                irradiance = irr_0 * exp(ZZ_phi[j][k] / irr_scaleheight);  // value of irradiance
+                lk = t_uptake / alpha;
+                l_uptake = irradiance / sqrt(POW2(irradiance) + POW2(lk));
+    
+                // Uptake and Remineralizaiton
+                N = phi[2][j][k];
+                uptake = (l_uptake * t_uptake) * POW2(N) / (N + monod);
+                remin_in_box = (1-f) * uptake;
+    
+                // Scale Height for Remin
+                scale_height = -(150/tot_depth) * ZZ_phi[j][k] + 50;
+                dz = 1/_dz_phi[j][k];
+    
+                flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
+                remin = - flux / scale_height;
+    
+                temp_flux = flux;             // Move to the next vertical grid cell
+    
+                // Return any extra flux of nutrients to bottom grid cell
+                if (k == 0)
+                {
+                    remin -= flux / dz;
+                    temp_flux = 0;           // Reset flux of nutrients at the surface to zero
+                }
+                
+                dphi_dt[2][j][k] += remin + remin_in_box - uptake;
             }
-            
-            dphi_dt[2][j][k] += remin + remin_in_box - uptake;
         }
-    }
 }
 
 
@@ -2565,7 +2619,7 @@ int main (int argc, char ** argv)
             // NaN residual clearly indicates a problem
             if (isnan(res[i]))
             {
-                fprintf(stderr,"ERROR: Computation blew up: residual==NaN\n Tracer Number: %d \n",i);
+                fprintf(stderr,"ERROR: Computation blew up: residual==NaN\n");
                 printUsage();
                 return 0;
             }
