@@ -495,7 +495,7 @@ void calcSlopes (     const real        t,
   real G_sml, G_bbl, G_slope;
   real z;
   real d2b_dz2;
-  real _lambda_sml, _lambda_bbl;
+  real _lambda_sml, lambda_bbl;
   
 #pragma parallel
   
