@@ -850,71 +850,91 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
 void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 {
         int i,j,k;
+
+        // Parameters
+        real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
+        real irr_scaleheight = 30;          // m
+        real a = 0.6;                       // 1/d
+        real b = 1.066;                     // From Sarmiento & Gruber (2006)
+        real c = 1;                         // deg C
+        real f = 0.2;                       // fraction of exported material
+        real monod = 0;                     // nutrient limitation term
+        real alpha = 0.025;                 // d^-1 (W/m^2)^-1
+        real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!!
     
-//        // Parameters
-//        real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
-//        real irr_scaleheight = 30;          // m
-//        real a = 0.6;                       // 1/d
-//        real b = 1.066;                     // From Sarmiento & Gruber (2006)
-//        real c = 1;                         // deg C
-//        real f = 0.5;                       // fraction of exported material
-//        real monod = 0;                     // nutrient limitation term
-//        real alpha = 0.025;                 // d^-1 (W/m^2)^-1
-//        real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!!
-//    
-//        // Variables
-//        real temp_flux = 0;                      // holder for remin value
-//        real flux = 0;                           // flux of remineralized nutrient
-//        real t_uptake = 0;                       // temperature dependent uptake rate
-//        real remin = 0;                          // remineralization
-//        real remin_in_box = 0;                   // value of remineralization in box
-//        real irradiance = 0;                     // amount of light that penetrates from the surface
-//        real lk = 0;                             // light saturation constant
-//        real l_uptake = 0;                       // light dependent uptake rate
-//        real uptake = 0;                         // uptake in each grid box
-//        real T = 0;                              // Placeholder for Temperature
-//        real N = 0;                              // Placeholder for Nitrate
-//        real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
-//        real dz = 0;                             // vertical grid spacing placeholder
-//    
-//        // Build temperature dependent uptake
-//        for (j = 0; j < Nx; j++)
-//        {
-//            temp_flux = 0;                  // Set the flux equal to zero at the surface
-//            for (k = Nz-1; k >= 0; k--)
-//            {
-//                // Temperature and Irradiance
-//                T = phi[0][j][k];    // temperature in grid box
-//                t_uptake = a * pow(b, c * T);    // temperature dependent uptake rate
-//    
-//                irradiance = irr_0 * exp(ZZ_phi[j][k] / irr_scaleheight);  // value of irradiance
-//                lk = t_uptake / alpha;
-//                l_uptake = irradiance / sqrt(POW2(irradiance) + POW2(lk));
-//    
-//                // Uptake and Remineralizaiton
-//                N = phi[2][j][k];
-//                uptake = (l_uptake * t_uptake) * POW2(N) / (N + monod);
-//                remin_in_box = (1-f) * uptake;
-//    
-//                // Scale Height for Remin
-//                scale_height = -(150/tot_depth) * ZZ_phi[j][k] + 50;
-//                dz = 1/_dz_phi[j][k];
-//    
-//                flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
-//                remin = - flux / scale_height;
-//    
-//                temp_flux = flux;             // Move to the next vertical grid cell
-//    
-//                // Return any extra flux of nutrients to bottom grid cell
-//                if (k == 0)
-//                {
-//                    remin -= flux / dz;
-//                    temp_flux = 0;           // Reset flux of nutrients at the surface to zero
-//                }
-//                
-//                dphi_dt[2][j][k] += remin + remin_in_box - uptake;
-//            }
-//        }
+        // Variables
+        real temp_flux = 0;                      // holder for remin value
+        real flux = 0;                           // flux of remineralized nutrient
+        real t_uptake = 0;                       // temperature dependent uptake rate
+        real remin = 0;                          // remineralization
+        real remin_in_box = 0;                   // value of remineralization in box
+        real irradiance = 0;                     // amount of light that penetrates from the surface
+        real lk = 0;                             // light saturation constant
+        real l_uptake = 0;                       // light dependent uptake rate
+        real uptake = 0;                         // uptake in each grid box
+        real T = 0;                              // Placeholder for Temperature
+        real N = 0;                              // Placeholder for Nitrate
+        real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
+        real dz = 0;                             // vertical grid spacing placeholder
+    
+        // Build temperature dependent uptake
+        for (j = 0; j < Nx; j++)
+        {
+            
+            temp_flux = 0;                  // Set the flux equal to zero at the surface
+            for (k = Nz-1; k >= 0; k--)
+            {
+                
+                // Temperature and Irradiance
+                T = phi[0][j][k];    // temperature in grid box
+                t_uptake = a * pow(b, c * T);    // temperature dependent uptake rate
+    
+                irradiance = irr_0 * exp(ZZ_phi[j][k] / irr_scaleheight);  // value of irradiance
+                lk = t_uptake / alpha;
+                l_uptake = irradiance / sqrt(POW2(irradiance) + POW2(lk));
+    
+                // Uptake and Remineralizaiton
+                N = phi[2][j][k];
+                uptake = (l_uptake * t_uptake) * N;
+                remin_in_box = (1-f) * uptake;
+    
+                // Scale Height for Remin
+                scale_height = 200;
+//                -(150/tot_depth) * ZZ_phi[j][k] + 50;
+                dz = 1/_dz_phi[j][k];
+    
+                flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
+                
+                remin = - flux / scale_height;
+    
+                temp_flux = flux;             // Move to the next vertical grid cell
+    
+                // Return any extra flux of nutrients to bottom grid cell
+                if (k == 0)
+                {
+                    remin -= flux / dz;
+                    temp_flux = 0;           // Reset flux of nutrients at the surface to zero
+                }
+                
+                dphi_dt[2][j][k] = remin + remin_in_box - uptake;
+                
+                // For debugging
+                if (k == Nz-1 && j == Nz - 1)
+                {
+                    printf(" Cell Number (x,z): (%d,%d) \n dN/dt = %f \n N = %f \n",j,k,dphi_dt[2][j][k], N);
+                    fflush(stdout);
+                }
+                
+                if (isnan(uptake))
+                {
+                    printf("Uptake is NaN \n");
+                    fflush(stdout);
+                }
+                
+               
+            }
+        }
+    
 }
 
 
@@ -2555,16 +2575,19 @@ int main (int argc, char ** argv)
             case METHOD_RKTVD1:
             {
                 dt = rktvd1(&t,phi_in_V,phi_out_V,cflFrac,Ntot,&tderiv);
+                printf("RK1 \n");
                 break;
             }
             case METHOD_RKTVD2:
             {
                 dt = rktvd2(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
+                printf("RK2 \n");
                 break;
             }
             case METHOD_RKTVD3:
             {
                 dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
+                printf("RK3 \n");
                 break;
             }
             default:
