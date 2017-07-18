@@ -153,7 +153,7 @@ function setparams (local_home_dir,run_name)
   %%% Store tracers in 3D matrix
   phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
   phi_init(2,:,:) = reshape(dtr_init,[1 Nx Nz]);
-  phi_init(3,:,:) = 1.5*ones(size(phi_init(1,:,:)));  
+  phi_init(3,:,:) = 15*ones(size(phi_init(1,:,:)));  
   
   %%% Write to data file
   initFile = 'initFile.dat';  
@@ -179,7 +179,12 @@ function setparams (local_home_dir,run_name)
   tau = tau0*tanh((Lx-xx_psi)/(Lx/8));
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
-  PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR);  
+  PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
+  
+  figure
+  plot(xx_psi,tau)
+  title('Surface Wind Stress')
+  
    
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Buoyancy diffusivity %%%%%
@@ -263,7 +268,7 @@ function setparams (local_home_dir,run_name)
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
   phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
-  phi_relax_all(3,:,:) = 1.5*ones(size(phi_relax_all(1,:,:)));
+  phi_relax_all(3,:,:) = 15*ones(size(phi_relax_all(1,:,:)));
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
