@@ -852,15 +852,16 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         int i,j,k;
 
         // Parameters
+        real day = 86400;
         real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
         real irr_scaleheight = 30;          // m
-        real a = 0.6;                       // 1/d
+        real a = 0.6/day;                   // 1/d
         real b = 1.066;                     // From Sarmiento & Gruber (2006)
         real c = 1;                         // deg C
         real f = 0.2;                       // fraction of exported material
         real monod = 0;                     // nutrient limitation term
-        real alpha = 0.025;                 // d^-1 (W/m^2)^-1
-        real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!!
+        real alpha = 0.025/day;             // d^-1 (W/m^2)^-1
+        real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!
     
         // Variables
         real temp_flux = 0;                      // holder for remin value
@@ -919,11 +920,11 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 dphi_dt[2][j][k] = remin + remin_in_box - uptake;
                 
                 // For debugging
-                if (k == Nz-1 && j == Nz - 1)
-                {
-                    printf(" Cell Number (x,z): (%d,%d) \n dN/dt = %f \n N = %f \n",j,k,dphi_dt[2][j][k], N);
-                    fflush(stdout);
-                }
+//                if (k == Nz-1 && j == Nz - 1)
+//                {
+//                    printf(" Cell Number (x,z): (%d,%d) \n dN/dt = %f \n N = %f \n",j,k,dphi_dt[2][j][k], N);
+//                    fflush(stdout);
+//                }
                 
                 if (isnan(uptake))
                 {
@@ -2575,19 +2576,19 @@ int main (int argc, char ** argv)
             case METHOD_RKTVD1:
             {
                 dt = rktvd1(&t,phi_in_V,phi_out_V,cflFrac,Ntot,&tderiv);
-                printf("RK1 \n");
+//                printf("RK1 \n");
                 break;
             }
             case METHOD_RKTVD2:
             {
                 dt = rktvd2(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-                printf("RK2 \n");
+//                printf("RK2 \n dt = %f \n",dt);
                 break;
             }
             case METHOD_RKTVD3:
             {
                 dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-                printf("RK3 \n");
+//                printf("RK3 \n");
                 break;
             }
             default:
