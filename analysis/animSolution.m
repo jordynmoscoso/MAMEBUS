@@ -76,7 +76,6 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
                         = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);
-
   
   %%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% PLOTTING LOOP %%%%%
@@ -135,8 +134,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
+        case 2 %%% Nitrate
+          [C h] = contourf(XX_tr,ZZ_tr,phi,30);
       end
-      clabel(C,h,'Color','w');      
+      clabel(C,h,'Color','w');  
       set(h,'ShowText','on'); 
 %       pcolor(XX_phi,ZZ_phi,phi);
             
