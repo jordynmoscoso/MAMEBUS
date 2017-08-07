@@ -46,7 +46,7 @@ function setparams (local_home_dir,run_name)
   Lx = 300*m1km; %%% Computational domain width
   
   %%% Scalar parameter definitions 
-  tau0 = -1e-1; %%% Northward wind stress
+  tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
   rho0 = 1e3; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (Southern Ocean)
   Kgm0 = 500; %%% Reference GM diffusivity
@@ -95,7 +95,13 @@ function setparams (local_home_dir,run_name)
   ['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))]
   ['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))]
   ['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))]
-                  
+  
+  figure(fignum);
+  fignum = fignum+1;
+  surf(ZZ_tr);
+  title('Grid')
+  shading interp
+  
   %%% Calculate grid stiffness  
   rx1 = abs(diff(0.5*(ZZ_psi(:,1:Nz)+ZZ_psi(:,2:Nz+1)),1,1) ./ diff(0.5*(ZZ_psi(1:Nx,:)+ZZ_psi(2:Nx+1,:)),1,2) );
   ['Grid stiffness: ' num2str(max(max(rx1)))]  
@@ -146,6 +152,7 @@ function setparams (local_home_dir,run_name)
   figure(fignum);
   fignum = fignum+1;
   pcolor(XX_tr,ZZ_tr,buoy_init);
+  title('Initial Buoyancy')
   
   %%% Initial depth tracer
   dtr_init = ZZ_tr;
@@ -181,7 +188,8 @@ function setparams (local_home_dir,run_name)
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
   
-  figure
+  figure(fignum);
+  fignum = fignum+1;
   plot(xx_psi,tau)
   title('Surface Wind Stress')
   
@@ -231,6 +239,7 @@ function setparams (local_home_dir,run_name)
   figure(fignum);
   fignum = fignum+1;
   plot(Kdia(1,:),ZZ_psi(1,:));
+  title('Open ocean diapycnal diffusivity')
   
   %%% Write to file
   KdiaFile = 'Kdia.dat';
