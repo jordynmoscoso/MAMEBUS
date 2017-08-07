@@ -1,7 +1,8 @@
 /**
  * mamebus.c
  *
- * Andrew Stewart
+ * Andrew Stewart 
+ * Jordyn Moscoso
  *
  * Core code file for the Meridionally-Averaged Model of Eastern Boundary Upwelling Systems (MAMEBUS).
  * Integrates residual-mean buoyancy and tracer equations in an Eastern Boundary Current-like domain.
@@ -40,6 +41,14 @@ bool use_sml = true;
 bool use_bbl = true;
 real Hsml = 50.0;
 real Hbbl = 50.0;
+
+// Scaling Constants
+real day = 86400;                 // Seconds in a day
+real year = 31536000;             // Seconds in a year
+real amp = 0.7846;                // Scaling amplitude for seasonal forcing
+real per = 2*3.1415/31536000;     // Period for seasonal forcing of one year in seconds
+real peak = 86400*120;            // Peak wind stress at the end of April
+real bb = 1.0392;                 // Shift so that the max wind stress is at 1.6 (April 30), and min is at 0.05 (Haack, et al 2005).
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
@@ -176,6 +185,12 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
 {
     int j,k;
     real z;
+    real ss = 0;
+    
+    // Scale based on seasonal forcing
+    ss = amp*(bb + cos((t-peak)*per));
+    
+    // Determine the forcing based on the time
     
     // Zero streamfunction at top/bottom boundaries
     for (j = 0; j < Nx+1; j ++)
@@ -199,7 +214,7 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
         {
             z = ZZ_psi[j][k];
             
-            psi_m[j][k] = tau[j]/(rho0*f0);
+            psi_m[j][k] = ss*tau[j]/(rho0*f0);
             
             if (use_sml && (z > -Hsml))
             {
@@ -852,13 +867,13 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         int i,j,k;
 
         // Parameters
-        real day = 86400;
+
         real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
         real irr_scaleheight = 30;          // m
         real a = 0.6/day;                   // 1/d
         real b = 1.066;                     // From Sarmiento & Gruber (2006)
         real c = 1;                         // deg C
-        real f = 0.2;                       // fraction of exported material
+        real f = 0.09;                      // fraction of exported material
         real monod = 0;                     // nutrient limitation term
         real alpha = 0.025/day;             // d^-1 (W/m^2)^-1
         real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!
@@ -878,6 +893,8 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
         real dz = 0;                             // vertical grid spacing placeholder
     
+        real u_damp = 1;                        // For testing purposes, damp the irradiance in uptake
+    
         // Build temperature dependent uptake
         for (j = 0; j < Nx; j++)
         {
@@ -896,12 +913,11 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     
                 // Uptake and Remineralizaiton
                 N = phi[2][j][k];
-                uptake = (l_uptake * t_uptake) * N;
+                uptake = u_damp*(l_uptake * t_uptake) * N;
                 remin_in_box = (1-f) * uptake;
     
                 // Scale Height for Remin
-                scale_height = 200;
-//                -(150/tot_depth) * ZZ_phi[j][k] + 50;
+                scale_height = -(150/tot_depth) * ZZ_phi[j][k] + 50;
                 dz = 1/_dz_phi[j][k];
     
                 flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
@@ -917,7 +933,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                     temp_flux = 0;           // Reset flux of nutrients at the surface to zero
                 }
                 
-                dphi_dt[2][j][k] = remin + remin_in_box - uptake;
+                dphi_dt[2][j][k] += remin + remin_in_box - uptake;
                 
                 // For debugging
 //                if (k == Nz-1 && j == Nz - 1)
@@ -2601,6 +2617,7 @@ int main (int argc, char ** argv)
         // Step 2: Add implicit vertical diffusion
         do_impl_diff(t,dt,phi_out);
         
+        
 #pragma parallel
         
         // Step 3: Enforce zero tendency where relaxation time is zero
@@ -2691,7 +2708,7 @@ int main (int argc, char ** argv)
             
             // Printing out the buoyancy residual can be quite a useful way of
             // keeping track of the computation's progress
-            printf("%e\n",res[idx_buoy]);
+            printf("%e, time = %f \n",res[idx_buoy],t/day);
             fflush(stdout);
         }
         
