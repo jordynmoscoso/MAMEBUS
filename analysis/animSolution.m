@@ -184,7 +184,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
       
       %%% Get the psi values on the gridpoints
       psi = fscanf(dfid,'%le',[Nx+1,Nz+1]);           
-      if (size(psi,1)~=Nx+1 || size(psi,2)~=Nz+1);
+      if (size(psi,1)~=Nx+1 || size(psi,2)~=Nz+1)
         error(['ERROR: Could not find data file: ',data_file]);
       end    
       
