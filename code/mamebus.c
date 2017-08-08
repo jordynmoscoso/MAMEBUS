@@ -188,7 +188,8 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
     real ss = 0;
     
     // Scale based on seasonal forcing
-    ss = amp*(bb + cos((t-peak)*per));
+//    ss = amp*(bb + cos((t-peak)*per));
+    ss = 1; // constant wind forcing
     
     // Determine the forcing based on the time
     
