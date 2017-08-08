@@ -113,8 +113,8 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'maxTime',100*t1year,PARM_REALF);
   PARAMS = addParameter(PARAMS,'monitorFrequency',0.1*t1year,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'maxTime',100*t1year,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'rho0',rho0,PARM_REALF);
   PARAMS = addParameter(PARAMS,'f0',f0,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'h_c',h_c,PARM_REALE);    
