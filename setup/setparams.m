@@ -194,7 +194,10 @@ function setparams (local_home_dir,run_name)
    %changed in the mamebus.c code as well in the windInterp function.
   tyear = 0:1:52;
   fcing = amp*(bb + cos((tyear-peak)*per));
+  tlength = length(fcing);                        % Determine the number of points of wind stress data
   tau = zeros(length(fcing),length(xx_psi));
+  
+  PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
   
   
   for ii = 1:1:53
