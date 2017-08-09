@@ -14,7 +14,8 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
+function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
+                            mov_on,mov_name)
  
   %%% Load convenience functions
   addpath ../utils;
@@ -54,6 +55,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
+  tdays = 86400;
   
   %%% Load grids from model output
 %   dx = (Lx/Nx);
@@ -76,7 +78,6 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
                         = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);
-
   
   %%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% PLOTTING LOOP %%%%%
@@ -97,6 +98,14 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   stillReading = true;
   counter = 1;
   n = 0;
+  
+  % Determines whether or not to make a movie and writes a new file to
+  % store the data.
+  if mov_on
+      vidObj = VideoWriter(mov_name);
+      vidObj.FrameRate = 10;
+      open(vidObj)
+  end
   
   %%% At each time iteration...
   while (stillReading)
@@ -133,11 +142,15 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       switch (var_id)
         case 0 %%% Buoyancy (temperature)
           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
+          set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
+        case 2 %%% Nitrate
+          [C h] = contourf(XX_tr,ZZ_tr,phi,20);
+          set(gca, 'CLim', [0,35]);
       end
-      clabel(C,h,'Color','w');      
-      set(h,'ShowText','on'); 
+%       clabel(C,h,'Color','w');  
+%       set(h,'ShowText','on'); 
 %       pcolor(XX_phi,ZZ_phi,phi);
             
       colormap jet;
@@ -171,7 +184,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       
       %%% Get the psi values on the gridpoints
       psi = fscanf(dfid,'%le',[Nx+1,Nz+1]);           
-      if (size(psi,1)~=Nx+1 || size(psi,2)~=Nz+1);
+      if (size(psi,1)~=Nx+1 || size(psi,2)~=Nz+1)
         error(['ERROR: Could not find data file: ',data_file]);
       end    
       
@@ -200,14 +213,27 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
     axis tight;
     set(gca,'XTick',0:Lx/5:Lx);
     set(gca,'YTick',-H:H/5:0);
-    title(strcat(['t=',num2str(round(t/t1year)),' yr']));           
+    title(strcat(['t=',num2str(round(t/tdays)),' days (',num2str(round(t/t1year)),' yr)']));           
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 
+    
+    
+    % Stores the frame to the video file.
+    if mov_on
+        writeVideo(vidObj,nextframe);
+        
+    end
+    
     
     counter = counter+1;   
     n = n + 1;
     
   end    
+  
+  % Close the movie writer
+  if mov_on
+      close(vidObj);
+  end
   
 end

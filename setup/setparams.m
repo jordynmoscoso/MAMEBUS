@@ -46,7 +46,7 @@ function setparams (local_home_dir,run_name)
   Lx = 300*m1km; %%% Computational domain width
   
   %%% Scalar parameter definitions 
-  tau0 = -1e-1; %%% Northward wind stress
+  tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
   rho0 = 1e3; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (Southern Ocean)
   Kgm0 = 500; %%% Reference GM diffusivity
@@ -95,7 +95,13 @@ function setparams (local_home_dir,run_name)
   ['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))]
   ['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))]
   ['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))]
-                  
+  
+  figure(fignum);
+  fignum = fignum+1;
+  surf(ZZ_tr);
+  title('Grid')
+  shading interp
+  
   %%% Calculate grid stiffness  
   rx1 = abs(diff(0.5*(ZZ_psi(:,1:Nz)+ZZ_psi(:,2:Nz+1)),1,1) ./ diff(0.5*(ZZ_psi(1:Nx,:)+ZZ_psi(2:Nx+1,:)),1,2) );
   ['Grid stiffness: ' num2str(max(max(rx1)))]  
@@ -107,8 +113,8 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'maxTime',100*t1year,PARM_REALF);
   PARAMS = addParameter(PARAMS,'monitorFrequency',0.1*t1year,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'maxTime',100*t1year,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'rho0',rho0,PARM_REALF);
   PARAMS = addParameter(PARAMS,'f0',f0,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'h_c',h_c,PARM_REALE);    
@@ -141,11 +147,12 @@ function setparams (local_home_dir,run_name)
   Tmax = 20 - 5*XX_tr/Lx;
   Tmin = 0;
   buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
-  
+
   %%% Plot initial buoyancy
   figure(fignum);
   fignum = fignum+1;
   pcolor(XX_tr,ZZ_tr,buoy_init);
+  title('Initial Buoyancy')
   
   %%% Initial depth tracer
   dtr_init = ZZ_tr;
@@ -153,7 +160,7 @@ function setparams (local_home_dir,run_name)
   %%% Store tracers in 3D matrix
   phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
   phi_init(2,:,:) = reshape(dtr_init,[1 Nx Nz]);
-  phi_init(3,:,:) = 30*ones(size(phi_init(1,:,:)));  
+  phi_init(3,:,:) = 15*ones(size(phi_init(1,:,:)));  
   
   %%% Write to data file
   initFile = 'initFile.dat';  
@@ -175,11 +182,37 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   
-%   tau = tau0*cos(pi*xx_psi/(2*Lx));
-  tau = tau0*tanh((Lx-xx_psi)/(Lx/8));
+%  tau = tau0*cos(pi*xx_psi/(2*Lx));
+   temp = tau0*tanh((Lx-xx_psi)/(Lx/8));
+  
+   amp = 0.7846;                % Scaling amplitude for seasonal forcing
+   per = 2*pi/52;               % Period for seasonal forcing of one year in seconds
+   peak = 17;                   % Peak wind stress at the end of April
+   bb = 1.0392;                 % Shift so that the max wind stress is at 1.6 (April 30), and 
+  
+   %Use weekly averaged wind forcing (if this value is changed, it must be
+   %changed in the mamebus.c code as well in the windInterp function.
+  tyear = 0:1:52;
+  fcing = amp*(bb + cos((tyear-peak)*per));
+  tlength = length(fcing);                        % Determine the number of points of wind stress data
+  tau = zeros(length(fcing),length(xx_psi));
+  
+  PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
+  
+  
+  for ii = 1:1:53
+      tau(ii,:) = fcing(ii)*temp;
+  end
+  
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
-  PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR);  
+  PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
+  
+  figure(fignum);
+  fignum = fignum+1;
+  plot(xx_psi,tau(1,:))
+  title('Initial Surface Wind Stress')
+  
    
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Buoyancy diffusivity %%%%%
@@ -226,6 +259,7 @@ function setparams (local_home_dir,run_name)
   figure(fignum);
   fignum = fignum+1;
   plot(Kdia(1,:),ZZ_psi(1,:));
+  title('Open ocean diapycnal diffusivity')
   
   %%% Write to file
   KdiaFile = 'Kdia.dat';
@@ -263,18 +297,18 @@ function setparams (local_home_dir,run_name)
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
   phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
-  T_relax_all = zeros(Ntracs,Nx,Nz);  
+  phi_relax_all(3,:,:) = 15*ones(size(phi_relax_all(1,:,:)));
+  T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
-  
+  T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:)));
+
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
   writeDataFile(fullfile(local_run_dir,relaxTracerFile),phi_relax_all);
   writeDataFile(fullfile(local_run_dir,relaxTimeFile),T_relax_all);
   PARAMS = addParameter(PARAMS,'relaxTracerFile',relaxTracerFile,PARM_STR);     
   PARAMS = addParameter(PARAMS,'relaxTimeFile',relaxTimeFile,PARM_STR);
-    
-  
   
   %%% Create a run script
   createRunScript (local_home_dir,run_name,exec_name, ...
