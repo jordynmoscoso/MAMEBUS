@@ -182,16 +182,33 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   
-%   tau = tau0*cos(pi*xx_psi/(2*Lx));
-  tau = tau0*tanh((Lx-xx_psi)/(Lx/8));
+%  tau = tau0*cos(pi*xx_psi/(2*Lx));
+   temp = tau0*tanh((Lx-xx_psi)/(Lx/8));
+  
+   amp = 0.7846;                % Scaling amplitude for seasonal forcing
+   per = 2*pi/52;               % Period for seasonal forcing of one year in seconds
+   peak = 17;                   % Peak wind stress at the end of April
+   bb = 1.0392;                 % Shift so that the max wind stress is at 1.6 (April 30), and 
+  
+   %Use weekly averaged wind forcing (if this value is changed, it must be
+   %changed in the mamebus.c code as well in the windInterp function.
+  tyear = 0:1:52;
+  fcing = amp*(bb + cos((tyear-peak)*per));
+  tau = zeros(length(fcing),length(xx_psi));
+  
+  
+  for ii = 1:1:53
+      tau(ii,:) = fcing(ii)*temp;
+  end
+  
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
   
   figure(fignum);
   fignum = fignum+1;
-  plot(xx_psi,tau)
-  title('Surface Wind Stress')
+  plot(xx_psi,tau(1,:))
+  title('Initial Surface Wind Stress')
   
    
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
