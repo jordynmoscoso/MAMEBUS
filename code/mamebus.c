@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 25
+#define NPARAMS 26
 
 
 
@@ -41,6 +41,7 @@ bool use_sml = true;
 bool use_bbl = true;
 real Hsml = 50.0;
 real Hbbl = 50.0;
+int tlength = 0;
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
@@ -1990,6 +1991,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,false);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
+    setParam(params,paramcntr++,"tlength","%u",&tlength,false);
     setParam(params,paramcntr++,"tauFile","%s",tauFile,true);
     setParam(params,paramcntr++,"KgmFile","%s",KgmFile,true);
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
@@ -2120,7 +2122,7 @@ int main (int argc, char ** argv)
     VECALLOC(hb_in,Nx+2);
     VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
     
-    MATALLOC(tau,53,Nx+1);
+    MATALLOC(tau,tlength,Nx+1);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
@@ -2206,7 +2208,7 @@ int main (int argc, char ** argv)
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
         ( (strlen(initFile) > 0)        &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) ) ||
         ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-        ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,53,Nx+1,stderr) ) ||
+        ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
@@ -2236,7 +2238,7 @@ int main (int argc, char ** argv)
     // Default wind stress is zero everywhere
     if (strlen(tauFile)==0)
     {
-        memset(tau,0,(53*Nx+1)*sizeof(real));
+        memset(tau,0,(tlength*Nx+1)*sizeof(real));
     }
     
     // Default Kgm is zero everywhere
