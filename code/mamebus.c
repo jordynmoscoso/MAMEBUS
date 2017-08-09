@@ -53,12 +53,14 @@ real bb = 1.0392;                 // Shift so that the max wind stress is at 1.6
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
 real * hb_in = NULL;          // Ocean depth
-real * tau = NULL;            // Surface wind stress
+real ** tau = NULL;           // Surface wind stress
 real ** Kgm_psi_ref = NULL;   // Reference GM diffusivity
 real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
 real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
+
+real * stau = NULL;                  // Seasonal tau
 
 // Numerical parameters
 real sigma = 1.4;         // Kurganov-Tadmor minmod-limiting parameter
@@ -164,6 +166,41 @@ real * db_dz = NULL;
 ////////////////////////////////
 
 
+void windInterp(const real t)
+{
+    int j = 0;
+    int spec_week = 0;
+    int spec_year = 0;
+    real hold = 0;
+    real week = day*7;
+    
+    // Determine the year and normalize to determine the date within a year
+    spec_year = floor(t/year);
+    if (spec_year >= 1)
+    {
+        hold = (t - spec_year*year)/week;     // Determine the date in a year
+                                              // based on week fraction.
+    }
+    else
+    {
+        hold = t/week;
+    }
+    
+    spec_week = floor(hold);
+    
+    // Linearly interpolate based on the current time
+    for (j = 0; j < Nx; j++)
+    {
+        if (spec_week == 52)
+        {
+            stau[j] = (tau[0][j] - tau[spec_week][j])*(hold-spec_week) + tau[spec_week][j];
+        }
+        else
+        {
+        stau[j] = (tau[spec_week+1][j] - tau[spec_week][j])*(hold - spec_week) + tau[spec_week][j];
+        }
+    }
+}
 
 
 
@@ -185,13 +222,8 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
 {
     int j,k;
     real z;
-    real ss = 0;
     
-    // Scale based on seasonal forcing
-//    ss = amp*(bb + cos((t-peak)*per));
-    ss = 1; // constant wind forcing
-    
-    // Determine the forcing based on the time
+    windInterp(t);
     
     // Zero streamfunction at top/bottom boundaries
     for (j = 0; j < Nx+1; j ++)
@@ -215,7 +247,7 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
         {
             z = ZZ_psi[j][k];
             
-            psi_m[j][k] = ss*tau[j]/(rho0*f0);
+            psi_m[j][k] = stau[j]/(rho0*f0);
             
             if (use_sml && (z > -Hsml))
             {
@@ -2086,7 +2118,9 @@ int main (int argc, char ** argv)
     VECALLOC(targetRes,Ntracs);
     MATALLOC3(phi_init,Ntracs,Nx,Nz);
     VECALLOC(hb_in,Nx+2);
-    VECALLOC(tau,Nx+1);
+    VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
+    
+    MATALLOC(tau,53,Nx+1);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
@@ -2172,7 +2206,7 @@ int main (int argc, char ** argv)
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
         ( (strlen(initFile) > 0)        &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) ) ||
         ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-        ( (strlen(tauFile) > 0)         &&  !readVector(tauFile,tau,Nx+1,stderr) ) ||
+        ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,53,Nx+1,stderr) ) ||
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
@@ -2202,7 +2236,7 @@ int main (int argc, char ** argv)
     // Default wind stress is zero everywhere
     if (strlen(tauFile)==0)
     {
-        memset(tau,0,(Nx+1)*sizeof(real));
+        memset(tau,0,(53*Nx+1)*sizeof(real));
     }
     
     // Default Kgm is zero everywhere
