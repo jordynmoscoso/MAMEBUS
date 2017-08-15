@@ -193,8 +193,8 @@ function setparams (local_home_dir,run_name)
    %Use weekly averaged wind forcing (if this value is changed, it must be
    %changed in the mamebus.c code as well in the windInterp function.
   tyear = 0:1:52;
-%   fcing = amp*(bb + cos((tyear-peak)*per));
-  fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
+  fcing = amp*(bb + cos((tyear-peak)*per));
+%   fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
   tlength = length(fcing);                        % Determine the number of points of wind stress data
   tau = zeros(length(fcing),length(xx_psi));
   
