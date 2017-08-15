@@ -149,8 +149,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
           [C h] = contourf(XX_tr,ZZ_tr,phi,20);
           set(gca, 'CLim', [0,35]);
       end
-%       clabel(C,h,'Color','w');  
-%       set(h,'ShowText','on'); 
+      clabel(C,h,'Color','w');  
+      set(h,'ShowText','on'); 
 %       pcolor(XX_phi,ZZ_phi,phi);
             
       colormap jet;
