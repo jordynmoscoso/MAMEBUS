@@ -57,7 +57,14 @@ function setparams (local_home_dir,run_name)
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
   Hsml = 50; %%% Surface mixed layer thickness
   Hbbl = 50; %%% Bottom boundary layer thickness
+  
+  %%% Biogeochemical Parameters
   c_init = 30; %%% Initial concentration of nutrient
+  a_temp = 0.6/t1day;
+  b_temp = 1.066;
+  c_temp = 1;
+  alpha = 0.025/t1day; % d^-1 (W/m^2)^-1
+  monod = 0;
   
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
@@ -123,7 +130,14 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'theta_s',theta_s,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'theta_b',theta_b,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hsml',Hsml,PARM_REALF);    
-  PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);    
+  PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
+  
+  %%% Save biogeochemical parameters
+  PARAMS = addParameter(PARAMS,'a_temp',a_temp,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'b_temp',b_temp,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'c_temp',c_temp,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'alpha',alpha,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'monod',monod,PARM_REALF);
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
