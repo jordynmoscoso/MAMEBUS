@@ -55,7 +55,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
-  tdays = 86400;
+  t1day = 86400;
   
   %%% If user is plotting nitrate, indicate what to plot
   if (var_id == 2)
@@ -65,6 +65,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     if (isempty(ncase) || ncase < 0 || ncase > 1)
         ncase = 0;
     end
+  end
   
   %%% Load grids from model output
 %   dx = (Lx/Nx);
@@ -172,9 +173,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
               irradiance = readDataFile (params_file,dirpath,'irFile',Nx,Nz,zeros(Nx,Nz));
               II = irradiance./sqrt(irradiance.^2 + lk.^2);
               
-              uptake = T.*II.*(phi.^2./(phi + ones(size(phi)).*monod));
+              uptake = 0.3*T.*II.*phi;
               
-              [C h] = contourf(XX_tr,ZZ_tr,uptake,10);
+              [C h] = contourf(XX_tr,ZZ_tr,uptake*t1day,10);
+              set(gca, 'CLim', [0,5]);
           else
             [C h] = contourf(XX_tr,ZZ_tr,phi,20);
             set(gca, 'CLim', [0,35]);
@@ -244,7 +246,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     axis tight;
     set(gca,'XTick',0:Lx/5:Lx);
     set(gca,'YTick',-H:H/5:0);
-    title(strcat(['t=',num2str(round(t/tdays)),' days (',num2str(round(t/t1year)),' yr)']));           
+    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)']));           
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 
