@@ -86,12 +86,18 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
+  shelfdepth = 75;
+  if shelfdepth < 50
+      disp('Shelf is smaller than sml and bbl')
+      return
+  end
+  
   Xtopog = 200*m1km;
   Ltopog = 25*m1km;
-  Htopog = H-150;  
+  Htopog = H-shelfdepth;  
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/Ltopog));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
-  hb_tr = hb(2:end-1);  
+  hb_tr = hb(2:end-1);
   
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
@@ -209,8 +215,8 @@ function setparams (local_home_dir,run_name)
    %Use weekly averaged wind forcing (if this value is changed, it must be
    %changed in the mamebus.c code as well in the windInterp function.
   tyear = 0:1:52;
-%   fcing = amp*(bb + cos((tyear-peak)*per));
-  fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
+  fcing = amp*(bb + cos((tyear-peak)*per));
+%   fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
   tlength = length(fcing);                        % Determine the number of points of wind stress data
   tau = zeros(length(fcing),length(xx_psi));
   
@@ -276,16 +282,28 @@ function setparams (local_home_dir,run_name)
   Kbbl = 1e-1;
   HB_psi = repmat(reshape(hb_psi,[Nx+1 1]),[1 Nz+1]);
   
+
   %%% Crude mixed layers
   idx_sml = ZZ_psi>-Hsml;
   Kdia(idx_sml) = Kdia(idx_sml) + Ksml * -4*(ZZ_psi(idx_sml)/Hsml).*(ZZ_psi(idx_sml)/Hsml+1);  
   idx_bbl = ZZ_psi<-HB_psi+Hbbl;
-  Kdia(idx_bbl) = Kdia(idx_bbl) + Kbbl * -4*((ZZ_psi(idx_bbl)+HB_psi(idx_bbl))/Hbbl).*((ZZ_psi(idx_bbl)+HB_psi(idx_bbl))/Hbbl-1);  
+  Kdia(idx_bbl) = Kdia(idx_bbl) + Kbbl * -4*((ZZ_psi(idx_bbl)+HB_psi(idx_bbl))/Hbbl).*((ZZ_psi(idx_bbl)+HB_psi(idx_bbl))/Hbbl-1); 
+  
+  % Check if sml and bbl overlap 
+  depth = hb_psi;
+  for jj = 1:length(depth)
+      if abs(depth(jj)) < (Hsml + Hbbl)
+        for kk = 1:Nz
+        	Kdia(jj,kk) = Kdia0 + (Ksml+Kbbl)* 0.5*(-4*(ZZ_psi(jj,kk)/depth(jj))*(ZZ_psi(jj,kk)/depth(jj)+1) ...
+                -4*((ZZ_psi(jj,kk)+HB_psi(jj,kk))/depth(jj))*((ZZ_psi(jj,kk)+HB_psi(jj,kk))/depth(jj)-1));
+        end
+      end
+  end
   
   %%% Plot open-ocean diapycnal diffusivity
   figure(fignum);
   fignum = fignum+1;
-  plot(Kdia(1,:),ZZ_psi(1,:));
+  plot(Kdia(end,:),ZZ_psi(end,:));
   title('Open ocean diapycnal diffusivity')
   
   %%% Write to file
@@ -310,11 +328,11 @@ function setparams (local_home_dir,run_name)
   T_relax_buoy(XX_tr>=L_relax) = -1;
   
   %%% Add relaxation to an atmospheric temperature profile
-%   buoy_surf_max = 20;
-%   buoy_surf_min = 15;
-%   buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
-%   buoy_relax(find(xx_tr>=L_relax),Nz) = buoy_surf(find(xx_tr>=L_relax)); 
-%   T_relax_buoy(find(xx_tr>=L_relax),Nz) = 10*t1day; 
+  buoy_surf_max = 20;
+  buoy_surf_min = 15;
+  buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
+  buoy_relax(find(xx_tr>=L_relax),Nz) = buoy_surf(find(xx_tr>=L_relax)); 
+  T_relax_buoy(find(xx_tr>=L_relax),Nz) = 10*t1day; 
   
   %%% Depth tracer relaxation  
   dtr_relax = dtr_init;
@@ -328,7 +346,7 @@ function setparams (local_home_dir,run_name)
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
-  T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:)));
+  T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:))); % Nutrients are conserved
 
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
