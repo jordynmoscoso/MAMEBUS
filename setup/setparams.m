@@ -57,6 +57,7 @@ function setparams (local_home_dir,run_name)
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
   Hsml = 50; %%% Surface mixed layer thickness
   Hbbl = 50; %%% Bottom boundary layer thickness
+  c_init = 30; %%% Initial concentration of nutrient
   
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
@@ -110,6 +111,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Ntracs',Ntracs,PARM_INT);
   PARAMS = addParameter(PARAMS,'Nx',Nx,PARM_INT);
   PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);
+  PARAMS = addParameter(PARAMS,'H',H,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
@@ -193,8 +195,8 @@ function setparams (local_home_dir,run_name)
    %Use weekly averaged wind forcing (if this value is changed, it must be
    %changed in the mamebus.c code as well in the windInterp function.
   tyear = 0:1:52;
-  fcing = amp*(bb + cos((tyear-peak)*per));
-%   fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
+%   fcing = amp*(bb + cos((tyear-peak)*per));
+  fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
   tlength = length(fcing);                        % Determine the number of points of wind stress data
   tau = zeros(length(fcing),length(xx_psi));
   
@@ -214,7 +216,17 @@ function setparams (local_home_dir,run_name)
   plot(xx_psi,tau(1,:))
   title('Initial Surface Wind Stress')
   
-   
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%% Irradiance Profile %%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  irr0 = 340;                   %%% W/m^2 (Can eventually include a seasonal amplitude)
+  irr_scaleheight = 30;          %%% m
+  irradiance = irr0.*exp(ZZ_tr./irr_scaleheight);
+  irFile = 'irradiance.dat';
+  writeDataFile(fullfile(local_run_dir,irFile),irradiance);
+  PARAMS = addParameter(PARAMS,'irFile',irFile,PARM_STR);
+  
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Buoyancy diffusivity %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -298,7 +310,7 @@ function setparams (local_home_dir,run_name)
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
   phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
-  phi_relax_all(3,:,:) = 15*ones(size(phi_relax_all(1,:,:)));
+  phi_relax_all(3,:,:) = c_init*ones(size(phi_relax_all(1,:,:)));
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
