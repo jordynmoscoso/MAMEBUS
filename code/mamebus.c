@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 28
+#define NPARAMS 33
 
 
 
@@ -43,6 +43,13 @@ bool use_bbl = true;
 real Hsml = 50.0;
 real Hbbl = 50.0;
 int tlength = 0;
+
+// Biogeochemical allometric parameters
+real a_temp = 0;
+real b_temp = 0;
+real c_temp = 0;
+real alpha = 0;
+real monod = 0;
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
@@ -905,12 +912,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 
         // Parameters
 
-        real a = 0.6/day;                   // 1/d
-        real b = 1.066;                     // From Sarmiento & Gruber (2006)
-        real c = 1;                         // deg C
         real f = 0.09;                      // fraction of exported material
-        real monod = 0;                     // nutrient limitation term
-        real alpha = 0.025/day;             // d^-1 (W/m^2)^-1
     
         // Variables
         real temp_flux = 0;                      // holder for remin value
@@ -938,7 +940,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 
                 // Temperature and Irradiance
                 T = phi[0][j][k];    // temperature in grid box
-                t_uptake = a * pow(b, c * T);    // temperature dependent uptake rate
+                t_uptake = a_temp * pow(b_temp, c_temp * T);    // temperature dependent uptake rate
                 
                 lk = t_uptake / alpha;
                 l_uptake = irradiance[j][k] / sqrt(POW2(irradiance[j][k]) + POW2(lk));
@@ -1999,6 +2001,13 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
     setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
+    
+    // Biogeochemical parameter inputs
+    setParam(params,paramcntr++,"a_temp","%lf",&a_temp,false);
+    setParam(params,paramcntr++,"b_temp","%lf",&b_temp,false);
+    setParam(params,paramcntr++,"c_temp","%lf",&c_temp,false);
+    setParam(params,paramcntr++,"alpha","%lf",&alpha,false);
+    setParam(params,paramcntr++,"monod","%lf",&monod,false);
     
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
