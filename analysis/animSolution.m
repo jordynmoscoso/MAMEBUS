@@ -57,6 +57,15 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   t1year = 365*86400; %%% Seconds in one year
   tdays = 86400;
   
+  %%% If user is plotting nitrate, indicate what to plot
+  if (var_id == 2)
+    prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
+    ncase = input(prompt);
+    %%% Check for valid input, if not choose default
+    if (isempty(ncase) || ncase < 0 || ncase > 1)
+        ncase = 0;
+    end
+  
   %%% Load grids from model output
 %   dx = (Lx/Nx);
 %   dz = (H/Nz);
@@ -146,8 +155,30 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
         case 2 %%% Nitrate
-          [C h] = contourf(XX_tr,ZZ_tr,phi,20);
-          set(gca, 'CLim', [0,35]);
+          if ncase == 0
+              %%% Import temperature file and irradiance file
+              buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);
+              bfid = fopen(buoy_file,'r');
+              temp = fscanf(dfid,'%le',[Nx,Nz]);  
+              a_temp = readparam(params_file,'a_temp','%lf');
+              b_temp = readparam(params_file,'b_temp','%lf');
+              c_temp = readparam(params_file,'c_temp','%lf');
+              T = a_temp.*(b_temp).^(c_temp.*temp);
+              
+              alpha = readparam(params_file,'alpha','%lf');
+              monod = readparam(params_file,'monod','%lf');
+              lk = T./alpha;
+              
+              irradiance = readDataFile (params_file,dirpath,'irFile',Nx,Nz,zeros(Nx,Nz));
+              II = irradiance./sqrt(irradiance.^2 + lk.^2);
+              
+              uptake = T.*II.*(phi.^2./(phi + ones(size(phi)).*monod));
+              
+              [C h] = contourf(XX_tr,ZZ_tr,uptake,10);
+          else
+            [C h] = contourf(XX_tr,ZZ_tr,phi,20);
+            set(gca, 'CLim', [0,35]);
+          end
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
