@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 26
+#define NPARAMS 28
 
 
 
@@ -34,6 +34,7 @@ int Ntot = 0;
 // Physical parameters
 real Lx = 0;
 real Lz = 0;
+real H = 0;
 real Kconv0 = 10;
 real rho0 = 1e3;
 real f0 = 1e-4;
@@ -60,6 +61,7 @@ real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
 real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
+real ** irradiance = NULL;     // Irradiance profile
 
 real * stau = NULL;                  // Seasonal tau
 
@@ -903,15 +905,12 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 
         // Parameters
 
-        real irr_0 = 340;                   // W/m^2 (Can eventually include a seasonal amplitude)
-        real irr_scaleheight = 30;          // m
         real a = 0.6/day;                   // 1/d
         real b = 1.066;                     // From Sarmiento & Gruber (2006)
         real c = 1;                         // deg C
         real f = 0.09;                      // fraction of exported material
         real monod = 0;                     // nutrient limitation term
         real alpha = 0.025/day;             // d^-1 (W/m^2)^-1
-        real tot_depth = 3000;              // m (MUST BE CHANGED IF TOPOGRAPHY IS CHANGED)!!!
     
         // Variables
         real temp_flux = 0;                      // holder for remin value
@@ -919,7 +918,6 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         real t_uptake = 0;                       // temperature dependent uptake rate
         real remin = 0;                          // remineralization
         real remin_in_box = 0;                   // value of remineralization in box
-        real irradiance = 0;                     // amount of light that penetrates from the surface
         real lk = 0;                             // light saturation constant
         real l_uptake = 0;                       // light dependent uptake rate
         real uptake = 0;                         // uptake in each grid box
@@ -928,7 +926,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
         real dz = 0;                             // vertical grid spacing placeholder
     
-        real u_damp = 1;                        // For testing purposes, damp the irradiance in uptake
+        real u_damp = 0.3;                        // For testing purposes, damp the irradiance in uptake
     
         // Build temperature dependent uptake
         for (j = 0; j < Nx; j++)
@@ -941,10 +939,9 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 // Temperature and Irradiance
                 T = phi[0][j][k];    // temperature in grid box
                 t_uptake = a * pow(b, c * T);    // temperature dependent uptake rate
-    
-                irradiance = irr_0 * exp(ZZ_phi[j][k] / irr_scaleheight);  // value of irradiance
+                
                 lk = t_uptake / alpha;
-                l_uptake = irradiance / sqrt(POW2(irradiance) + POW2(lk));
+                l_uptake = irradiance[j][k] / sqrt(POW2(irradiance[j][k]) + POW2(lk));
     
                 // Uptake and Remineralizaiton
                 N = phi[2][j][k];
@@ -952,7 +949,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 remin_in_box = (1-f) * uptake;
     
                 // Scale Height for Remin
-                scale_height = -(150/tot_depth) * ZZ_phi[j][k] + 50;
+                scale_height = -(150/H) * ZZ_phi[j][k] + 50;
                 dz = 1/_dz_phi[j][k];
     
                 flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
@@ -1862,7 +1859,7 @@ void printUsage (void)
      "  topogFile          File containing an Nx+1 x 1 array of ocean depths\n"
      "                     at grid cell corners. All elements must be > 0.\n"
      "                     Optional, default is Lz everywhere.\n"
-     "  tauFile            File containing an Nx+1 x 1 array of wind stresses\n"
+     "  tauFile            File containing an Nx+1 x tlength array of wind stresses\n"
      "                     at grid cell corners.\n"
      "                     Optional, default is 0 everywhere.\n"
      "  KgmFile            File containing an Nx+1 x Nz+1 array of GM eddy\n"
@@ -1961,6 +1958,7 @@ int main (int argc, char ** argv)
     char initFile[MAX_PARAMETER_FILENAME_LENGTH];
     char topogFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tauFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char irFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KgmFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KisoFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KdiaFile[MAX_PARAMETER_FILENAME_LENGTH];
@@ -1976,6 +1974,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Ntracs","%u",&Ntracs,false);
     setParam(params,paramcntr++,"Nx","%u",&Nx,false);
     setParam(params,paramcntr++,"Nz","%u",&Nz,false);
+    setParam(params,paramcntr++,"H","%lf",&H,false);
     setParam(params,paramcntr++,"Lx","%lf",&Lx,false);
     setParam(params,paramcntr++,"Lz","%lf",&Lz,false);
     setParam(params,paramcntr++,"cflFrac","%lf",&cflFrac,false);
@@ -1994,6 +1993,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
     setParam(params,paramcntr++,"tlength","%u",&tlength,false);
     setParam(params,paramcntr++,"tauFile","%s",tauFile,true);
+    setParam(params,paramcntr++,"irFile","%s",irFile,true);
     setParam(params,paramcntr++,"KgmFile","%s",KgmFile,true);
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
@@ -2005,6 +2005,7 @@ int main (int argc, char ** argv)
     initFile[0] = '\0';
     topogFile[0] = '\0';
     tauFile[0] = '\0';
+    irFile[0] = '\0';
     KgmFile[0] = '\0';
     KisoFile[0] = '\0';
     KdiaFile[0] = '\0';
@@ -2067,7 +2068,8 @@ int main (int argc, char ** argv)
         (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) )
+        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(irFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
     {
         fprintf(stderr,"ERROR: Invalid input parameter values\n");
         printUsage();
@@ -2124,6 +2126,7 @@ int main (int argc, char ** argv)
     VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
     
     MATALLOC(tau,tlength,Nx+1);
+    MATALLOC(irradiance,Nx,Nz);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
@@ -2210,6 +2213,7 @@ int main (int argc, char ** argv)
         ( (strlen(initFile) > 0)        &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) ) ||
         ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
         ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
+        ( (strlen(irFile) > 0)          &&  !readMatrix(irFile,irradiance,Nx,Nz,stderr) ) ||
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
