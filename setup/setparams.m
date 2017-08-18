@@ -95,20 +95,21 @@ function setparams (local_home_dir,run_name)
   Xtopog = 200*m1km;
   Ltopog = 25*m1km;
   Htopog = H-shelfdepth;  
-  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/Ltopog));
+  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
   %%% Generate full sigma-coordinate grids
-  [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
-                    = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);
-  slopeidx = max(find(hb_psi>Htopog/2))
-  ['Vertical grid spacing at (',num2str(XX_psi(1,1)),',',num2str(ZZ_psi(1,1)),'): ',num2str(ZZ_psi(1,2)-ZZ_psi(1,1))]
-  ['Vertical grid spacing at (',num2str(XX_psi(1,end)),',',num2str(ZZ_psi(1,end)),'): ',num2str(ZZ_psi(1,end)-ZZ_psi(1,end-1))]
-  ['Vertical grid spacing at (',num2str(XX_psi(end,1)),',',num2str(ZZ_psi(end,1)),'): ',num2str(ZZ_psi(end,2)-ZZ_psi(end,1))]
-  ['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))]
-  ['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))]
-  ['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))]
+  [XX_tr,ZZ_tr,XX_psi,ZZ_psi,~,~,~,~] ...
+                    = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);  % Full output [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w]
+  slopeidx = max((hb_psi>Htopog/2));
+  disp(['slopeidx = ',num2str(slopeidx)])
+  disp(['Vertical grid spacing at (',num2str(XX_psi(1,1)),',',num2str(ZZ_psi(1,1)),'): ',num2str(ZZ_psi(1,2)-ZZ_psi(1,1))])
+  disp(['Vertical grid spacing at (',num2str(XX_psi(1,end)),',',num2str(ZZ_psi(1,end)),'): ',num2str(ZZ_psi(1,end)-ZZ_psi(1,end-1))])
+  disp(['Vertical grid spacing at (',num2str(XX_psi(end,1)),',',num2str(ZZ_psi(end,1)),'): ',num2str(ZZ_psi(end,2)-ZZ_psi(end,1))])
+  disp(['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))])
+  disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))])
+  disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))])
   
   figure(fignum);
   fignum = fignum+1;
@@ -118,7 +119,7 @@ function setparams (local_home_dir,run_name)
   
   %%% Calculate grid stiffness  
   rx1 = abs(diff(0.5*(ZZ_psi(:,1:Nz)+ZZ_psi(:,2:Nz+1)),1,1) ./ diff(0.5*(ZZ_psi(1:Nx,:)+ZZ_psi(2:Nx+1,:)),1,2) );
-  ['Grid stiffness: ' num2str(max(max(rx1)))]  
+  disp(['Grid stiffness: ' num2str(max(max(rx1)))]  )
   
   %%% Define parameter
   PARAMS = addParameter(PARAMS,'Ntracs',Ntracs,PARM_INT);
@@ -205,12 +206,12 @@ function setparams (local_home_dir,run_name)
  
   
 %  tau = tau0*cos(pi*xx_psi/(2*Lx));
-   temp = tau0*tanh((Lx-xx_psi)/(Lx/8));
+   temp = tau0*tanh(((Lx)-xx_psi)/(Lx/16)) - 0.15;
   
-   amp = 0.7846;                % Scaling amplitude for seasonal forcing
+   amp = 0.7846/2;                % Scaling amplitude for seasonal forcing
    per = 2*pi/52;               % Period for seasonal forcing of one year in seconds
-   peak = 17;                   % Peak wind stress at the end of April
-   bb = 1.0392;                 % Shift so that the max wind stress is at 1.6 (April 30), and 
+   peak = 17;                   % Peak wind stress at the end of April (Haack, et al 2005).
+   bb = 1.0392;                 % Shift so that the max wind stress is at 1.6 (April 30)
   
    %Use weekly averaged wind forcing (if this value is changed, it must be
    %changed in the mamebus.c code as well in the windInterp function.
@@ -220,21 +221,23 @@ function setparams (local_home_dir,run_name)
   tlength = length(fcing);                        % Determine the number of points of wind stress data
   tau = zeros(length(fcing),length(xx_psi));
   
-  PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
-  
-  
   for ii = 1:1:53
       tau(ii,:) = fcing(ii)*temp;
   end
   
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
+  PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
   
   figure(fignum);
   fignum = fignum+1;
-  plot(xx_psi,tau(1,:))
-  title('Initial Surface Wind Stress')
+  surf(tau)
+  shading interp
+  title('Yearly Surface Wind Stress')
+  view(2)
+  axis tight
+  colorbar
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Irradiance Profile %%%%%
@@ -246,6 +249,14 @@ function setparams (local_home_dir,run_name)
   irFile = 'irradiance.dat';
   writeDataFile(fullfile(local_run_dir,irFile),irradiance);
   PARAMS = addParameter(PARAMS,'irFile',irFile,PARM_STR);
+  
+%   figure(fignum)
+%   fignum = fignum+1;
+%   surf(XX_tr,ZZ_tr,irradiance)
+%   title('Irradiance Profile')
+%   shading interp
+%   view(2)
+%   colorbar
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Buoyancy diffusivity %%%%%
@@ -281,7 +292,6 @@ function setparams (local_home_dir,run_name)
   Ksml = 1e-1;
   Kbbl = 1e-1;
   HB_psi = repmat(reshape(hb_psi,[Nx+1 1]),[1 Nz+1]);
-  
 
   %%% Crude mixed layers
   idx_sml = ZZ_psi>-Hsml;
@@ -331,8 +341,8 @@ function setparams (local_home_dir,run_name)
   buoy_surf_max = 20;
   buoy_surf_min = 15;
   buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
-  buoy_relax(find(xx_tr>=L_relax),Nz) = buoy_surf(find(xx_tr>=L_relax)); 
-  T_relax_buoy(find(xx_tr>=L_relax),Nz) = 10*t1day; 
+  buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
+  T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
   
   %%% Depth tracer relaxation  
   dtr_relax = dtr_init;
