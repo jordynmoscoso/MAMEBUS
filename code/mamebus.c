@@ -54,10 +54,7 @@ real monod = 0;
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
 real year = 31536000;             // Seconds in a year
-real amp = 0.7846;                // Scaling amplitude for seasonal forcing
-real per = 2*3.1415/31536000;     // Period for seasonal forcing of one year in seconds
-real peak = 86400*120;            // Peak wind stress at the end of April
-real bb = 1.0392;                 // Shift so that the max wind stress is at 1.6 (April 30), and min is at 0.05 (Haack, et al 2005).
+
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
