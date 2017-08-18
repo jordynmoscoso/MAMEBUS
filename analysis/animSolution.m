@@ -58,7 +58,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   t1day = 86400;
   
   %%% If user is plotting nitrate, indicate what to plot
-  if (var_id == 2)
+  if (var_id == 2 && plot_trac)
     prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
     ncase = input(prompt);
     %%% Check for valid input, if not choose default
@@ -156,11 +156,20 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
         case 2 %%% Nitrate
-          if ncase == 0
-              %%% Import temperature file and irradiance file
               buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);
               bfid = fopen(buoy_file,'r');
-              temp = fscanf(dfid,'%le',[Nx,Nz]);  
+              temp = fscanf(dfid,'%le',[Nx,Nz]); 
+              
+              fclose(bfid);
+    
+              irradiance = readDataFile (params_file,dirpath,'irFile',Nx,Nz,zeros(Nx,Nz));
+              ir_surf = irradiance(end,:);
+              
+              eu_depth = 30*log(3.4./ir_surf);
+              
+              
+          if ncase == 0
+              %%% Import temperature file and irradiance file
               a_temp = readparam(params_file,'a_temp','%lf');
               b_temp = readparam(params_file,'b_temp','%lf');
               c_temp = readparam(params_file,'c_temp','%lf');
@@ -170,15 +179,22 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
               monod = readparam(params_file,'monod','%lf');
               lk = T./alpha;
               
-              irradiance = readDataFile (params_file,dirpath,'irFile',Nx,Nz,zeros(Nx,Nz));
+              
               II = irradiance./sqrt(irradiance.^2 + lk.^2);
               
               uptake = 0.3*T.*II.*phi;
               
               [C h] = contourf(XX_tr,ZZ_tr,uptake*t1day,10);
-              set(gca, 'CLim', [0,5]);
+              hold on
+              plot(XX_tr,eu_depth,'w','LineWidth',2)
+              hold off
+              set(gca, 'CLim', [0,7]);
+              axis([0 Nx -120 0])
           else
             [C h] = contourf(XX_tr,ZZ_tr,phi,20);
+            hold on
+            plot(XX_tr,eu_depth,'w','LineWidth',2)
+            hold off
             set(gca, 'CLim', [0,35]);
           end
       end
