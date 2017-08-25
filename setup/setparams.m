@@ -48,7 +48,7 @@ function setparams (local_home_dir,run_name)
   %%% Scalar parameter definitions 
   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
   rho0 = 1e3; %%% Reference density
-  f0 = 1e-4; %%% Coriolis parameter (Southern Ocean)
+  f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 500; %%% Reference GM diffusivity
   Kiso0 = 500; %%% Reference isopycnal diffusivity
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
@@ -59,7 +59,6 @@ function setparams (local_home_dir,run_name)
   Hbbl = 50; %%% Bottom boundary layer thickness
   
   %%% Biogeochemical Parameters
-  c_init = 30; %%% Initial concentration of nutrient
   a_temp = 0.6/t1day;
   b_temp = 1.066;
   c_temp = 1;
@@ -86,7 +85,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 75;
+  shelfdepth = 150;
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
       return
@@ -176,14 +175,35 @@ function setparams (local_home_dir,run_name)
   fignum = fignum+1;
   pcolor(XX_tr,ZZ_tr,buoy_init);
   title('Initial Buoyancy')
+  colorbar
   
   %%% Initial depth tracer
   dtr_init = ZZ_tr;
   
+  %%% Initial nitrate profile (Hyperbolic)
+  Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
+  Ncline = 150; % Approximate guess of the depth of the nutracline
+  N_init = -Nmax*tanh(ZZ_tr./Ncline);
+    
+  figure(fignum);
+  fignum = fignum+1;
+  pcolor(XX_tr,ZZ_tr,N_init);
+%   plot(N_init(1,:),ZZ_tr(1,:))
+  shading interp
+  title('Initial Nitrate Profile')
+  colorbar
+  caxis([0 Nmax])
+  
+  
+  figure(fignum);
+  fignum = fignum+1;
+  plot(N_init(1,:),ZZ_tr(1,:))
+  title('Initial Nutracline Profile')
+  
   %%% Store tracers in 3D matrix
   phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
   phi_init(2,:,:) = reshape(dtr_init,[1 Nx Nz]);
-  phi_init(3,:,:) = 15*ones(size(phi_init(1,:,:)));  
+  phi_init(3,:,:) = reshape(N_init,[1 Nx Nz]);  
   
   %%% Write to data file
   initFile = 'initFile.dat';  
@@ -206,9 +226,9 @@ function setparams (local_home_dir,run_name)
  
   
 %  tau = tau0*cos(pi*xx_psi/(2*Lx));
-   temp = tau0*tanh(((Lx)-xx_psi)/(Lx/16)) - 0.15;
+   temp = tau0*tanh(((Lx)-xx_psi)/(Lx/16));
   
-   amp = 0.7846/2;                % Scaling amplitude for seasonal forcing
+   amp = 0.7846/4;                % Scaling amplitude for seasonal forcing
    per = 2*pi/52;               % Period for seasonal forcing of one year in seconds
    peak = 17;                   % Peak wind stress at the end of April (Haack, et al 2005).
    bb = 1.0392;                 % Shift so that the max wind stress is at 1.6 (April 30)
@@ -216,8 +236,8 @@ function setparams (local_home_dir,run_name)
    %Use weekly averaged wind forcing (if this value is changed, it must be
    %changed in the mamebus.c code as well in the windInterp function.
   tyear = 0:1:52;
-  fcing = amp*(bb + cos((tyear-peak)*per));
-%   fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
+%   fcing = amp*(bb + cos((tyear-peak)*per));
+  fcing = ones(size(tyear));            % Constant forcing to determine upwelling. 
   tlength = length(fcing);                        % Determine the number of points of wind stress data
   tau = zeros(length(fcing),length(xx_psi));
   
@@ -232,12 +252,13 @@ function setparams (local_home_dir,run_name)
   
   figure(fignum);
   fignum = fignum+1;
-  surf(tau)
+  plot(xx_psi,tau(1,:))
+%   surf(tau)
   shading interp
-  title('Yearly Surface Wind Stress')
+  title('Surface Wind Stress')
   view(2)
   axis tight
-  colorbar
+%   colorbar
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Irradiance Profile %%%%%
@@ -313,7 +334,7 @@ function setparams (local_home_dir,run_name)
   %%% Plot open-ocean diapycnal diffusivity
   figure(fignum);
   fignum = fignum+1;
-  plot(Kdia(end,:),ZZ_psi(end,:));
+  plot(Kdia(1,:),ZZ_psi(1,:));
   title('Open ocean diapycnal diffusivity')
   
   %%% Write to file
@@ -344,15 +365,21 @@ function setparams (local_home_dir,run_name)
   buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
   T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
   
+  figure(100)
+  plot(xx_tr,buoy_surf)
+  
   %%% Depth tracer relaxation  
   dtr_relax = dtr_init;
   T_relax_dtr = 5*t1year * ones(Nx,Nz);
   
+  %%% Relax nitrate to initial conditions
+  N_relax = N_init;
+ 
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
   phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
-  phi_relax_all(3,:,:) = c_init*ones(size(phi_relax_all(1,:,:)));
+  phi_relax_all(3,:,:) = reshape(N_relax,[1 Nx Nz]);
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
