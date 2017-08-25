@@ -909,7 +909,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 
         // Parameters
 
-        real f = 0.09;                      // fraction of exported material
+        real f = 0.09;                           // fraction of exported material
     
         // Variables
         real temp_flux = 0;                      // holder for remin value
@@ -925,7 +925,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
         real dz = 0;                             // vertical grid spacing placeholder
     
-        real u_damp = 0.3;                        // For testing purposes, damp the irradiance in uptake
+        real u_damp = 0.3;                       // For testing purposes, damp the irradiance in uptake
     
         // Build temperature dependent uptake
         for (j = 0; j < Nx; j++)
