@@ -53,6 +53,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   dt_s = readparam(params_file,'monitorFrequency','%lf');
   tmax = readparam(params_file,'maxTime','%lf');
   
+  
+  
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
   t1day = 86400;
@@ -65,6 +67,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     if (isempty(ncase) || ncase < 0 || ncase > 1)
         ncase = 0;
     end
+    Nstore = [];
+    tsave = [];
   end
   
   %%% Load grids from model output
@@ -179,23 +183,31 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
               monod = readparam(params_file,'monod','%lf');
               lk = T./alpha;
               
-              
               II = irradiance./sqrt(irradiance.^2 + lk.^2);
               
               uptake = 0.3*T.*II.*phi;
+%               nstore = uptake*t1day;
+              nstore = -(sum(uptake(:,1))/ZZ_psi(end,1))*t1day;
+              
+              Nstore = [Nstore nstore(end,end)];
+              tsave = [tsave t];
               
               [C h] = contourf(XX_tr,ZZ_tr,uptake*t1day,10);
-              hold on
-              plot(XX_tr,eu_depth,'w','LineWidth',2)
-              hold off
-              set(gca, 'CLim', [0,7]);
+%               hold on
+%               plot(XX_tr,eu_depth,'w','LineWidth',2)
+%               hold off
+              set(gca, 'CLim', [0,10]);
               axis([0 Nx -120 0])
           else
             [C h] = contourf(XX_tr,ZZ_tr,phi,20);
-            hold on
-            plot(XX_tr,eu_depth,'w','LineWidth',2)
-            hold off
-            set(gca, 'CLim', [0,35]);
+%             hold on
+%             plot(XX_tr,eu_depth,'w','LineWidth',2)
+%             hold off
+            set(gca, 'CLim', [0,45]);
+            
+            nstore = -t1day*(sum(phi(:,end)))./ZZ_psi(end,1);
+            Nstore = [Nstore nstore];
+            tsave = [tsave t];
           end
       end
 %       clabel(C,h,'Color','w');  
@@ -245,7 +257,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
       limval = 2;
       psi_r_lim = min(psi_r_lim,limval);
       psi_r_lim = max(psi_r_lim,-limval);
-%       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');                 
+%       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
+      figure(1)
       pcolor(XX_psi,ZZ_psi,psi_r_lim);
       shading interp;     
       colormap redblue;
@@ -256,7 +269,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     end
       
     
-    %%% Store the image in the movie buffer          
+    %%% Store the image in the movie buffer  
     xlabel('x');    
     ylabel('z','Rotation',0);        
     axis tight;
@@ -274,11 +287,26 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
         
     end
     
-    
     counter = counter+1;   
     n = n + 1;
     
   end    
+  
+  if (var_id == 2 && plot_trac)
+      titlestr = ['Final time = ', num2str(t/t1year), ' yr'];
+      
+      if ncase == 0
+      figure(2)
+      plot(tsave/t1year,Nstore)
+      title('NPP (depth averaged) (mmol/(m^2 day))')
+      xlabel(titlestr)
+      else
+      figure(2)
+      plot(tsave/t1year,Nstore)
+      title('Nitrate (mmol/m^3)')
+      xlabel(titlestr)
+      end
+  end
   
   % Close the movie writer
   if mov_on
