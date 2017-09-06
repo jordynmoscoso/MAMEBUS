@@ -196,7 +196,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
 %               hold on
 %               plot(XX_tr,eu_depth,'w','LineWidth',2)
 %               hold off
-              set(gca, 'CLim', [0,10]);
+              set(gca, 'CLim', [0,6]);
               axis([0 Nx -120 0])
           else
             [C h] = contourf(XX_tr,ZZ_tr,phi,20);
