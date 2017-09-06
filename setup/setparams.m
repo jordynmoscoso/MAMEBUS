@@ -50,7 +50,9 @@ function setparams (local_home_dir,run_name)
   rho0 = 1e3; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 500; %%% Reference GM diffusivity
-  Kiso0 = 500; %%% Reference isopycnal diffusivity
+  Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s
+  Kiso_hb = 200; %%% Reference interior isopycnal diffusivity
+  
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
@@ -85,7 +87,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 150;
+  shelfdepth = 105;
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
       return
@@ -110,11 +112,8 @@ function setparams (local_home_dir,run_name)
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))])
   
-  figure(fignum);
-  fignum = fignum+1;
-  surf(ZZ_tr);
-  title('Grid')
-  shading interp
+  %%% ZZ_tr size: 40 40
+  %%% ZZ_psi size: 41 41
   
   %%% Calculate grid stiffness  
   rx1 = abs(diff(0.5*(ZZ_psi(:,1:Nz)+ZZ_psi(:,2:Nz+1)),1,1) ./ diff(0.5*(ZZ_psi(1:Nx,:)+ZZ_psi(2:Nx+1,:)),1,2) );
@@ -298,7 +297,32 @@ function setparams (local_home_dir,run_name)
   
   %%% Uniform diffusivity
 %   Kiso = Kiso0*ones(Nx+1,Nz+1);        
-  Kiso = Kgm;
+  %%% First guess is a linearly decreasing profile with depth from Kiso0 to
+  %%% Kiso_int, with respect to depth.
+  
+%   Kiso = (((Kiso0 - Kiso_hb)/H).*ZZ_psi) + Kiso0;
+%   figure(fignum);
+%   fignum = fignum+1;
+%   pcolor(XX_psi,ZZ_psi,Kiso)
+%   title('Isopycnal Diffusivity')
+%   shading interp
+%   colorbar
+  
+  %%% Another guess is a hyperbolic profile decreasing to 200 at the lower
+  %%% boundary. 
+  Kefold = 1000;
+  
+  Kiso = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi./Kefold);
+  figure(fignum);
+  fignum = fignum+1;
+  pcolor(XX_psi,ZZ_psi,Kiso)
+  title('Isopycnal Diffusivity')
+  shading interp
+  colorbar
+  
+  Kiso(:,1)
+  
+%   Kiso = Kgm;
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
