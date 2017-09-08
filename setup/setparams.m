@@ -25,7 +25,7 @@ function setparams (local_home_dir,run_name)
   walltime = 24;
   cluster_home_dir = '/data1/astewart/MAMEBUS/runs';
   cluster_username = 'astewart';
-  cluster_address = 'ardbeg.atmos.ucla.edu';      
+  cluster_address = 'ardbeg.atmos.ucla.edu';
   
   %%% Run directory
   run_name = strtrim(run_name);  
