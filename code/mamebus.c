@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 33
+#define NPARAMS 31
 
 
 
@@ -45,11 +45,10 @@ real Hbbl = 50.0;
 int tlength = 0;
 
 // Biogeochemical allometric parameters
-real a_temp = 0;
-real b_temp = 0;
-real c_temp = 0;
-real alpha = 0;
-real monod = 0;
+int modeltype = 0;
+int NP = 0;
+int NZ = 0;  // I know, bad notation, here is the number of zooplankton size classes.
+int ND = 0;
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
@@ -906,83 +905,102 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
 void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 {
         int i,j,k;
+    
 
+    
+    switch(modeltype)
+    {
+    case 0 // Nitrate only model
+        {
         // Parameters
 
-        real f = 0.09;                           // fraction of exported material
-    
-        // Variables
-        real temp_flux = 0;                      // holder for remin value
-        real flux = 0;                           // flux of remineralized nutrient
-        real t_uptake = 0;                       // temperature dependent uptake rate
-        real remin = 0;                          // remineralization
-        real remin_in_box = 0;                   // value of remineralization in box
-        real lk = 0;                             // light saturation constant
-        real l_uptake = 0;                       // light dependent uptake rate
-        real uptake = 0;                         // uptake in each grid box
-        real T = 0;                              // Placeholder for Temperature
-        real N = 0;                              // Placeholder for Nitrate
-        real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
-        real dz = 0;                             // vertical grid spacing placeholder
-    
-        real u_damp = 0.3;                       // For testing purposes, damp the irradiance in uptake
-    
-        // Build temperature dependent uptake
-        for (j = 0; j < Nx; j++)
-        {
+            real f = 0.09;                           // fraction of exported material
+            real I0 = 340;                           // Surface irradiance
+            kw = 0.04;                               // attenuation of clear water
+            kp = 0.03;                               // accounts for shading when phytoplankton are present
             
-            temp_flux = 0;                  // Set the flux equal to zero at the surface
-            for (k = Nz-1; k >= 0; k--)
+            // Variables
+            real temp_flux = 0;                      // holder for remin value
+            real flux = 0;                           // flux of remineralized nutrient
+            real t_uptake = 0;                       // temperature dependent uptake rate
+            real remin = 0;                          // remineralization
+            real remin_in_box = 0;                   // value of remineralization in box
+            real lk = 0;                             // light saturation constant
+            real l_uptake = 0;                       // light dependent uptake rate
+            real uptake = 0;                         // uptake in each grid box
+            real T = 0;                              // Placeholder for Temperature
+            real N = 0;                              // Placeholder for Nitrate
+            real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
+            real dz = 0;                             // vertical grid spacing placeholder
+            real IR = 0;                             // the value of irradiance in the grid box.
+            real K = 0;                              // light attenuation value
+    
+            real u_damp = 0.3;                       // For testing purposes, damp the irradiance in uptake
+    
+            // Build temperature dependent uptake
+            for (j = 0; j < Nx; j++)
             {
-                
-                // Temperature and Irradiance
-                T = phi[0][j][k];    // temperature in grid box
-                t_uptake = a_temp * pow(b_temp, c_temp * T);    // temperature dependent uptake rate
-                
-                lk = t_uptake / alpha;
-                l_uptake = irradiance[j][k] / sqrt(POW2(irradiance[j][k]) + POW2(lk));
-    
-                // Uptake and Remineralizaiton
-                N = phi[2][j][k];
-                uptake = u_damp*(l_uptake * t_uptake) * N;
-                remin_in_box = (1-f) * uptake;
-    
-                // Scale Height for Remin
-                scale_height = -(150/H) * ZZ_phi[j][k] + 50;
-                dz = 1/_dz_phi[j][k];
-    
-                flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
-                
-                remin = - flux / scale_height;
-    
-                temp_flux = flux;             // Move to the next vertical grid cell
-    
-                // Return any extra flux of nutrients to bottom grid cell
-                if (k == 0)
+            
+                temp_flux = 0;                  // Set the flux equal to zero at the surface
+                for (k = Nz-1; k >= 0; k--)
                 {
-                    remin -= flux / dz;
-                    temp_flux = 0;           // Reset flux of nutrients at the surface to zero
+                
+                    N = phi[2][j][k];
+                    T = phi[0][j][k];    // temperature in grid box
+                    
+                    K = kw + kp*N;
+                    IR = I0*exp(-K * ZZ_phi[j][k]);
+                    
+                    t_uptake = a_temp * pow(b_temp, c_temp * T);    // temperature dependent uptake rate
+                
+                    lk = t_uptake / alpha;
+                    l_uptake = IR / sqrt(POW2(IR) + POW2(lk));
+    
+                    // Uptake and Remineralizaiton
+                    uptake = u_damp*(l_uptake * t_uptake) * N;
+                    remin_in_box = (1-f) * uptake;
+    
+                    // Scale Height for Remin
+                    scale_height = -(150/H) * ZZ_phi[j][k] + 50;
+                    dz = 1/_dz_phi[j][k];
+    
+                    flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
+                
+                    remin = - flux / scale_height;
+    
+                    temp_flux = flux;             // Move to the next vertical grid cell
+    
+                    // Return any extra flux of nutrients to bottom grid cell
+                    if (k == 0)
+                    {
+                        remin -= flux / dz;
+                        temp_flux = 0;           // Reset flux of nutrients at the surface to zero
+                    }
+                    
+                    dphi_dt[2][j][k] += remin + remin_in_box - uptake;
+                    
+                    // For debugging
+                    //                if (k == Nz-1 && j == Nz - 1)
+                    //                {
+                    //                    printf(" Cell Number (x,z): (%d,%d) \n dN/dt = %f \n N = %f \n",j,k,dphi_dt[2][j][k], N);
+                    //                    fflush(stdout);
+                    //                }
+                    
+                    if (isnan(uptake))
+                    {
+                        printf("Uptake is NaN \n");
+                        fflush(stdout);
+                    }
+                    
+                    
                 }
-                
-                dphi_dt[2][j][k] += remin + remin_in_box - uptake;
-                
-                // For debugging
-//                if (k == Nz-1 && j == Nz - 1)
-//                {
-//                    printf(" Cell Number (x,z): (%d,%d) \n dN/dt = %f \n N = %f \n",j,k,dphi_dt[2][j][k], N);
-//                    fflush(stdout);
-//                }
-                
-                if (isnan(uptake))
-                {
-                    printf("Uptake is NaN \n");
-                    fflush(stdout);
-                }
-                
-               
             }
         }
-    
+    case 1 // NPZD model
+        {
+        
+        }
+    }
 }
 
 
@@ -1992,19 +2010,16 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
     setParam(params,paramcntr++,"tlength","%u",&tlength,false);
     setParam(params,paramcntr++,"tauFile","%s",tauFile,true);
-    setParam(params,paramcntr++,"irFile","%s",irFile,true);
     setParam(params,paramcntr++,"KgmFile","%s",KgmFile,true);
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
     setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
-    
-    // Biogeochemical parameter inputs
-    setParam(params,paramcntr++,"a_temp","%lf",&a_temp,false);
-    setParam(params,paramcntr++,"b_temp","%lf",&b_temp,false);
-    setParam(params,paramcntr++,"c_temp","%lf",&c_temp,false);
-    setParam(params,paramcntr++,"alpha","%lf",&alpha,false);
-    setParam(params,paramcntr++,"monod","%lf",&monod,false);
+
+    setParam(params,paramcntr++,"NP","%u",&NP,false);
+    setParam(params,paramcntr++,"NZ","%u",&NZ,false);
+    setParam(params,paramcntr++,"ND","%u",&ND,false);
+    setParam(params,paramcntr++,"modeltype","%u",&modeltype,false);
     
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
