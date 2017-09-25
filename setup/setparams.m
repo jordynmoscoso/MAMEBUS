@@ -12,8 +12,46 @@
 %%% the run files will be written. N.B. a directory called 'run_name' will
 %%% be created within local_home_dir to house the files.
 %%%
-function setparams (local_home_dir,run_name)    
+function setparams (local_home_dir,run_name,modeltype)  
 
+  %%% Check to see if a valid model type is indicated for biogeochemistry,
+  %%% if not use the default single nitrate model (modeltype = 0)
+  if (modeltype ~=0 && modeltype ~=1)
+      modeltype = 0;
+      
+  end
+  
+  %%% For an NPZ model, prompt the user to choose the number of
+  %%% phytoplankton and zooplankton size classes
+  if (modeltype == 1)
+    NP = 2;
+    NZ = 2;
+    ND = 2;
+    spec_tot = NP + NZ + ND + 1; %%% Add one for nitrate
+  elseif (modeltype == 0)
+    NP = 0;
+    NZ = NP;
+    ND = NZ;
+  end
+  
+  disp(['(NP,NZ) = (',num2str(NP),' , ', num2str(NZ),')']);
+  
+  %Uncomment to have the model take in user-prescribed data,
+%   if (modeltype == 1)
+%       phy_prompt='Please choose the number of phytoplankton classes (NP > 1)';
+%       NP = input(phy_prompt);
+%       if (isempty(NP) || NP <= 0)
+%           disp('Default class number, NP = 2')
+%           NP = 2;
+%       end
+%       zoo_prompt = 'Please choose the number of zooplankton classes (NZ > NP)';
+%       NZ = input(zoo_prompt);
+%       if (isempty(NZ) || NZ <= NP)
+%           disp('Default class number, NZ = 4')
+%           NZ = 4;
+%       end 
+%   end
+      
   %%% Convenience scripts used in this function
   addpath ../utils;
   
@@ -61,11 +99,7 @@ function setparams (local_home_dir,run_name)
   Hbbl = 50; %%% Bottom boundary layer thickness
   
   %%% Biogeochemical Parameters
-  a_temp = 0.6/t1day;
-  b_temp = 1.066;
-  c_temp = 1;
-  alpha = 0.025/t1day; % d^-1 (W/m^2)^-1
-  monod = 0;
+
   
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
@@ -78,7 +112,7 @@ function setparams (local_home_dir,run_name)
 %   theta_b = 0; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
    
   %%% Grids  
-  Ntracs = 3; %%% Number of tracers
+  Ntracs = 2 + NP + NZ + ND + 1; %%% Number of tracers (2 physical and the rest are bgc, plus one for nitrate)
   Nx = 40; %%% Number of latitudinal grid points 
   Nz = 40; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
@@ -112,8 +146,11 @@ function setparams (local_home_dir,run_name)
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))])
   
-  %%% ZZ_tr size: 40 40
-  %%% ZZ_psi size: 41 41
+  ZZ_psi(1,1)
+  ZZ_psi(end,end)
+  
+  %%% ZZ_tr size: 40 40 (centers)
+  %%% ZZ_psi size: 41 41 (edges) n = 0 is base, n = N is top
   
   %%% Calculate grid stiffness  
   rx1 = abs(diff(0.5*(ZZ_psi(:,1:Nz)+ZZ_psi(:,2:Nz+1)),1,1) ./ diff(0.5*(ZZ_psi(1:Nx,:)+ZZ_psi(2:Nx+1,:)),1,2) );
@@ -137,24 +174,52 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Hsml',Hsml,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
   
-  %%% Save biogeochemical parameters
-  PARAMS = addParameter(PARAMS,'a_temp',a_temp,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'b_temp',b_temp,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'c_temp',c_temp,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'alpha',alpha,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'monod',monod,PARM_REALF);
+  %%% Indicate number of phytoplankton, zooplankton and detrital pools
+  PARAMS = addParameter(PARAMS,'NP',NP,PARM_INT);
+  PARAMS = addParameter(PARAMS,'NZ',NZ,PARM_INT);
+  PARAMS = addParameter(PARAMS,'ND',ND,PARM_INT);
+  %%% Save biogeochemical parameters in vector form call bgc_setup function
+  switch(modeltype)
+      case 0
+        [params, bgc_init, ~, ~] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
+        bgcParamsFile = 'bgcParams.dat';
+        writeDataFile(fullfile(local_run_dir,bgcParamsFile),params);
+        PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
+        
+        lp = 0;
+        lz = 0;
+        disp('Nitrate only')
+      case 1
+        [params, bgc_init, lp, lz] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
+        bgcParamsFile = 'bgcParams.dat';
+        writeDataFile(fullfile(local_run_dir,bgcParamsFile),params);
+        PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
+        disp('NPZD')
+        %%% Store phytoplankton size and zooplankton size to determine what size
+        %%% pool of detritus they go into (large or small) when passed into
+        %%% mamebus.c code.
+  end
   
+  size(bgc_init)
+  
+  
+  
+  pSizeFile = 'pSize.dat';
+  writeDataFile(fullfile(local_run_dir,pSizeFile),lp);
+  PARAMS = addParameter(PARAMS,'pSizeFile',pSizeFile,PARM_STR);
+  
+  zSizeFile = 'zSize.dat';
+  writeDataFile(fullfile(local_run_dir,zSizeFile),lz);
+  PARAMS = addParameter(PARAMS,'zSizeFile',zSizeFile,PARM_STR);
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Target residuals %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
-  
   targetRes = 1e-16 * ones(Ntracs,1);
   targetResFile = 'targetRes.dat';  
   writeDataFile(fullfile(local_run_dir,targetResFile),targetRes);
   PARAMS = addParameter(PARAMS,'targetResFile',targetResFile,PARM_STR); 
-  
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Tracer initial conditions %%%%%
@@ -179,30 +244,20 @@ function setparams (local_home_dir,run_name)
   %%% Initial depth tracer
   dtr_init = ZZ_tr;
   
-  %%% Initial nitrate profile (Hyperbolic)
-  Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-  Ncline = 150; % Approximate guess of the depth of the nutracline
-  N_init = -Nmax*tanh(ZZ_tr./Ncline);
-    
-  figure(fignum);
-  fignum = fignum+1;
-  pcolor(XX_tr,ZZ_tr,N_init);
-%   plot(N_init(1,:),ZZ_tr(1,:))
-  shading interp
-  title('Initial Nitrate Profile')
-  colorbar
-  caxis([0 Nmax])
-  
-  
-  figure(fignum);
-  fignum = fignum+1;
-  plot(N_init(1,:),ZZ_tr(1,:))
-  title('Initial Nutracline Profile')
-  
-  %%% Store tracers in 3D matrix
+  %%% Store physical tracers in 3D matrix
   phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
   phi_init(2,:,:) = reshape(dtr_init,[1 Nx Nz]);
-  phi_init(3,:,:) = reshape(N_init,[1 Nx Nz]);  
+  
+  %%% Count number of bgc tracers
+  switch (modeltype)
+      case 0
+          phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
+      case 1
+          bgc_tracs = NP + NZ + ND + 1;
+          for ii = 1:bgc_tracs
+              phi_init(ii+2,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
+          end
+  end
   
   %%% Write to data file
   initFile = 'initFile.dat';  
@@ -259,25 +314,7 @@ function setparams (local_home_dir,run_name)
   axis tight
 %   colorbar
   
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  %%%%% Irradiance Profile %%%%%
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
-  irr0 = 340;                   %%% W/m^2 (Can eventually include a seasonal amplitude)
-  irr_scaleheight = 30;          %%% m
-  irradiance = irr0.*exp(ZZ_tr./irr_scaleheight);
-  irFile = 'irradiance.dat';
-  writeDataFile(fullfile(local_run_dir,irFile),irradiance);
-  PARAMS = addParameter(PARAMS,'irFile',irFile,PARM_STR);
-  
-%   figure(fignum)
-%   fignum = fignum+1;
-%   surf(XX_tr,ZZ_tr,irradiance)
-%   title('Irradiance Profile')
-%   shading interp
-%   view(2)
-%   colorbar
-  
+
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Buoyancy diffusivity %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -319,8 +356,6 @@ function setparams (local_home_dir,run_name)
   title('Isopycnal Diffusivity')
   shading interp
   colorbar
-  
-  Kiso(:,1)
   
 %   Kiso = Kgm;
   KisoFile = 'Kiso.dat';
@@ -397,17 +432,28 @@ function setparams (local_home_dir,run_name)
   T_relax_dtr = 5*t1year * ones(Nx,Nz);
   
   %%% Relax nitrate to initial conditions
-  N_relax = N_init;
+  bgc_relax = bgc_init;
  
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
   phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
-  phi_relax_all(3,:,:) = reshape(N_relax,[1 Nx Nz]);
+  switch (modeltype)
+      case 0
+          phi_relax_all(3,:,:) = reshape(bgc_relax,[1 Nx Nz]);
+      case 1
+          phi_relax_all(3:end,:,:) = reshape(bgc_relax,[spec_tot Nx Nz]);
+  end
+  
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
-  T_relax_all(3,:,:) = -ones(size(T_relax_all(1,:,:))); % Nutrients are conserved
+  switch (modeltype)
+      case 0
+          T_relax_all(3,:,:) = -ones(1,Nx,Nz); % Total nitrate conserved
+      case 1
+          T_relax_all(3:end,:,:) = -ones(spec_tot,Nx,Nz);
+  end
 
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
@@ -424,5 +470,6 @@ function setparams (local_home_dir,run_name)
   %%% Create the input parameter file
   writeParamFile(pfname,PARAMS);    
 
+  size(phi_init)
   
 end
