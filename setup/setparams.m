@@ -175,26 +175,31 @@ function setparams (local_home_dir,run_name,modeltype)
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
   
   %%% Indicate number of phytoplankton, zooplankton and detrital pools
+  PARAMS = addParameter(PARAMS,'modeltype',modeltype,PARM_INT);
   PARAMS = addParameter(PARAMS,'NP',NP,PARM_INT);
   PARAMS = addParameter(PARAMS,'NZ',NZ,PARM_INT);
   PARAMS = addParameter(PARAMS,'ND',ND,PARM_INT);
   %%% Save biogeochemical parameters in vector form call bgc_setup function
   switch(modeltype)
       case 0
-        [params, bgc_init, ~, ~] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
+        [params, bgc_init, ~, ~,bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
         bgcParamsFile = 'bgcParams.dat';
         writeDataFile(fullfile(local_run_dir,bgcParamsFile),params);
         PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
+        
+        PARAMS = addParameter(PARAMS,'bgc_nparams',bgc_nparams,PARM_INT);
         
         lp = 0;
         lz = 0;
         disp('Nitrate only')
       case 1
-        [params, bgc_init, lp, lz] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
+        [params, bgc_init, lp, lz,bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
         bgcParamsFile = 'bgcParams.dat';
         writeDataFile(fullfile(local_run_dir,bgcParamsFile),params);
         PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
         disp('NPZD')
+        
+        PARAMS = addParameter(PARAMS,'bgc_nparams',bgc_nparams,PARM_INT);
         %%% Store phytoplankton size and zooplankton size to determine what size
         %%% pool of detritus they go into (large or small) when passed into
         %%% mamebus.c code.
