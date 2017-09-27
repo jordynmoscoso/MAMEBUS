@@ -12,7 +12,7 @@
 %%%
 
 
-function [params, bgc_init,lp,lz] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
+function [params, bgc_init,lp,lz,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
 
 fignum = 100;
 
@@ -32,7 +32,7 @@ switch (model_type)
         alpha = 0.025/t1day; % s^-1 (W/m^2)^-1
         monod = 0;
         
-        params = [a_temp;b_temp;c_temp;alpha;monod];
+        params = [a_temp, b_temp, c_temp, alpha, monod];
         
         %%% Initial nitrate profile (Hyperbolic)
         Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
