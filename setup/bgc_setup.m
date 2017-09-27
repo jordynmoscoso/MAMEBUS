@@ -12,7 +12,7 @@
 %%%
 
 
-function [params, bgc_init,lp,lz,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
+function [params, bgc_init,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
 
 fignum = 100;
 
@@ -169,6 +169,13 @@ switch (model_type)
        dparam(2) = 10/t1day;  % Ward model m/s ~10m/day
        
        params = [params, dparam];
+       nparams = nparams+1;
+       
+       params = [lp, params];
+       nparams = nparams+1;
+       
+       params = [lz, params];
+       nparams = nparams+1;
        
        % Initialize bgc to have a maximum amount of phytoplankton at the
        % top, use the initial value of 1 mmol /m^3 of phytoplankton
