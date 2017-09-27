@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 31
+#define NPARAMS 33
 
 
 
@@ -49,6 +49,7 @@ int modeltype = 0;
 int NP = 0;
 int NZ = 0;  // I know, bad notation, here is the number of zooplankton size classes.
 int ND = 0;
+int bgc_nparams = 0;
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
@@ -64,7 +65,7 @@ real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
 real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
-real ** irradiance = NULL;     // Irradiance profile
+real ** bgcParams = NULL;     // Array for biogeochemical parameters
 
 real * stau = NULL;                  // Seasonal tau
 
@@ -902,7 +903,7 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
  * Calculates the time tendency of any tracer phi due to biogeochemical processes.
  *
  */
-void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
+void tderiv_bgc (const real t, real *** phi, real *** dphi_dt, real ** bgcParams)
 {
         int i,j,k;
     
@@ -910,14 +911,22 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     
     switch(modeltype)
     {
-    case 0 // Nitrate only model
+        case 0: // Nitrate only model
         {
         // Parameters
-
+            
+            // In matlab the parameters are ordered as such...
+            // params = [a_temp, b_temp, c_temp, alpha, monod]; so we must take the bgcParams, extract values,
+            real a_temp = bgcParams[1][0];
+            real b_temp = bgcParams[1][1];
+            real c_temp = bgcParams[1][2];
+            real alpha = bgcParams[1][3];
+            real monod = bgcParams[1][4];
+            
             real f = 0.09;                           // fraction of exported material
             real I0 = 340;                           // Surface irradiance
-            kw = 0.04;                               // attenuation of clear water
-            kp = 0.03;                               // accounts for shading when phytoplankton are present
+            real kw = 0.04;                               // attenuation of clear water
+            real kp = 0.03;                               // accounts for shading when phytoplankton are present
             
             // Variables
             real temp_flux = 0;                      // holder for remin value
@@ -995,10 +1004,17 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                     
                 }
             }
+            break;
         }
-    case 1 // NPZD model
+        case 1: // NPZD model
         {
         
+            break;
+        }
+        default:
+        {
+            fprintf(stderr,"ERROR: Modeltype not found \n");
+            break;
         }
     }
 }
@@ -1404,7 +1420,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     }
     
     // Add tendency due to biogeochemistry
-    tderiv_bgc(t,phi,dphi_dt);
+    tderiv_bgc(t,phi,dphi_dt,bgcParams);
     
     // Add tendency due to relaxation
     tderiv_relax(t,phi,dphi_dt);
@@ -1554,7 +1570,7 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
     
     // Calculate tracer tendencies due to biogeochemistry
-    tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
+    tderiv_bgc (t, phi_wrk, dphi_dt_wrk,bgcParams);
     
     // Calculate tracer tendencies due to relaxation
     tderiv_relax (t, phi_wrk, dphi_dt_wrk);
@@ -1975,12 +1991,12 @@ int main (int argc, char ** argv)
     char initFile[MAX_PARAMETER_FILENAME_LENGTH];
     char topogFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tauFile[MAX_PARAMETER_FILENAME_LENGTH];
-    char irFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KgmFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KisoFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KdiaFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTimeFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char bgcParamsFile[MAX_PARAMETER_FILENAME_LENGTH];
     
     // To store current time
     time_t now;
@@ -2015,23 +2031,55 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
     setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
+    setParam(params,paramcntr++,"bgcParamFile","%s",bgcParamsFile,true);
 
     setParam(params,paramcntr++,"NP","%u",&NP,false);
     setParam(params,paramcntr++,"NZ","%u",&NZ,false);
     setParam(params,paramcntr++,"ND","%u",&ND,false);
     setParam(params,paramcntr++,"modeltype","%u",&modeltype,false);
+    setParam(params,paramcntr++,"bgc_nparams","%u",&bgc_nparams,false);
+    
+    // Do a quick check and see if NP or NZ has the larger number and store that for memory allocation, if the nitrate model is used, numspec only has 1 row,
+    int numspec = 0;
+    switch (modeltype) {
+        case 0:
+        {
+            numspec = 1;
+            break;
+        }
+            
+        case 1:
+        {
+            if (NP > NZ)
+            {
+                numspec = NP;
+            }
+            else{
+                numspec = NZ;
+            }
+            break;
+        }
+        default:
+        {
+            fprintf(stderr,"ERROR: modeltype undefined \n");
+            printUsage();
+        }
+            
+    }
+
+
     
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
     initFile[0] = '\0';
     topogFile[0] = '\0';
     tauFile[0] = '\0';
-    irFile[0] = '\0';
     KgmFile[0] = '\0';
     KisoFile[0] = '\0';
     KdiaFile[0] = '\0';
     relaxTracerFile[0] = '\0';
     relaxTimeFile[0] = '\0';
+    bgcParamsFile[0] = '\0';
     
     // First program argument always carries the program name
     progname = argv[0];
@@ -2089,8 +2137,8 @@ int main (int argc, char ** argv)
         (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(irFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
+        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH)   ||
+        (strlen(bgcParamsFile) > MAX_PARAMETER_FILENAME_LENGTH)    )
     {
         fprintf(stderr,"ERROR: Invalid input parameter values\n");
         printUsage();
@@ -2147,9 +2195,9 @@ int main (int argc, char ** argv)
     VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
     
     MATALLOC(tau,tlength,Nx+1);
-    MATALLOC(irradiance,Nx,Nz);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
+    MATALLOC(bgcParams,bgc_nparams,numspec)
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
     MATALLOC3(phi_relax,Ntracs,Nx,Nz);
     MATALLOC3(T_relax,Ntracs,Nx,Nz);
@@ -2230,12 +2278,12 @@ int main (int argc, char ** argv)
     ////////////////////////////////////////
     
     // Read input matrices and vectors
-    if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
+    if (  ( (strlen(targetResFile) > 0) &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
         ( (strlen(initFile) > 0)        &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) ) ||
         ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
         ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
-        ( (strlen(irFile) > 0)          &&  !readMatrix(irFile,irradiance,Nx,Nz,stderr) ) ||
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
+        ( (strlen(bgcParamsFile) > 0)   &&  !readMatrix(bgcParamsFile,bgcParams,bgc_nparams,numspec,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
