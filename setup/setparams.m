@@ -182,40 +182,24 @@ function setparams (local_home_dir,run_name,modeltype)
   %%% Save biogeochemical parameters in vector form call bgc_setup function
   switch(modeltype)
       case 0
-        [params, bgc_init, ~, ~,bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
-        bgcParamsFile = 'bgcParams.dat';
-        writeDataFile(fullfile(local_run_dir,bgcParamsFile),params);
-        PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
-        
-        PARAMS = addParameter(PARAMS,'bgc_nparams',bgc_nparams,PARM_INT);
-        
-        lp = 0;
-        lz = 0;
+        [bgc_params, bgc_init,bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
         disp('Nitrate only')
       case 1
-        [params, bgc_init, lp, lz,bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
-        bgcParamsFile = 'bgcParams.dat';
-        writeDataFile(fullfile(local_run_dir,bgcParamsFile),params);
-        PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
+        [bgc_params, bgc_init, bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
         disp('NPZD')
         
-        PARAMS = addParameter(PARAMS,'bgc_nparams',bgc_nparams,PARM_INT);
         %%% Store phytoplankton size and zooplankton size to determine what size
         %%% pool of detritus they go into (large or small) when passed into
         %%% mamebus.c code.
   end
   
+  bgcParamsFile = 'bgcParams.dat';
+  writeDataFile(fullfile(local_run_dir,bgcParamsFile),bgc_params);
+  PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
+  PARAMS = addParameter(PARAMS,'bgc_nparams',bgc_nparams,PARM_INT);
+  
   size(bgc_init)
   
-  
-  
-  pSizeFile = 'pSize.dat';
-  writeDataFile(fullfile(local_run_dir,pSizeFile),lp);
-  PARAMS = addParameter(PARAMS,'pSizeFile',pSizeFile,PARM_STR);
-  
-  zSizeFile = 'zSize.dat';
-  writeDataFile(fullfile(local_run_dir,zSizeFile),lz);
-  PARAMS = addParameter(PARAMS,'zSizeFile',zSizeFile,PARM_STR);
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Target residuals %%%%%
