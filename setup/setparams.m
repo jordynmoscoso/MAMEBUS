@@ -24,31 +24,31 @@ function setparams (local_home_dir,run_name,modeltype)
   %%% For an NPZ model, prompt the user to choose the number of
   %%% phytoplankton and zooplankton size classes
   if (modeltype == 1)
-    NP = 2;
-    NZ = 2;
+    PP = 2;
+    ZZ = 2;
     ND = 2;
-    spec_tot = NP + NZ + ND + 1; %%% Add one for nitrate
+    spec_tot = PP + ZZ + ND + 1; %%% Add one for nitrate
   elseif (modeltype == 0)
-    NP = 0;
-    NZ = NP;
-    ND = NZ;
+    PP = 0;
+    ZZ = PP;
+    ND = ZZ;
   end
   
-  disp(['(NP,NZ) = (',num2str(NP),' , ', num2str(NZ),')']);
+  disp(['(PP,ZZ) = (',num2str(PP),' , ', num2str(ZZ),')']);
   
   %Uncomment to have the model take in user-prescribed data,
 %   if (modeltype == 1)
-%       phy_prompt='Please choose the number of phytoplankton classes (NP > 1)';
-%       NP = input(phy_prompt);
-%       if (isempty(NP) || NP <= 0)
-%           disp('Default class number, NP = 2')
-%           NP = 2;
+%       phy_prompt='Please choose the number of phytoplankton classes (PP > 1)';
+%       PP = input(phy_prompt);
+%       if (isempty(PP) || PP <= 0)
+%           disp('Default class number, PP = 2')
+%           PP = 2;
 %       end
-%       zoo_prompt = 'Please choose the number of zooplankton classes (NZ > NP)';
-%       NZ = input(zoo_prompt);
-%       if (isempty(NZ) || NZ <= NP)
-%           disp('Default class number, NZ = 4')
-%           NZ = 4;
+%       zoo_prompt = 'Please choose the number of zooplankton classes (ZZ > PP)';
+%       ZZ = input(zoo_prompt);
+%       if (isempty(ZZ) || ZZ <= PP)
+%           disp('Default class number, ZZ = 4')
+%           ZZ = 4;
 %       end 
 %   end
       
@@ -79,6 +79,7 @@ function setparams (local_home_dir,run_name,modeltype)
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km
   t1day = 86400; %%% Seconds in 1 day
+  m1day = 60*24;
   t1year = 365*t1day; %%% Seconds in 1 year
   H = 3*m1km; %%% Depth, excluding the mixed layer
   Lx = 300*m1km; %%% Computational domain width
@@ -112,7 +113,7 @@ function setparams (local_home_dir,run_name,modeltype)
 %   theta_b = 0; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
    
   %%% Grids  
-  Ntracs = 2 + NP + NZ + ND + 1; %%% Number of tracers (2 physical and the rest are bgc, plus one for nitrate)
+  Ntracs = 2 + PP + ZZ + ND + 1; %%% Number of tracers (2 physical and the rest are bgc, plus one for nitrate)
   Nx = 40; %%% Number of latitudinal grid points 
   Nz = 40; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
@@ -176,16 +177,15 @@ function setparams (local_home_dir,run_name,modeltype)
   
   %%% Indicate number of phytoplankton, zooplankton and detrital pools
   PARAMS = addParameter(PARAMS,'modeltype',modeltype,PARM_INT);
-  PARAMS = addParameter(PARAMS,'NP',NP,PARM_INT);
-  PARAMS = addParameter(PARAMS,'NZ',NZ,PARM_INT);
-  PARAMS = addParameter(PARAMS,'ND',ND,PARM_INT);
+  PARAMS = addParameter(PARAMS,'PP',PP,PARM_INT);
+  PARAMS = addParameter(PARAMS,'ZZ',ZZ,PARM_INT);
   %%% Save biogeochemical parameters in vector form call bgc_setup function
   switch(modeltype)
       case 0
-        [bgc_params, bgc_init,bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
+        [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,PP,ZZ,ND,XX_tr,ZZ_tr);
         disp('Nitrate only')
       case 1
-        [bgc_params, bgc_init, bgc_nparams] = bgc_setup(modeltype,NP,NZ,ND,XX_tr,ZZ_tr);
+        [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,PP,ZZ,ND,XX_tr,ZZ_tr);
         disp('NPZD')
         
         %%% Store phytoplankton size and zooplankton size to determine what size
@@ -193,10 +193,10 @@ function setparams (local_home_dir,run_name,modeltype)
         %%% mamebus.c code.
   end
   
-  bgcParamsFile = 'bgcParams.dat';
-  writeDataFile(fullfile(local_run_dir,bgcParamsFile),bgc_params);
-  PARAMS = addParameter(PARAMS,'bgcParamsFile',bgcParamsFile,PARM_STR);
-  PARAMS = addParameter(PARAMS,'bgc_nparams',bgc_nparams,PARM_INT);
+  bgcFile = 'bgcFile.dat';
+  writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
+  PARAMS = addParameter(PARAMS,'bgcFile',bgcFile,PARM_STR);
+  PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
   
   size(bgc_init)
   
@@ -242,7 +242,7 @@ function setparams (local_home_dir,run_name,modeltype)
       case 0
           phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
       case 1
-          bgc_tracs = NP + NZ + ND + 1;
+          bgc_tracs = PP + ZZ + ND + 1;
           for ii = 1:bgc_tracs
               phi_init(ii+2,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
           end
