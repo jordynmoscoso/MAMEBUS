@@ -17,7 +17,7 @@ function [params, bgc_init,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
 fignum = 100;
 
 %%% Note, all biogeochemical parameters are calculated in seconds
-t1day = 86400; %%% Seconds in 1 day
+t1day = 24*60*60; %%% Seconds in 1 day
 
 switch (model_type)
     
@@ -69,28 +69,23 @@ switch (model_type)
         maxz = 460;
         lz = logspace(log10(minz),log10(maxz),NZ);   
         lz = lz.';
-        dz = [lz(1) ; lz(2:end) - lz(1:end-1)];
     
         % Phytoplankton Spectra
         maxp = floor(0.65*(maxz)^0.56);
         lp = logspace(log10(minp),log10(maxp),NP);
         lp = lp.';
-        dp = [lp(1) ; lp(2:end) - lp(1:end-1)];
         
         %%%%%%%%%%%% Nutrient Parameters %%%%%%%%%%%%%%%
         % maximum uptake rate
         vmax = zeros(NP,1); 
         av = 2.6/t1day; % s^-1
         bv = -0.45;
-        nparams = nparams + 1;
     
         % nutrient limiting Monod constant
         monod = zeros(NP,1);
         am = 0.1;
-        nparams = nparams + 1;
     
 %         %%%%%%%%% Phytoplankton Parameters %%%%%%%%%%%%
-%         sink = zeros(NP,1);
 %         as = 0;
 %         bs = 0.39;
     
@@ -98,12 +93,10 @@ switch (model_type)
         maxgraze = zeros(NZ,1);
         amg = 26/t1day; % s^-1
         bmg = -0.4;
-        nparams = nparams + 1;
         
         preyopt = zeros(NZ,1);
         ap = 0.65;
         bp = 0.56;
-        nparams = nparams + 1;
                 
         for ii = 1:NZ
             maxgraze(ii) = amg*lz(ii)^bmg;
@@ -111,16 +104,13 @@ switch (model_type)
         end
     
         for ii = 1:NP
-            size = lp(ii);
-        
-            vmax(ii) = av*size^bv;
-            monod(ii) = am*size;
+            vmax(ii) = av*lp(ii)^bv;
+            monod(ii) = am*lp(ii);
        
-%             sink(ii) = as*size^bs;
+%             sink(ii) = as*lp(ii)^bs;
         end
         
         kp = 3*ones(NZ,1);
-        nparams = nparams + 1;
         
         %%% Determine of NP or NZ is larger, 
        Ntot = 0;
@@ -137,7 +127,7 @@ switch (model_type)
        params = zeros(Ntot,nparams);
        
        if (NP == NZ)
-           params = [vmax,monod,maxgraze,preyopt,kp];
+           params = [lp;lz;vmax;monod;maxgraze;preyopt;kp];
        else
            if (Ncase == 0) % must add appropriate number of zeros to the zooplankton parameters to create a matrix
                addZ = NP - NZ;
@@ -145,6 +135,8 @@ switch (model_type)
                maxgraze = [maxgraze ; append];
                preyopt = [preyopt ; append];
                kp = [kp ; append];
+               lp = [lp; append];
+               lz = [lz; append];
                if length(kp) ~= length(vmax)
                    disp('Parameter vectors are not the same length')
                    return
@@ -154,28 +146,24 @@ switch (model_type)
                append = zeros(addP,1);
                vmax = [vmax ; append];
                monod = [monod; append];
+               lp = [lp; append];
+               lz = [lz; append];
                if length(kp) ~= length(vmax)
                    disp('Parameter vectors are not the same length')
                    return
                end
            end
-           params = [vmax,monod,maxgraze,preyopt,kp];
+           params = [lp; lz; vmax; monod; maxgraze; preyopt; kp];
        end
        
        
        
        %%%%%%% Detritus Parameter %%%%%%%
        dparam = zeros(Ntot,1);
-       dparam(2) = 10/t1day;  % Ward model m/s ~10m/day
+       dparam(1) = 50/t1day;  % Ward model m/s ~10m/day
        
-       params = [params, dparam];
-       nparams = nparams+1;
+       params = [params; dparam];
        
-       params = [lp, params];
-       nparams = nparams+1;
-       
-       params = [lz, params];
-       nparams = nparams+1;
        
        % Initialize bgc to have a maximum amount of phytoplankton at the
        % top, use the initial value of 1 mmol /m^3 of phytoplankton
@@ -187,31 +175,30 @@ switch (model_type)
        
        
        %%% Initial values of phytoplankton and zooplankton concentration
-       
-       pmax = 1;
-       zmax = 0.1;
-       dmax = 0.3;
+       %%% These worked in the matlab model, for now.
+       pmax = 2;
+       zmax = 1;
+       dmax = 5;
        bgc_cline = 50; %m
        
        %%% Initial nitrate profile (Hyperbolic)
-       Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-       Ncline = 150; % Approximate guess of the depth of the nutracline
+       Nmax = 15; %%% Maximum concentration of nutrient at the ocean bed
        
-       bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
+       bgc_init(:,:,1) = Nmax*ones(size(ZZ_tr));
        
-       for ii = 2:1:NP
-           bgc_init(:,:,ii) = pmax*(1-tanh(ZZ_tr./bgc_cline));
+       for ii = 1:NP
+           bgc_init(:,:,ii+1) = pmax*exp(ZZ_tr/20);
        end
        
-       for ii = NP+2:NZ+1
-           bgc_init(:,:,ii) = zmax*(1-tanh(ZZ_tr./bgc_cline));
+       for ii = 1:NZ
+           bgc_init(:,:,ii+1+NP) = zmax*exp(ZZ_tr/30);
        end
        
-       for ii = NZ+2:ND+1
-           bgc_init(:,:,ii) = dmax*(1-tanh(ZZ_tr./bgc_cline));
+       for ii = 1:ND
+           bgc_init(:,:,ii+1+NP+NZ) = dmax*(1-tanh(ZZ_tr./bgc_cline));
        end
        
+       nparams = length(params);
 
-       
 end   
 end
