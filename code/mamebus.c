@@ -1,7 +1,7 @@
 /**
  * mamebus.c
  *
- * Andrew Stewart 
+ * Andrew Stewart
  * Jordyn Moscoso
  *
  * Core code file for the Meridionally-Averaged Model of Eastern Boundary Upwelling Systems (MAMEBUS).
@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 33
+#define NPARAMS 32
 
 
 
@@ -44,12 +44,13 @@ real Hsml = 50.0;
 real Hbbl = 50.0;
 int tlength = 0;
 
-// Biogeochemical allometric parameters
+// Biogeochemical parameters
 int modeltype = 0;
-int NP = 0;
-int NZ = 0;  // I know, bad notation, here is the number of zooplankton size classes.
-int ND = 0;
-int bgc_nparams = 0;
+int PP = 0;
+int ZZ = 0;
+int DD = 2;  // Always have one small detrital group and one large.
+int NN = 1;  // Always have one Nitrate
+int nbgc; // Counts number of biogeochemical parameters
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
@@ -65,7 +66,8 @@ real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
 real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
-real ** bgcParams = NULL;     // Array for biogeochemical parameters
+real * bgc_params = NULL;     // Vector containing biogeochemical parameters, all read in as a vector for
+                              // storage purposes and to make code adapable for a single nitrate model and NPZ model
 
 real * stau = NULL;                  // Seasonal tau
 
@@ -186,7 +188,7 @@ void windInterp(const real t)
     if (spec_year >= 1)
     {
         hold = (t - spec_year*year)/week;     // Determine the date in a year
-                                              // based on week fraction.
+        // based on week fraction.
     }
     else
     {
@@ -204,7 +206,7 @@ void windInterp(const real t)
         }
         else
         {
-        stau[j] = (tau[spec_week+1][j] - tau[spec_week][j])*(hold - spec_week) + tau[spec_week][j];
+            stau[j] = (tau[spec_week+1][j] - tau[spec_week][j])*(hold - spec_week) + tau[spec_week][j];
         }
     }
 }
@@ -903,82 +905,138 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
  * Calculates the time tendency of any tracer phi due to biogeochemical processes.
  *
  */
-void tderiv_bgc (const real t, real *** phi, real *** dphi_dt, real ** bgcParams)
+void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 {
-        int i,j,k;
+    int i,j,k; // Physical coutners
+    int p,z,d; // For NPZD model, counters,
+    real dn = 0;
+    real dp = 0;
+    real dz = 0;
+    real dd_large = 0;
+    real dd_small = 0;
     
-
+    real remin = 0;                          // remineralization
+    real irfrac = 0;
+    real palat[PP][ZZ];
+    real delx = 0.25;
+    real graze = 0;
+    real gmax = 0;
+    real kp = 0;
+    int DD = 2;
+    real eff = 0.33;             // zooplankton assimilation efficiency.
+    real sinklim = 66.55;       // the esd (mu m) where detritus sinks approx 10m/day
+    
+    // Parameters for temperature dependent uptake.
+    real tref = 20;
+    real R = 0.05;
+    real tfrac = 0;
+    
+    // NPZD arrays as to not over calculate
+    real uptake[PP];
+    real mp[PP];
+    real mz[ZZ];
+    
+    // Holders for parameter values, because it's prettier.
+    real kn = 0;
+    real P = 0;
+    real Z = 0;
+    real vmax = 0;
+    real DS = 0;
+    real DL = 0;
+    real pbiotot = 0;
+    real zbiotot = 0;
+    real lp = 0;
+    real preyopt = 0;
+    real dmax = 5;
+    
+    real mu = 0.02/day; // Mortality parameter (Ward)
+    
+    // REMIN stuff must be here, since we may only have one zooplankton and one phytoplankton class, for now.
+    real rdl = 0.01/day;  // remin parameter PON remin
+    real rds = 0.1/day;   // DON remin
+    
+    // Initalize arrays to hold NPZD parameters
+    // [lp ; lz; vmax; kn; gmax; preyopt; kp; dsink];               SIZES
+    real ** npzparams = NULL;                                       // 8 X (PP or ZZ (whichever is larger))
+    int NMAX = 0;
+    
+    real IR = 0;
+    real I0 = 340;
+    real efold = 30;
+    real kw = 0.04;
+    real kc = 0.03;
+    real K = 0;
+    int NN = 1;
+    
+    real T = 0;                              // Placeholder for Temperature
+    real N = 0;                              // Placeholder for Nitrate
+    
+    real alpha = 0;
     
     switch(modeltype)
     {
-        case 0: // Nitrate only model
+        case 0:
         {
-        // Parameters
-            
-            // In matlab the parameters are ordered as such...
-            // params = [a_temp, b_temp, c_temp, alpha, monod]; so we must take the bgcParams, extract values,
-            real a_temp = bgcParams[1][0];
-            real b_temp = bgcParams[1][1];
-            real c_temp = bgcParams[1][2];
-            real alpha = bgcParams[1][3];
-            real monod = bgcParams[1][4];
-            
+
+            // Parameters
+    
             real f = 0.09;                           // fraction of exported material
-            real I0 = 340;                           // Surface irradiance
-            real kw = 0.04;                               // attenuation of clear water
-            real kp = 0.03;                               // accounts for shading when phytoplankton are present
-            
+    
             // Variables
             real temp_flux = 0;                      // holder for remin value
             real flux = 0;                           // flux of remineralized nutrient
             real t_uptake = 0;                       // temperature dependent uptake rate
-            real remin = 0;                          // remineralization
             real remin_in_box = 0;                   // value of remineralization in box
             real lk = 0;                             // light saturation constant
             real l_uptake = 0;                       // light dependent uptake rate
             real uptake = 0;                         // uptake in each grid box
-            real T = 0;                              // Placeholder for Temperature
-            real N = 0;                              // Placeholder for Nitrate
             real scale_height = 0;                   // scale height from 50 to 200 for remineralization (surface to floor)
             real dz = 0;                             // vertical grid spacing placeholder
-            real IR = 0;                             // the value of irradiance in the grid box.
-            real K = 0;                              // light attenuation value
-    
+            
             real u_damp = 0.3;                       // For testing purposes, damp the irradiance in uptake
-    
+            
+            real a_temp = bgc_params[0];
+            real b_temp = bgc_params[1];
+            real c_temp = bgc_params[2];
+            real monod = bgc_params[3];
+            
+            alpha = 0.025/day;
+            
             // Build temperature dependent uptake
             for (j = 0; j < Nx; j++)
             {
-            
+                
                 temp_flux = 0;                  // Set the flux equal to zero at the surface
                 for (k = Nz-1; k >= 0; k--)
                 {
-                
-                    N = phi[2][j][k];
-                    T = phi[0][j][k];    // temperature in grid box
                     
-                    K = kw + kp*N;
-                    IR = I0*exp(-K * ZZ_phi[j][k]);
+                    // Temperature and Irradiance
+                    T = phi[0][j][k];    // temperature in grid box
+                    N = phi[2][j][k];
+                    
+                    K = kw + kc*N;
+                    IR = I0*exp(K*ZZ_phi[j][k]/efold);
                     
                     t_uptake = a_temp * pow(b_temp, c_temp * T);    // temperature dependent uptake rate
-                
+                    
                     lk = t_uptake / alpha;
                     l_uptake = IR / sqrt(POW2(IR) + POW2(lk));
-    
+                    
                     // Uptake and Remineralizaiton
+                    
                     uptake = u_damp*(l_uptake * t_uptake) * N;
                     remin_in_box = (1-f) * uptake;
-    
+                    
                     // Scale Height for Remin
                     scale_height = -(150/H) * ZZ_phi[j][k] + 50;
                     dz = 1/_dz_phi[j][k];
-    
+                    
                     flux = (temp_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
-                
+                    
                     remin = - flux / scale_height;
-    
+                    
                     temp_flux = flux;             // Move to the next vertical grid cell
-    
+                    
                     // Return any extra flux of nutrients to bottom grid cell
                     if (k == 0)
                     {
@@ -1004,21 +1062,217 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt, real ** bgcParams
                     
                 }
             }
-            break;
-        }
-        case 1: // NPZD model
+                break;
+            }
+                //
+                //
+                // NPZ MODEL STARTS HERE
+                //
+                //
+            
+        case 1: // NPZD Model
         {
-        
+            // Determine whether PP or ZZ is larger in order to unpack the uptake parameters and all of that
+            if (PP > ZZ)
+            {
+                NMAX = PP;
+            }
+            else
+            {
+                NMAX = ZZ;
+            }
+            
+            
+            for (j = 0; j < Nx-1; j++)
+            {
+                for (k = Nz-1; k >= 0; k--)
+                {
+                    // BIOGEOCHEMISTRY STARTS HERE
+                    // Unpack all of the parameters first
+                    //  this much match the length in vec2mat below
+                    vec2mat(bgc_params,&npzparams,8,NMAX);
+                    // Calculate palatibility:
+                    for (p = 0; p < PP; p++)
+                    {
+                        for (z = 0; z < ZZ; z ++)
+                        {
+                            lp = npzparams[0][p];
+                            preyopt = npzparams[5][z];
+                            palat[p][z] = exp(- POW2((log10(lp) - log10(preyopt))/delx) );
+                        }
+                    }
+                    
+                    
+                    //
+                    // Calculate physical scaling values for temperature dependent uptake
+                    // and light dependent uptake.
+                    //
+                    T = phi[0][j][k];    // temperature in grid box
+                    N = phi[2][j][k];
+                    DS = phi[2+NN+PP+ZZ][j][k];
+                    DL = phi[2+NN+PP+ZZ+1][j][k];
+                    tfrac = exp(R*(T-tref));
+                    
+                    for (p = 0; p < PP; p++)
+                    {
+                        pbiotot += phi[2+NN+p][j][k];
+                    }
+                    
+                    for (z = 0; z < ZZ; z++)
+                    {
+                        zbiotot += phi[2+NN+PP+z][j][k];
+                    }
+                    
+                    K = kw + kc*(pbiotot+zbiotot);
+                    IR = I0*exp(K*ZZ_phi[j][k]/efold);  // Irradiance is here...
+                    
+                    irfrac = IR/I0; // Franks 2001
+
+                    //
+                    // NITRATE
+                    //
+                    dn = 0;  // reset to zero in the new grid box.
+                    for (p = 0; p < PP; p++)
+                    {
+                        kn = npzparams[3][p];
+                        P = phi[2+NN+p][j][k]; // phytoplankton starts after 2;
+                        vmax = npzparams[2][p];
+                        uptake[p] = irfrac*tfrac*vmax*(N/(N+kn))*P;
+                        dn += uptake[p];
+                    }
+                    remin = rdl*(DL/dmax) + rds*(DS/dmax);
+                    dphi_dt[2][j][k] += -dn + remin;
+                    
+                    //
+                    // PHYTOPLANKTON
+                    //
+                    
+                    for (p = 0; p < PP; p++)
+                    {
+                        // Reset to zero at the start of every outer loop.
+                        graze = 0;
+                        // Calculate grazing on the jth phytoplankton by summing over k-zooplankton.
+                        P = phi[2+NN+p][j][k];
+                        for (z = 0; z < ZZ; z ++)
+                        {
+                            gmax = npzparams[4][z];
+                            kp = npzparams[6][z];
+                            Z = phi[2+NN+PP+z][j][k];
+                            graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
+                        }
+                        mp[p] = mu*P;
+                        
+                        dp = uptake[p] - graze - mp[p];
+                        dphi_dt[2+NN+p][j][k] += dp;
+                    }
+                    
+                    //
+                    // ZOOPLANKTON
+                    //
+                    
+                    // We also need to calculate the effect of grazing on zooplankton
+                    for (z = 0; z < ZZ; z++)
+                    {
+                        graze = 0;
+                        Z = phi[2+NN+PP+z][j][k];
+                        for (p = 0; p < PP; p++)
+                        {
+                            P = phi[2+NN+p][j][k];
+                            gmax = npzparams[4][z];
+                            kp = npzparams[6][z];
+                            graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
+                        }
+                        
+                        mz[z] = mu*Z;
+                        dz = eff*graze - mz[z];
+                        dphi_dt[2+NN+PP+z][j][k] += dz;
+                    }
+                    
+                    //
+                    // DETRITUS
+                    //
+                    
+                    // Detritus is split into two groups, the larger (PON) and smaller (DON) rates are from (Ward et. al. 2012)
+                 
+                    dd_small = 0; // set the detritus holders to zero.
+                    dd_large = 0;
+                    // Messy grazing
+                    for (p = 0; p < PP; p++)
+                    {
+                        graze = 0;
+                        // if the phytoplankton being grazed is less than the sinking limit, then, the messy grazing is added to the small DON group.
+                        P = phi[2+NN+p][j][k];
+                        if (npzparams[0][p] < sinklim)
+                        {
+                            for (z = 0; z < ZZ; z ++)
+                            {
+                                gmax = npzparams[4][z];
+                                kp = npzparams[6][z];
+                                Z = phi[2+NN+PP+z][j][k];
+                                graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
+                            }
+                            dd_small = (1-eff)*graze;
+                        }
+                        else
+                        {
+                            for (z = 0; z < ZZ; z ++)
+                            {
+                                gmax = npzparams[4][z];
+                                kp = npzparams[6][z];
+                                Z = phi[2+NN+PP+z][j][k];
+                                graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
+                            }
+                            dd_large = (1-eff)*graze;
+                        }
+                    }
+                    
+                    // Add in the effects of mortality
+                    for (p = 0; p < PP; p++)
+                    {
+                        if (npzparams[0][p] < sinklim)
+                        {
+                            dd_small += mp[p];
+                        }
+                        else
+                        {
+                            dd_large += mp[p];
+                        }
+                    }
+                    
+                    for (z = 0; z < ZZ; z++)
+                    {
+                        if (npzparams[1][p] < sinklim)
+                        {
+                            dd_small += mz[z];
+                        }
+                        else
+                        {
+                            dd_large += mz[z];
+                        }
+                    }
+                    
+                    
+                    // Subtract off remineralization
+                    dd_large -= rdl*DL/dmax;
+                    dd_small -= rds*DS/dmax;
+                    
+                    dphi_dt[2+NN+PP+ZZ+1][j][k] += dd_large;
+                    dphi_dt[2+NN+PP+ZZ][j][k] += dd_small;
+                    
+                }
+            }
+            
             break;
         }
         default:
         {
-            fprintf(stderr,"ERROR: Modeltype not found \n");
+            printf("Error: MODELTYPE is undefined");
             break;
         }
+            
     }
+    
 }
-
 
 
 
@@ -1377,8 +1631,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real xdiff_max = 0;
     real zdiff_dzsq = 0;
     real zdiff_dzsq_max = 0;
+    real cfl_phys = 0;
     
-    
+    real cfl_bgc = 0.9;
     
     ////////////////////////////////////////
     ///// BEGIN CALCULATING TENDENCIES /////
@@ -1420,7 +1675,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     }
     
     // Add tendency due to biogeochemistry
-    tderiv_bgc(t,phi,dphi_dt,bgcParams);
+    tderiv_bgc(t,phi,dphi_dt);
     
     // Add tendency due to relaxation
     tderiv_relax(t,phi,dphi_dt);
@@ -1501,7 +1756,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     
     // Actual CFL-limted time step
-    cfl_dt = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
+    cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
+//    printf(" CFL condition is %f\n", cfl_phys);
+    cfl_dt = cfl_phys;
     
     ////////////////////////////////
     ///// END CALCULATING CFLS /////
@@ -1555,8 +1812,6 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     // CFL timesteps
     real cfl_dt = 0;
     
-    
-    
     // Construct output matrix from the dt_data vector
     memset(dt_data,0,numvars*sizeof(real));
     vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
@@ -1564,21 +1819,22 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     // Copy tracer data from the 'data' array to the work array
     memcpy(phi_wrk_V,data,Ntot*sizeof(real));
     
-    
-    
     // Calculate tracer tendencies due to advection/diffusion
     cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
     
     // Calculate tracer tendencies due to biogeochemistry
-    tderiv_bgc (t, phi_wrk, dphi_dt_wrk,bgcParams);
+    tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
     
     // Calculate tracer tendencies due to relaxation
     tderiv_relax (t, phi_wrk, dphi_dt_wrk);
     
-    
-    
     return cfl_dt;
 }
+
+
+
+
+
 
 
 
@@ -1977,7 +2233,7 @@ int main (int argc, char ** argv)
     // than matrices for compatibility with time integration methods
     real * phi_in_V = NULL; // Input to time-integration method
     real * phi_out_V = NULL; // Output from time-integration method
-    real * phi_buf_V = NULL; // Buffer for time-integration method
+    real * phi_buf_V = NULL; // Buffer for time-integration method (needed for RK2 or RK3)
     real * phi_int_V = NULL; // Buffer for time-interpolation
     real *** phi_in = NULL;
     real *** phi_out = NULL;
@@ -1991,12 +2247,13 @@ int main (int argc, char ** argv)
     char initFile[MAX_PARAMETER_FILENAME_LENGTH];
     char topogFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tauFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char bgcFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KgmFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KisoFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KdiaFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTimeFile[MAX_PARAMETER_FILENAME_LENGTH];
-    char bgcParamsFile[MAX_PARAMETER_FILENAME_LENGTH];
+    
     
     // To store current time
     time_t now;
@@ -2026,60 +2283,31 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
     setParam(params,paramcntr++,"tlength","%u",&tlength,false);
     setParam(params,paramcntr++,"tauFile","%s",tauFile,true);
+    setParam(params,paramcntr++,"bgcFile","%s",bgcFile,true);
     setParam(params,paramcntr++,"KgmFile","%s",KgmFile,true);
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
     setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
-    setParam(params,paramcntr++,"bgcParamFile","%s",bgcParamsFile,true);
-
-    setParam(params,paramcntr++,"NP","%u",&NP,false);
-    setParam(params,paramcntr++,"NZ","%u",&NZ,false);
-    setParam(params,paramcntr++,"ND","%u",&ND,false);
-    setParam(params,paramcntr++,"modeltype","%u",&modeltype,false);
-    setParam(params,paramcntr++,"bgc_nparams","%u",&bgc_nparams,false);
     
-    // Do a quick check and see if NP or NZ has the larger number and store that for memory allocation, if the nitrate model is used, numspec only has 1 row,
-    int numspec = 0;
-    switch (modeltype) {
-        case 0:
-        {
-            numspec = 1;
-            break;
-        }
-            
-        case 1:
-        {
-            if (NP > NZ)
-            {
-                numspec = NP;
-            }
-            else{
-                numspec = NZ;
-            }
-            break;
-        }
-        default:
-        {
-            fprintf(stderr,"ERROR: modeltype undefined \n");
-            printUsage();
-        }
-            
-    }
-
-
+    // Biogeochemical parameter inputs
+    setParam(params,paramcntr++,"PP","%u",&PP,false);
+    setParam(params,paramcntr++,"ZZ","%u",&ZZ,false);
+    setParam(params,paramcntr++,"modeltype","%u",&modeltype,false);
+    setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
+    
     
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
     initFile[0] = '\0';
     topogFile[0] = '\0';
     tauFile[0] = '\0';
+    bgcFile[0] = '\0';
     KgmFile[0] = '\0';
     KisoFile[0] = '\0';
     KdiaFile[0] = '\0';
     relaxTracerFile[0] = '\0';
     relaxTimeFile[0] = '\0';
-    bgcParamsFile[0] = '\0';
     
     // First program argument always carries the program name
     progname = argv[0];
@@ -2137,8 +2365,8 @@ int main (int argc, char ** argv)
         (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH)   ||
-        (strlen(bgcParamsFile) > MAX_PARAMETER_FILENAME_LENGTH)    )
+        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
     {
         fprintf(stderr,"ERROR: Invalid input parameter values\n");
         printUsage();
@@ -2193,11 +2421,11 @@ int main (int argc, char ** argv)
     MATALLOC3(phi_init,Ntracs,Nx,Nz);
     VECALLOC(hb_in,Nx+2);
     VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
+    VECALLOC(bgc_params,nbgc);
     
     MATALLOC(tau,tlength,Nx+1);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
-    MATALLOC(bgcParams,bgc_nparams,numspec)
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
     MATALLOC3(phi_relax,Ntracs,Nx,Nz);
     MATALLOC3(T_relax,Ntracs,Nx,Nz);
@@ -2225,6 +2453,7 @@ int main (int argc, char ** argv)
     VECALLOC(phi_wrk_V,Ntot);
     vec2mat3(phi_wrk_V,&phi_wrk,Ntracs,Nx,Nz);
     vec2mat3(phi_wrk_V,&dphi_dt_wrk,Ntracs,Nx,Nz); // N.B. dphi_dt_wrk will be reassigned when tderiv is first called
+    
     MATALLOC(HHx,Nx+1,Nz);
     MATALLOC(HHz,Nx,Nz+1);
     MATALLOC(PPx,Nx+1,Nz);
@@ -2278,12 +2507,12 @@ int main (int argc, char ** argv)
     ////////////////////////////////////////
     
     // Read input matrices and vectors
-    if (  ( (strlen(targetResFile) > 0) &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
+    if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
         ( (strlen(initFile) > 0)        &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) ) ||
         ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
         ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
+        ( (strlen(bgcFile) > 0)          &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
-        ( (strlen(bgcParamsFile) > 0)   &&  !readMatrix(bgcParamsFile,bgcParams,bgc_nparams,numspec,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
@@ -2697,25 +2926,25 @@ int main (int argc, char ** argv)
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
     {
-        // Step 1: Perform a single numerical time-step for all explicit terms in the equations
+        // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (method_t)
         {
             case METHOD_RKTVD1:
             {
                 dt = rktvd1(&t,phi_in_V,phi_out_V,cflFrac,Ntot,&tderiv);
-//                printf("RK1 \n");
+                //                printf("RK1 \n");
                 break;
             }
             case METHOD_RKTVD2:
             {
                 dt = rktvd2(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-//                printf("RK2 \n dt = %f \n",dt);
+                //                printf("RK2 \n dt = %f \n",dt);
                 break;
             }
             case METHOD_RKTVD3:
             {
                 dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-//                printf("RK3 \n");
+                //                printf("RK3 \n");
                 break;
             }
             default:
@@ -2859,3 +3088,4 @@ int main (int argc, char ** argv)
     
     return 0;
 }
+
