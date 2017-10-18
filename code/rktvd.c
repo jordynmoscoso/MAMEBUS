@@ -83,6 +83,77 @@ real rktvd1 ( real *                  t,
 }
 
 /****************************************************************************************
+ **
+ **  Function    ::      rkt1
+ **
+ **  Purpose     ::      Performs a single iteration of the standard Runge-Kutta first
+ **                      order method (Euler integration), with a prescribed time step
+ **
+ **                      The arrays x and xout MUST each have a length at least
+ **                      as great as numvars
+ **
+ **  Input       ::      PARAMETERS:
+ **
+ **                      t
+ **                          Pointer to the independent variable value.
+ **                      x
+ **                          Array of values of dependent variables
+ **                      xout
+ **                          Array into which the incremented x-values will be put
+ **                      cfl
+ **                          Specifies the CFL number to use. The derivative function f
+ **                          must return an estimate of the minimum time (dt_w = 1) for a wave
+ **                          to cross a grid cell, or otherwise reach a point that
+ **                          invalidates the method. The time step will be chosen such
+ **                          that dt = cfl*dt_w.
+ **                      numvars
+ **                          Specifies the size of all input arrays
+ **                      f
+ **                          Derivative function
+ **
+ **  Output      ::      The value of the independent variable (t) will be incremented by h,
+ **                      and the new values of the dependent variables will be put in
+ **                      the xout array.
+ **
+ **                      Returns the time step used, based on the supplied CFL number.
+ **
+ ****************************************************************************************/
+
+real rk1   ( real *                  t,
+             real *                  x,
+             real *                  xout,
+             const real              cfl,
+             const uint              numvars,
+             DERIVATIVE_FUNCTION_CFL f)
+{
+    // For looping
+    uint i;
+    
+    // Max time step, based on estimate from derivative function
+    real dt_w;
+    
+    // Actual time step
+    real h;
+    
+    // Calculate the derivatives of x at t
+    dt_w = (*f)(*t, x, xout, numvars);
+    
+    // Calculate time step
+    h = cfl*dt_w;
+    
+    // Increment the dependent variable
+    for (i = 0; i < numvars; i ++)
+    {
+        xout[i] = xout[i] * h + x[i];
+    }
+    
+    // Increment t
+    *t += h;
+    
+    return h;
+}
+
+/****************************************************************************************
 **
 **  Function    ::      rktvd2
 **
