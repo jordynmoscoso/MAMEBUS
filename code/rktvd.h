@@ -11,6 +11,13 @@ real rktvd1 ( real *                  t,
               const uint              numvars,
               DERIVATIVE_FUNCTION_CFL f);
 
+real rk1   ( real *                  t,
+             real *                  x,
+             real *                  xout,
+             const real              cfl,
+             const uint              numvars,
+             DERIVATIVE_FUNCTION_CFL f);
+
 real rktvd2 ( real *                  t,
               real *                  x,
               real *                  xout,
