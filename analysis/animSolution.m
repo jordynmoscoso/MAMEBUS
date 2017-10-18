@@ -60,16 +60,18 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   t1day = 86400;
   
   %%% If user is plotting nitrate, indicate what to plot
-  if (var_id == 2 && plot_trac)
-    prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
-    ncase = input(prompt);
-    %%% Check for valid input, if not choose default
-    if (isempty(ncase) || ncase < 0 || ncase > 1)
-        ncase = 0;
-    end
+%   if (var_id == 2 && plot_trac)
+%     prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
+%     ncase = input(prompt);
+%     %%% Check for valid input, if not choose default
+%     if (isempty(ncase) || ncase < 0 || ncase > 1)
+%         ncase = 0;
+%     end
     Nstore = [];
     tsave = [];
-  end
+%   end
+
+ncase = 1; 
   
   %%% Load grids from model output
 %   dx = (Lx/Nx);
@@ -194,7 +196,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
               
               [C h] = contourf(XX_tr,ZZ_tr,uptake*t1day,10);
 %               hold on
-%               plot(XX_tr,eu_depth,'w','LineWidth',2)
+%                plot(XX_tr,eu_depth,'w','LineWidth',2)
 %               hold off
               set(gca, 'CLim', [0,6]);
               axis([0 Nx -120 0])
@@ -203,7 +205,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
 %             hold on
 %             plot(XX_tr,eu_depth,'w','LineWidth',2)
 %             hold off
-            set(gca, 'CLim', [0,45]);
+%             set(gca, 'CLim', [0,45]);
             
             nstore = -t1day*(sum(phi(:,end)))./ZZ_psi(end,1);
             Nstore = [Nstore nstore];
@@ -219,7 +221,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
 %       caxis([0 20]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);
+
       
+
+
     %%% If plot_trac==false, plot the streamfunction
     else    
     
@@ -232,6 +237,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
         case 2 %%% Eddy streamfunction
           data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
       end
+      
       
       
       %%% Open the data file for reading    
