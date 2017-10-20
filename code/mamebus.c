@@ -952,8 +952,9 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real mu = 0.02/day; // Mortality parameter (Ward)
     
     // REMIN stuff must be here, since we may only have one zooplankton and one phytoplankton class, for now.
-    real rdl = 0.01/day;  // remin parameter PON remin
+    real rdl = 0.04/day;  // remin parameter PON remin
     real rds = 0.1/day;   // DON remin
+    real rsink = 10/day;  // sinking rate 50 m day
     
     // Initalize arrays to hold NPZD parameters
     // [lp ; lz; vmax; kn; gmax; preyopt; kp; dsink];               SIZES
@@ -1140,7 +1141,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                         uptake[p] = irfrac*tfrac*vmax*(N/(N+kn))*P;
                         dn += uptake[p];
                     }
-                    remin = rdl*(DL/dmax) + rds*(DS/dmax);
+                    remin = rdl*DL + rds*DS;
                     dphi_dt[2][j][k] += -dn + remin;
                     
                     //
@@ -1183,7 +1184,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                             graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
                         }
                         
-                        mz[z] = mu*Z;
+                        mz[z] = mu*Z*zbiotot;       // Following Banas 2011
                         dz = eff*graze - mz[z];
                         dphi_dt[2+NN+PP+z][j][k] += dz;
                     }
@@ -1253,8 +1254,14 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                     
                     
                     // Subtract off remineralization
-                    dd_large -= rdl*DL/dmax;
-                    dd_small -= rds*DS/dmax;
+                    dd_large -= rdl*DL;
+                    dd_small -= rds*DS;
+                    
+                    if (k < Nz)
+                    {
+                        dphi_dt[2+NN+PP+ZZ+1][j][k] -= rsink*(DL - phi[2+NN+PP+ZZ+1][j][k+1])*_dz_phi[j][k];
+                        dphi_dt[2+NN+PP+ZZ+1][j][k+1] += rsink*(DL - phi[2+NN+PP+ZZ+1][j][k+1])*_dz_phi[j][k];
+                    }
                     
                     dphi_dt[2+NN+PP+ZZ+1][j][k] += dd_large;
                     dphi_dt[2+NN+PP+ZZ][j][k] += dd_small;
