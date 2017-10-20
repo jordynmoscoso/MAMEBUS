@@ -187,11 +187,11 @@ switch (model_type)
        bgc_init(:,:,1) = Nmax*ones(size(ZZ_tr));
        
        for ii = 1:NP
-           bgc_init(:,:,ii+1) = pmax*exp(ZZ_tr/20);
+           bgc_init(:,:,ii+1) = pmax*ones(size(ZZ_tr));
        end
        
        for ii = 1:NZ
-           bgc_init(:,:,ii+1+NP) = zmax*exp(ZZ_tr/30);
+           bgc_init(:,:,ii+1+NP) = zmax*ones(size(ZZ_tr));
        end
        
        for ii = 1:ND
