@@ -281,7 +281,7 @@ ncase = 1;
     axis tight;
     set(gca,'XTick',0:Lx/5:Lx);
     set(gca,'YTick',-H:H/5:0);
-    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)']));           
+    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 
