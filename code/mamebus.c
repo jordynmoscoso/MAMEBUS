@@ -72,7 +72,7 @@ real * bgc_params = NULL;     // Vector containing biogeochemical parameters, al
 real * stau = NULL;                  // Seasonal tau
 
 // Numerical parameters
-real sigma = 1.4;         // Kurganov-Tadmor minmod-limiting parameter
+real sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter (sigma = 1.4)
 bool limSlopes = false;    // Use Cox slope limiting
 real Smax = 0.1;        // Max isopycnal slope
 const int idx_buoy = 0;   // Index of buoyancy variable in list of tracers
@@ -1639,8 +1639,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real zdiff_dzsq = 0;
     real zdiff_dzsq_max = 0;
     real cfl_phys = 0;
-    
-    real cfl_bgc = 0.9;
     
     ////////////////////////////////////////
     ///// BEGIN CALCULATING TENDENCIES /////
