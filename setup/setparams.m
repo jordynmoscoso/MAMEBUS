@@ -24,8 +24,8 @@ function setparams (local_home_dir,run_name,modeltype)
   %%% For an NPZ model, prompt the user to choose the number of
   %%% phytoplankton and zooplankton size classes
   if (modeltype == 1)
-    PP = 2;
-    ZZ = 2;
+    PP = 5;
+    ZZ = 5;
     ND = 2;
     spec_tot = PP + ZZ + ND + 1; %%% Add one for nitrate
   elseif (modeltype == 0)
