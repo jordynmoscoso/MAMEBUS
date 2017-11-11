@@ -18,8 +18,8 @@ function setparams (local_home_dir,run_name)
   MN = 1; %%% The number of nutrients in the model (must be 1).
   %%% The number of biogeochemical classes are entered here. 
   modeltype = 1; %%% This automatically defaults so that the model runs a size structured NPZD model
-  MP = 0;
-  MZ = 3;
+  MP = 2;
+  MZ = 2;
   MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
   spec_tot = MP + MZ + MD + MN; %%% Add one for nitrate
 
@@ -420,7 +420,7 @@ function setparams (local_home_dir,run_name)
   figure(fignum);
   fignum = fignum+1;
   pcolor(XX_tr,ZZ_tr,buoy_init);
-  title('Initial Buoyancy')
+  title('Initial Buoyancy with Grid')
   colorbar
   
 end
