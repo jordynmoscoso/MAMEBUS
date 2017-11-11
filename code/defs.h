@@ -18,6 +18,10 @@
 #define METHOD_RKTVD2 1
 #define METHOD_RKTVD3 2
 
+// Biogeochemical method identifiers
+#define SINGLENITRATE 0 // Single nitrate model as a "base" model when MP,MZ = 0.
+#define NPZD 1 // Size structured NPZD model 
+
 // Spatial discretisation method identifiers
 #define METHOD_CENTERED 0 // Fluxes based on mean phi at cell boundaries
 #define METHOD_KT 1 // Kurganov-Tadmor scheme for conservation laws (see K&T 2000)
