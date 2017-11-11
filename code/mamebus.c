@@ -49,7 +49,7 @@ int modeltype = 0;
 int MP = 0;
 int MZ = 0;
 int MD = 2;  // Always have one small detrital group and one large.
-int NN = 1;  // Always have one Nitrate
+int MN = 1;  // Always have one Nitrate
 int nbgc; // Counts number of biogeochemical parameters
 
 // Scaling Constants
@@ -896,7 +896,7 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
  * Calculates the time tendency of the biogeochemical tracers in a single nitrate model
  * returns the flux out of the grid cell to be used by the next grid cell (vertically) in the model
  */
-real single_nitrate (const real t, int j, int k,
+real single_nitrate (const real t, const int j, const int k,
                      real *** phi, real *** dphi_dt,
                      real N, real T, real a_temp, real b_temp, real c_temp, real alpha, real monod, real r_flux)
 {
@@ -973,6 +973,236 @@ real single_nitrate (const real t, int j, int k,
 
 
 
+
+
+void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
+           int NMAX, real N, real T,
+           real * lp, real * lz, real * vmax, real * kn, real * gmax, real * preyopt, real * kp)
+{
+    int l,m;                    // Counters
+
+    
+    // Parameters for temperature dependent uptake.
+    real tref = 20;         // Reference surface temperature
+    real R = 0.05;          // Temperature dependence (ward 2012)
+    real tfrac = 0;         // Temperature dependent uptake
+    real irfrac = 0;        // Fraction of light (for light depenendent uptake)
+    real IR = 0;            // Holder to calculate irradiance
+    real I0 = 340;          // Irradiance at the surface
+    real efold = 30;        // efolding depth for irradiance (Sarmeinto & Gruber)
+    real kw = 0.04;         // light attenuation of water
+    real kc = 0.03;         // light attenuation of cholorophyll
+    real K = 0;             // Holder for light attenuation constant
+    
+    // Grazing Parameters and placeholders
+    real delx = 0.25;           // Width of grading profile
+    real graze = 0;
+    real eff = 0.33;             // zooplankton assimilation efficiency.
+    
+    // Detritus parameters
+    real mu = 0.02/day;         // Mortality parameter (Ward)
+    real sinklim = 66.55;       // the esd (mu m) where detritus sinks approx 10m/day
+    real rdl = 0.04/day;        // remin parameter PON remin
+    real rds = 0.1/day;         // DON remin
+    real rsink = 10/day;        // sinking rate 50 m day
+    real remin = 0;             // Detritus remin value
+    
+    // Placeholders for timestepping
+    real dn = 0;            // Nitrate
+    real dp = 0;            // Phytoplankton
+    real dz = 0;            // Zooplankton
+    real dd_large = 0;      // Large detritus (sinking)
+    real dd_small = 0;      // Small detritus (non-sinking)
+    real pbiotot = 0;       // total phytoplankton biomass
+    real zbiotot = 0;       // total zooplankton biomass
+    real P = 0;             // Phytoplankton
+    real Z = 0;             // Zooplankton
+    real DS = 0;            // Small detritus
+    real DL = 0;            // Large detritus
+    
+    // NPZD arrays as to not over calculate
+    real uptake[MP];        // uptake
+    real mp[MP];            // phytoplankton mortality
+    real mz[MZ];            // zooplankton mortality
+    real palat[MP][MZ];     // phytoplankton palatibility matrix
+    
+    
+    
+    
+    
+    ///////////////////////////////////////
+    ///// BIOGEOCHEMISTRY STARTS HERE /////
+    ///////////////////////////////////////
+    
+    // Calculate palatibility:
+    for (l = 0; l < MP; l++)
+    {
+        for (m = 0; m < MZ; m ++)
+        {
+            palat[l][m] = exp(- POW2((log10(lp[l]) - log10(preyopt[m]))/delx) );
+        }
+    }
+    
+    
+    //
+    // Calculate physical scaling values for temperature dependent uptake
+    // and light dependent uptake.
+    //
+    DS = phi[2+MN+MP+MZ][j][k];
+    DL = phi[2+MN+MP+MZ+1][j][k];
+    tfrac = exp(R*(T-tref));
+    
+    for (l = 0; l < MP; l++)
+    {
+        pbiotot += phi[2+MN+l][j][k];
+    }
+    
+    for (m = 0; m < MZ; m++)
+    {
+        zbiotot += phi[2+MN+MP+m][j][k];
+    }
+    
+    K = kw + kc*(pbiotot+zbiotot);
+    IR = I0*exp(K*ZZ_phi[j][k]/efold);  // Irradiance is here
+    irfrac = IR/I0; // Franks 2001
+    
+    //
+    // NITRATE
+    //
+    for (l = 0; l < MP; l++)
+    {
+        P = phi[2+MN+l][j][k];
+        uptake[l] = irfrac*tfrac*vmax[l]*(N/(N+kn[l]))*P;
+        dn += uptake[l];
+    }
+    remin = rdl*DL + rds*DS;
+    dphi_dt[2][j][k] += -dn + remin;
+    
+    //
+    // PHYTOPLANKTON
+    //
+    
+    for (l = 0; l < MP; l++)
+    {
+        // Reset to zero at the start of every outer loop.
+        graze = 0;
+        // Calculate grazing on the jth phytoplankton by summing over k-zooplankton.
+        P = phi[2+MN+l][j][k];
+        for (m = 0; m < MZ; m ++)
+        {
+            Z = phi[2+MN+MP+m][j][k];
+            graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
+        }
+        mp[l] = mu*P;
+        
+        dp = uptake[l] - graze - mp[l];
+        dphi_dt[2+MN+l][j][k] += dp;
+    }
+    
+    //
+    // ZOOPLANKTON
+    //
+    
+    // Calculate the effect of grazing on zooplankton
+    for (m = 0; m < MZ; m++)
+    {
+        graze = 0;
+        Z = phi[2+MN+MP+m][j][k];
+        for (l = 0; l < MP; l++)
+        {
+            P = phi[2+MN+l][j][k];
+            graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
+        }
+        
+        mz[m] = mu*Z*zbiotot;       // Following Banas 2011
+        dz = eff*graze - mz[m];
+        dphi_dt[2+MN+MP+m][j][k] += dz;
+    }
+    
+    //
+    // DETRITUS
+    //
+    
+    // Detritus is split into two groups, the larger (PON) and smaller (DON) rates are from (Ward et. al. 2012)
+    
+    dd_small = 0; // set the detritus holders to zero.
+    dd_large = 0;
+    // Messy grazing for system closure
+    for (l = 0; l < MP; l++)
+    {
+        graze = 0;
+        // if the phytoplankton being grazed is less than the sinking limit, then, the messy grazing is added to the small DON group.
+        P = phi[2+MN+l][j][k];
+        if (lp[l] < sinklim)
+        {
+            for (m = 0; m < MZ; m ++)
+            {
+                Z = phi[2+MN+MP+m][j][k];
+                graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
+            }
+            dd_small = (1-eff)*graze;
+        }
+        else
+        {
+            for (m = 0; m < MZ; m ++)
+            {
+                Z = phi[2+MN+MP+m][j][k];
+                graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
+            }
+            dd_large = (1-eff)*graze;
+        }
+    }
+    
+    // Add in the effects of mortality
+    for (l = 0; l < MP; l++)
+    {
+        if (lp[l] < sinklim)
+        {
+            dd_small += mp[l];
+        }
+        else
+        {
+            dd_large += mp[l];
+        }
+    }
+    
+    for (m = 0; m < MZ; m++)
+    {
+        if (lz[m] < sinklim)
+        {
+            dd_small += mz[m];
+        }
+        else
+        {
+            dd_large += mz[m];
+        }
+    }
+    
+    
+    // Subtract off remineralization
+    dd_large -= rdl*DL;
+    dd_small -= rds*DS;
+    
+    if (k < Nz)
+    {
+        dphi_dt[2+MN+MP+MZ+1][j][k] -= rsink*(DL - phi[2+MN+MP+MZ+1][j][k+1])*_dz_phi[j][k];
+        dphi_dt[2+MN+MP+MZ+1][j][k+1] += rsink*(DL - phi[2+MN+MP+MZ+1][j][k+1])*_dz_phi[j][k];
+    }
+    
+    dphi_dt[2+MN+MP+MZ+1][j][k] += dd_large;
+    dphi_dt[2+MN+MP+MZ][j][k] += dd_small;
+    
+}
+
+
+
+
+
+
+
+
+
+
 /**
  * tderiv_bgc
  *
@@ -982,72 +1212,22 @@ real single_nitrate (const real t, int j, int k,
 void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 {
     int i,j,k; // Physical coutners
-    int n,p,z,d;
+    int l,m;   // BGC parameters
     
     // Single nitrate model holders
     real r_flux = 0;                         // holder for remin value in the single nitrate model
     real r_flux_next = 0;                    // placeholder for function output
-    
-    real dn = 0;
-    real dp = 0;
-    real dz = 0;
-    real dd_large = 0;
-    real dd_small = 0;
-    
-    real remin = 0;                          // remineralization
-    
-    real irfrac = 0;
-    real palat[MP][MZ];
-    real delx = 0.25;
-    real graze = 0;
-    real gmax = 0;
-    real kp = 0;
-    int MD = 2;
-    real eff = 0.33;             // zooplankton assimilation efficiency.
-    real sinklim = 66.55;       // the esd (mu m) where detritus sinks approx 10m/day
-    
-    // Parameters for temperature dependent uptake.
-    real tref = 20;
-    real R = 0.05;
-    real tfrac = 0;
-    
-    // NPZD arrays as to not over calculate
-    real uptake[MP];
-    real mp[MP];
-    real mz[MZ];
-    
-    // Holders for parameter values, because it's prettier.
-    real kn = 0;
-    real P = 0;
-    real Z = 0;
-    real vmax = 0;
-    real DS = 0;
-    real DL = 0;
-    real pbiotot = 0;
-    real zbiotot = 0;
-    real lp = 0;
-    real preyopt = 0;
-    real dmax = 5;
-    
-    real mu = 0.02/day; // Mortality parameter (Ward)
-    
-    // REMIN stuff must be here, since we may only have one zooplankton and one phytoplankton class, for now.
-    real rdl = 0.04/day;  // remin parameter PON remin
-    real rds = 0.1/day;   // DON remin
-    real rsink = 10/day;  // sinking rate 50 m day
-    
-    // Initalize arrays to hold NPZD parameters
-    // [lp ; lz; vmax; kn; gmax; preyopt; kp; dsink];               SIZES
+
+    // NPZD model parameter vectors
+    real gmax[MZ];
+    real kp[MZ];
+    real kn[MP];
+    real vmax[MP];
+    real lp[MP];
+    real lz[MZ];
+    real preyopt[MZ];
     real ** npzparams = NULL;                                       // 8 X (MP or MZ (whichever is larger))
     int NMAX = 0;
-    
-    real IR = 0;
-    real I0 = 340;
-    real efold = 30;
-    real kw = 0.04;
-    real kc = 0.03;
-    real K = 0;
-    int MN = 1;
     
     real T = 0;                              // Placeholder for Temperature
     real N = 0;                              // Placeholder for Nitrate
@@ -1100,189 +1280,36 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 NMAX = MZ;
             }
             
+            // Unpack all of the parameters first
+            //  this much match the length in vec2mat below
+            // [lp ; lz; vmax; kn; gmax; preyopt; kp];
+            vec2mat(bgc_params,&npzparams,nbgc,NMAX);
             
+            // Phytoplankton parameters
+            for (l = 0; l < MP; l++)
+            {
+                lp[l] = npzparams[0][l];
+                vmax[l] = npzparams[2][l];
+                kn[l] = npzparams[3][l];
+            }
+            // Zooplankton Parameters
+            for (m = 0; m < MZ; m++)
+            {
+                lz[m] = npzparams[1][m];
+                gmax[m] = npzparams[4][m];
+                preyopt[m] = npzparams[5][m];
+                kp[m] = npzparams[6][m];
+            }
+            
+            
+            // Caluclate the time tendency of the npzd model
             for (j = 0; j < Nx-1; j++)
             {
                 for (k = Nz-1; k >= 0; k--)
                 {
-                    // BIOGEOCHEMISTRY STARTS HERE
-                    // Unpack all of the parameters first
-                    //  this much match the length in vec2mat below
-                    vec2mat(bgc_params,&npzparams,8,NMAX);
-                    // Calculate palatibility:
-                    for (p = 0; p < MP; p++)
-                    {
-                        for (z = 0; z < MZ; z ++)
-                        {
-                            lp = npzparams[0][p];
-                            preyopt = npzparams[5][z];
-                            palat[p][z] = exp(- POW2((log10(lp) - log10(preyopt))/delx) );
-                        }
-                    }
-                    
-                    
-                    //
-                    // Calculate physical scaling values for temperature dependent uptake
-                    // and light dependent uptake.
-                    //
                     T = phi[0][j][k];    // temperature in grid box
-                    N = phi[2][j][k];
-                    DS = phi[2+MN+MP+MZ][j][k];
-                    DL = phi[2+MN+MP+MZ+1][j][k];
-                    tfrac = exp(R*(T-tref));
-                    
-                    for (p = 0; p < MP; p++)
-                    {
-                        pbiotot += phi[2+MN+p][j][k];
-                    }
-                    
-                    for (z = 0; z < MZ; z++)
-                    {
-                        zbiotot += phi[2+MN+MP+z][j][k];
-                    }
-                    
-                    K = kw + kc*(pbiotot+zbiotot);
-                    IR = I0*exp(K*ZZ_phi[j][k]/efold);  // Irradiance is here...
-                    
-                    irfrac = IR/I0; // Franks 2001
-                    
-                    //
-                    // NITRATE
-                    //
-                    dn = 0;  // reset to zero in the new grid box.
-                    for (p = 0; p < MP; p++)
-                    {
-                        kn = npzparams[3][p];
-                        P = phi[2+MN+p][j][k]; // phytoplankton starts after 2;
-                        vmax = npzparams[2][p];
-                        uptake[p] = irfrac*tfrac*vmax*(N/(N+kn))*P;
-                        dn += uptake[p];
-                    }
-                    remin = rdl*DL + rds*DS;
-                    dphi_dt[2][j][k] += -dn + remin;
-                    
-                    //
-                    // PHYTOPLANKTON
-                    //
-                    
-                    for (p = 0; p < MP; p++)
-                    {
-                        // Reset to zero at the start of every outer loop.
-                        graze = 0;
-                        // Calculate grazing on the jth phytoplankton by summing over k-zooplankton.
-                        P = phi[2+MN+p][j][k];
-                        for (z = 0; z < MZ; z ++)
-                        {
-                            gmax = npzparams[4][z];
-                            kp = npzparams[6][z];
-                            Z = phi[2+MN+MP+z][j][k];
-                            graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
-                        }
-                        mp[p] = mu*P;
-                        
-                        dp = uptake[p] - graze - mp[p];
-                        dphi_dt[2+MN+p][j][k] += dp;
-                    }
-                    
-                    //
-                    // ZOOPLANKTON
-                    //
-                    
-                    // We also need to calculate the effect of grazing on zooplankton
-                    for (z = 0; z < MZ; z++)
-                    {
-                        graze = 0;
-                        Z = phi[2+MN+MP+z][j][k];
-                        for (p = 0; p < MP; p++)
-                        {
-                            P = phi[2+MN+p][j][k];
-                            gmax = npzparams[4][z];
-                            kp = npzparams[6][z];
-                            graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
-                        }
-                        
-                        mz[z] = mu*Z*zbiotot;       // Following Banas 2011
-                        dz = eff*graze - mz[z];
-                        dphi_dt[2+MN+MP+z][j][k] += dz;
-                    }
-                    
-                    //
-                    // DETRITUS
-                    //
-                    
-                    // Detritus is split into two groups, the larger (PON) and smaller (DON) rates are from (Ward et. al. 2012)
-                    
-                    dd_small = 0; // set the detritus holders to zero.
-                    dd_large = 0;
-                    // Messy grazing
-                    for (p = 0; p < MP; p++)
-                    {
-                        graze = 0;
-                        // if the phytoplankton being grazed is less than the sinking limit, then, the messy grazing is added to the small DON group.
-                        P = phi[2+NN+p][j][k];
-                        if (npzparams[0][p] < sinklim)
-                        {
-                            for (z = 0; z < MZ; z ++)
-                            {
-                                gmax = npzparams[4][z];
-                                kp = npzparams[6][z];
-                                Z = phi[2+MN+MP+z][j][k];
-                                graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
-                            }
-                            dd_small = (1-eff)*graze;
-                        }
-                        else
-                        {
-                            for (z = 0; z < MZ; z ++)
-                            {
-                                gmax = npzparams[4][z];
-                                kp = npzparams[6][z];
-                                Z = phi[2+MN+MP+z][j][k];
-                                graze += gmax*(palat[p][z]/(kp + pbiotot))*Z*P*(1-exp(-P));
-                            }
-                            dd_large = (1-eff)*graze;
-                        }
-                    }
-                    
-                    // Add in the effects of mortality
-                    for (p = 0; p < MP; p++)
-                    {
-                        if (npzparams[0][p] < sinklim)
-                        {
-                            dd_small += mp[p];
-                        }
-                        else
-                        {
-                            dd_large += mp[p];
-                        }
-                    }
-                    
-                    for (z = 0; z < MZ; z++)
-                    {
-                        if (npzparams[1][p] < sinklim)
-                        {
-                            dd_small += mz[z];
-                        }
-                        else
-                        {
-                            dd_large += mz[z];
-                        }
-                    }
-                    
-                    
-                    // Subtract off remineralization
-                    dd_large -= rdl*DL;
-                    dd_small -= rds*DS;
-                    
-                    if (k < Nz)
-                    {
-                        dphi_dt[2+MN+MP+MZ+1][j][k] -= rsink*(DL - phi[2+MN+MP+MZ+1][j][k+1])*_dz_phi[j][k];
-                        dphi_dt[2+MN+MP+MZ+1][j][k+1] += rsink*(DL - phi[2+MN+MP+MZ+1][j][k+1])*_dz_phi[j][k];
-                    }
-                    
-                    dphi_dt[2+MN+MP+MZ+1][j][k] += dd_large;
-                    dphi_dt[2+MN+MP+MZ][j][k] += dd_small;
-                    
+                    N = phi[2][j][k];    // Nitrate in grid box
+                    npzd(t,j,k,phi,dphi_dt,NMAX,N,T,lp,lz,vmax,kn,gmax,preyopt,kp);
                 }
             }
             
