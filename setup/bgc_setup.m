@@ -14,8 +14,6 @@
 
 function [params, bgc_init,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
 
-fignum = 100;
-
 %%% Note, all biogeochemical parameters are calculated in seconds
 t1day = 24*60*60; %%% Seconds in 1 day
 
@@ -39,20 +37,6 @@ switch (model_type)
         Ncline = 150; % Approximate guess of the depth of the nutracline
         bgc_init = -Nmax*tanh(ZZ_tr./Ncline);
     
-        figure(fignum);
-        fignum = fignum+1;
-        pcolor(XX_tr,ZZ_tr,bgc_init);
-%      plot(N_init(1,:),ZZ_tr(1,:))
-        shading interp
-        title('Initial Nitrate Profile')
-        colorbar
-        caxis([0 Nmax])
-  
-        figure(fignum);
-        fignum = fignum+1;
-        plot(bgc_init(1,:),ZZ_tr(1,:))
-        title('Initial Nutracline Profile')
-        
         lp = 0; lz = 0;
         nparams = length(params);
 
