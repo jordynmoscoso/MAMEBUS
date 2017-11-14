@@ -21,6 +21,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   addpath ../utils;
   addpath ./redblue
 
+  
   %%%%%%%%%%%%%%%%%%%%%
   %%%%% VARIABLES %%%%%
   %%%%%%%%%%%%%%%%%%%%% 
@@ -54,22 +55,23 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   tmax = readparam(params_file,'maxTime','%lf');
   
   
-  
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
   t1day = 86400;
   
   %%% If user is plotting nitrate, indicate what to plot
-  if (var_id == 2 && plot_trac)
-    prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
-    ncase = input(prompt);
-    %%% Check for valid input, if not choose default
-    if (isempty(ncase) || ncase < 0 || ncase > 1)
-        ncase = 0;
-    end
+%   if (var_id == 2 && plot_trac)
+%     prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
+%     ncase = input(prompt);
+%     %%% Check for valid input, if not choose default
+%     if (isempty(ncase) || ncase < 0 || ncase > 1)
+%         ncase = 0;
+%     end
     Nstore = [];
     tsave = [];
-  end
+%   end
+
+ncase = 1; 
   
   %%% Load grids from model output
 %   dx = (Lx/Nx);
@@ -96,6 +98,13 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   %%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% PLOTTING LOOP %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%
+  surf_layer = 75;
+  sl_ind = find(ZZ_tr > - surf_layer);
+  denom = size(sl_ind);
+  
+  if (var_id ~= 0 && var_id ~= 1)
+     n_var = var_id; 
+  end
   
   %%% Max number of time steps is the number of whole time steps that can
   %%% fit into tmax, plus one initial save, plus one final save
@@ -103,7 +112,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   
   %%% Make a movie of the data - allocate a movie array large enough to
   %%% hold the largest possible number of frames
-  figure(1);
+  nfig = 107;
+  figure(nfig);
   clf;
   axes('FontSize',18);
   M = moviein(Nt);  
@@ -159,6 +169,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
+
         case 2 %%% Nitrate
               buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);
               bfid = fopen(buoy_file,'r');
@@ -200,15 +211,15 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
               axis([0 Nx -120 0])
           else
             [C h] = contourf(XX_tr,ZZ_tr,phi,20);
+
 %             hold on
 %             plot(XX_tr,eu_depth,'w','LineWidth',2)
 %             hold off
-            set(gca, 'CLim', [0,45]);
+%             set(gca, 'CLim', [0,45]);
             
-            nstore = -t1day*(sum(phi(:,end)))./ZZ_psi(end,1);
-            Nstore = [Nstore nstore];
-            tsave = [tsave t];
-          end
+             nstore = (sum(phi(sl_ind)))./(denom(1));
+             Nstore = [Nstore nstore];
+             tsave = [tsave t];
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
@@ -219,7 +230,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
 %       caxis([0 20]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);
+
       
+
+
     %%% If plot_trac==false, plot the streamfunction
     else    
     
@@ -232,6 +246,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
         case 2 %%% Eddy streamfunction
           data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
       end
+      
       
       
       %%% Open the data file for reading    
@@ -275,7 +290,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     axis tight;
     set(gca,'XTick',0:Lx/5:Lx);
     set(gca,'YTick',-H:H/5:0);
-    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)']));           
+    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 
@@ -292,20 +307,15 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     
   end    
   
-  if (var_id == 2 && plot_trac)
+  if (var_id ~= 0 && var_id ~= 1 && plot_trac)
       titlestr = ['Final time = ', num2str(t/t1year), ' yr'];
       
-      if ncase == 0
-      figure(2)
+      figure(nfig+1)
+      size(tsave)
+      size(Nstore)
       plot(tsave/t1year,Nstore)
-      title('NPP (depth averaged) (mmol/(m^2 day))')
+      title('D (small) Surface Layer Averaged (mmol/m^3)')
       xlabel(titlestr)
-      else
-      figure(2)
-      plot(tsave/t1year,Nstore)
-      title('Nitrate (mmol/m^3)')
-      xlabel(titlestr)
-      end
   end
   
   % Close the movie writer
