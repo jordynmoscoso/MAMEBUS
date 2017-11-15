@@ -19,6 +19,7 @@
 #define METHOD_RKTVD3 2
 
 // Biogeochemical method identifiers
+#define NOBGC -1 // No biogeochemistry
 #define SINGLENITRATE 0 // Single nitrate model as a "base" model when MP,MZ = 0.
 #define NPZD 1 // Size structured NPZD model 
 
