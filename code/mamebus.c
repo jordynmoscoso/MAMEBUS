@@ -1506,7 +1506,7 @@ void do_adv_diff (  const real    t,
                     {
                         PPx[j][k] = Kiso_u[j][k] * (
                                                     (phi[j][k]-phi[j-1][k]) * _dx
-                                                    + (Siso_u[j][k] + ZZ_u[j][k]*sb_psi[j]/hb_psi[j]) * 0.5*(dphi_dz[j][k]+dphi_dz[j-1][k]) );
+                                                    + Siso_true * 0.5*(dphi_dz[j][k]+dphi_dz[j-1][k]) );
                     }
                     
                     // Boundary layer fluxes
