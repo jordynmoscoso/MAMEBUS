@@ -143,24 +143,7 @@ ncase = 1;
 
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
-
-      %%% Open the output file for reading    
-      dfid = fopen(data_file,'r');
-      if (dfid == -1)
-        stillReading = false;
-        continue;
-        %%% Ignore any missing data - might just be the end of the
-        %%% computation
-      end
-
-      %%% Get the phi values on the gridpoints
-      phi = fscanf(dfid,'%le',[Nx,Nz]);            
-      if (size(phi,1)~=Nx || size(phi,2)~=Nz)
-        error(['ERROR: Could not find data file: ',data_file]);
-      end          
-
-      %%% Close data file
-      fclose(dfid);
+      phi = readOutputFile(data_file,Nx,Nz);       
       
       %%% Plot the tracer     
       switch (var_id)
@@ -171,11 +154,8 @@ ncase = 1;
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
 
         case 2 %%% Nitrate
-              buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);
-              bfid = fopen(buoy_file,'r');
-              temp = fscanf(dfid,'%le',[Nx,Nz]); 
-              
-              fclose(bfid);
+              buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);              
+              temp = readOutputFile (data_file,Nx,Nz);       
     
               irradiance = readDataFile (params_file,dirpath,'irFile',Nx,Nz,zeros(Nx,Nz));
               ir_surf = irradiance(end,:);
@@ -247,26 +227,9 @@ ncase = 1;
         case 2 %%% Eddy streamfunction
           data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
       end
-      
-      
-      
-      %%% Open the data file for reading    
-      dfid = fopen(data_file,'r');
-      if (dfid == -1)
-        stillReading = false;
-        continue;
-        %%% Ignore any missing data - might just be the end of the
-        %%% computation
-      end             
-      
+                
       %%% Get the psi values on the gridpoints
-      psi = fscanf(dfid,'%le',[Nx+1,Nz+1]);           
-      if (size(psi,1)~=Nx+1 || size(psi,2)~=Nz+1)
-        error(['ERROR: Could not find data file: ',data_file]);
-      end    
-      
-      %%% Close data file
-      fclose(dfid);
+      psi = readOutputFile (data_file,Nx+1,Nz+1);       
 
       %%% Plot the streamfunction
       psi_r_lim = psi;
@@ -305,7 +268,7 @@ ncase = 1;
     
     counter = counter+1;   
     n = n + 1;
-    
+        
   end    
   
   if (var_id ~= 0 && var_id ~= 1 && plot_trac)

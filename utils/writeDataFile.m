@@ -6,11 +6,11 @@
 %%%
 function writeDataFile (fname,data)
   
-  fid = fopen(fname,'w');
+  fid = fopen(fname,'w','b');
   if (fid == -1)
     error(['Could not open ',fname]);
   end
-  fprintf(fid,'%e ',data);
+  fwrite(fid,data,'real*8','ieee-le');
   fclose(fid);
 
 end
