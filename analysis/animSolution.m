@@ -51,9 +51,31 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   hb_tr = hb(2:end-1); %%% Remove "ghost" points
   
   %%% Parameters related to number of iterations
-  dt_s = readparam(params_file,'monitorFrequency','%lf');
-  tmax = readparam(params_file,'maxTime','%lf');
+  [dt_s dt_s_found] = readparam(params_file,'monitorFrequency','%lf');
+  [startTime startTime_found] = readparam(params_file,'startTime','%lf');
+  [endTime endTime_found] = readparam(params_file,'endTime','%lf'); 
+  [restart restart_found] = readparam(params_file,'restart','%d');
+  [n0 n0_found] = readparam(params_file,'startIdx','%u');
+
+  %%% Default is that we're not picking up from a previous simulation
+  if (~restart_found)
+    restart = false;
+  end
+
+  %%% Default is that we pickup from the first output file
+  if (~n0_found)
+    n0 = 0;
+  end
   
+  %%% If the start time isn't specified then it may be specified implicitly
+  %%% by the pickup file
+  if (~startTime_found)
+    if (restart && dt_s_found)
+      startTime = n0*dt_s;
+    else
+      startTime = 0;
+    end
+  end
   
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
@@ -106,9 +128,9 @@ ncase = 1;
      n_var = var_id; 
   end
   
-  %%% Max number of time steps is the number of whole time steps that can
+  %%% Max number of output files is the number of whole time steps that can
   %%% fit into tmax, plus one initial save, plus one final save
-  Nt = floor(tmax/dt_s) + 2;
+  Noutput = floor(endTime/dt_s) + 2;
   
   %%% Make a movie of the data - allocate a movie array large enough to
   %%% hold the largest possible number of frames
@@ -116,12 +138,12 @@ ncase = 1;
   figure(nfig);
   clf;
   axes('FontSize',18);
-  M = moviein(Nt);  
+  M = moviein(Noutput);  
   
   %%% Tracks whether we should still read data
   stillReading = true;
   counter = 1;
-  n = 0;
+  n = n0;
   
   % Determines whether or not to make a movie and writes a new file to
   % store the data.
@@ -135,7 +157,7 @@ ncase = 1;
   while (stillReading)
       
     %%% Get the time value 
-    t = n*dt_s;
+    t = startTime + (n-n0)*dt_s;
     
     %%% If plot_trac==true, load the tracer specified by trac_num and plot
     %%% it
@@ -143,24 +165,7 @@ ncase = 1;
 
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
-
-      %%% Open the output file for reading    
-      dfid = fopen(data_file,'r');
-      if (dfid == -1)
-        stillReading = false;
-        continue;
-        %%% Ignore any missing data - might just be the end of the
-        %%% computation
-      end
-
-      %%% Get the phi values on the gridpoints
-      phi = fscanf(dfid,'%le',[Nx,Nz]);            
-      if (size(phi,1)~=Nx || size(phi,2)~=Nz)
-        error(['ERROR: Could not find data file: ',data_file]);
-      end          
-
-      %%% Close data file
-      fclose(dfid);
+      phi = readOutputFile(data_file,Nx,Nz);       
       
       %%% Plot the tracer     
       switch (var_id)
@@ -171,11 +176,8 @@ ncase = 1;
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
 
         case 2 %%% Nitrate
-              buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);
-              bfid = fopen(buoy_file,'r');
-              temp = fscanf(dfid,'%le',[Nx,Nz]); 
-              
-              fclose(bfid);
+              buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);              
+              temp = readOutputFile (data_file,Nx,Nz);       
     
               irradiance = readDataFile (params_file,dirpath,'irFile',Nx,Nz,zeros(Nx,Nz));
               ir_surf = irradiance(end,:);
@@ -247,26 +249,9 @@ ncase = 1;
         case 2 %%% Eddy streamfunction
           data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
       end
-      
-      
-      
-      %%% Open the data file for reading    
-      dfid = fopen(data_file,'r');
-      if (dfid == -1)
-        stillReading = false;
-        continue;
-        %%% Ignore any missing data - might just be the end of the
-        %%% computation
-      end             
-      
+                
       %%% Get the psi values on the gridpoints
-      psi = fscanf(dfid,'%le',[Nx+1,Nz+1]);           
-      if (size(psi,1)~=Nx+1 || size(psi,2)~=Nz+1)
-        error(['ERROR: Could not find data file: ',data_file]);
-      end    
-      
-      %%% Close data file
-      fclose(dfid);
+      psi = readOutputFile (data_file,Nx+1,Nz+1);       
 
       %%% Plot the streamfunction
       psi_r_lim = psi;
@@ -305,7 +290,7 @@ ncase = 1;
     
     counter = counter+1;   
     n = n + 1;
-    
+        
   end    
   
   if (var_id ~= 0 && var_id ~= 1 && plot_trac)

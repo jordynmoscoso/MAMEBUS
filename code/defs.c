@@ -49,6 +49,7 @@ real stretch_ROMS (real sigma, real h_c, real theta_s, real theta_b, real h_b)
   return z;
 }
 
+
 /**
  * printMatrix
  *
@@ -65,9 +66,8 @@ void printMatrix (FILE * outfile, real ** mat, uint m, uint n)
     {
         for (i = 0; i < m; i ++)
         {
-           fprintf(outfile,"%e ",mat[i][j]);
+            fwrite(&mat[i][j],sizeof(real),1,outfile);
         }
-        fprintf(outfile,"\r\n");
     }
     fflush(outfile);
 }
@@ -441,7 +441,7 @@ bool readVector (char * fname, real * vec, uint len, FILE * errstrm)
     // Read data from the file
     for (i = 0; i < len; i ++)
     {
-        if (fscanf(pfile,"%le",&vec[i]) == EOF)
+        if (fread(&vec[i],sizeof(real),1,pfile) < 1)
         {
             if (errstrm != NULL)
             {
@@ -523,7 +523,7 @@ bool readMatrix (char * fname, real ** mat, uint m, uint n, FILE * errstrm)
   {
     for (i = 0; i < m; i ++)
     {
-      if (fscanf(pfile,"%le",&mat[i][j]) == EOF)
+      if (fread(&mat[i][j],sizeof(real),1,pfile) < 1)
       {
         if (errstrm != NULL)
         {
@@ -619,7 +619,7 @@ bool readMatrix3 (char * fname, real *** mat3, uint Nr, uint Nc, uint Ns, FILE *
     {
       for (i = 0; i < Nr; i ++)
       {
-        if (fscanf(pfile,"%le",&mat3[i][j][k]) == EOF)
+        if (fread(&mat3[i][j][k],sizeof(real),1,pfile) < 1)
         {
           if (errstrm != NULL)
           {

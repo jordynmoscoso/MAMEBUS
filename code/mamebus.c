@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 32
+#define NPARAMS 35
 
 
 
@@ -1939,6 +1939,107 @@ void do_impl_diff (real t, real dt, real *** phi)
 
 
 
+
+
+
+
+
+
+
+
+
+
+/**
+ *
+ * constructOutputName
+ *
+ * Constructs an output file path from the destination directory (outdir),
+ * variable name (varname, defined at the top of this file), tracer number (i),
+ * and output index (n). The resulting file path is stored in outfile. If i<0
+ * then no tracer number is specified in the output file. If n<0 then no
+ * output index is specified.
+ *
+ */
+void constructOutputName (char * outdir, const char * varname, int i, int n, char * outfile)
+{
+  char nstr[MAX_PARAMETER_FILENAME_LENGTH];
+  char istr[MAX_PARAMETER_FILENAME_LENGTH];
+  
+  // Create a string for the current iteration number
+  sprintf(nstr,"%d",n);
+  
+  // Create a string for the current isopycnal layer
+  if (i >= 0)
+  {
+    sprintf(istr,"%d",i);
+  }
+  else
+  {
+    sprintf(istr,"");
+  }
+  
+  // Construct output file path
+  strcpy(outfile,outdir);
+  strcat(outfile,"/");
+  strcat(outfile,varname);
+  strcat(outfile,istr);
+  if (n >= 0)
+  {
+    strcat(outfile,"_n=");
+    strcat(outfile,nstr);
+  }
+  strcat(outfile,".dat");
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ *
+ * writeOutputFile
+ *
+ * Convenience function to write a 2D matrix to a specified output file.
+ *
+ */
+bool writeOutputFile (char * outfile, real ** mat, uint m, uint n)
+{
+  FILE * outfd = NULL;
+  
+  outfd = fopen(outfile,"w");
+  if (outfd == NULL)
+  {
+    fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+    return false;
+  }
+  printMatrix(outfd,mat,m,n);
+  fclose(outfd);
+  return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  *
  * writeModelGrid
@@ -1950,64 +2051,23 @@ void do_impl_diff (real t, real dt, real *** phi)
 bool writeModelGrid (real ** ZZ_phi, real ** ZZ_psi, real ** ZZ_u, real ** ZZ_w, char * outdir)
 {
     char outfile[MAX_PARAMETER_FILENAME_LENGTH];
-    FILE * outfd = NULL;
     
     // Write depths on phi-points
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_ZZ_PHI);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,ZZ_phi,Nx,Nz);
-    fclose(outfd);
-    
+    constructOutputName(outdir,OUTN_ZZ_PHI,-1,-1,outfile);
+    if (!writeOutputFile(outfile,ZZ_phi,Nx,Nz)) return false;
+  
     // Write depths on psi-points
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_ZZ_PSI);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,ZZ_psi,Nx+1,Nz+1);
-    fclose(outfd);
-    
+    constructOutputName(outdir,OUTN_ZZ_PSI,-1,-1,outfile);
+    if (!writeOutputFile(outfile,ZZ_psi,Nx,Nz)) return false;
+  
     // Write depths on u-points
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_ZZ_U);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,ZZ_u,Nx+1,Nz);
-    fclose(outfd);
-    
+    constructOutputName(outdir,OUTN_ZZ_U,-1,-1,outfile);
+    if (!writeOutputFile(outfile,ZZ_u,Nx,Nz)) return false;
+  
     // Write depths on w-points
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_ZZ_W);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,ZZ_w,Nx,Nz+1);
-    fclose(outfd);
-    
+    constructOutputName(outdir,OUTN_ZZ_W,-1,-1,outfile);
+    if (!writeOutputFile(outfile,ZZ_w,Nx,Nz)) return false;
+  
     return true;
 }
 
@@ -2038,9 +2098,6 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     char istr[MAX_PARAMETER_FILENAME_LENGTH];
     FILE * outfd = NULL;
     
-    // Create a string for the current iteration number
-    sprintf(nstr,"%d",n);
-    
     // Calculate residual streamfunction
     buoy = phi[idx_buoy];
     calcKgm(t,buoy,Kgm_psi,Kgm_u,Kgm_w);
@@ -2052,75 +2109,23 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     // Loop over tracers
     for (i = 0; i < Ntracs; i ++)
     {
-        // Create a string for the current tracer number
-        sprintf(istr,"%d",i);
-        
         // Write iteration data for this tracer
-        strcpy(outfile,outdir);
-        strcat(outfile,"/");
-        strcat(outfile,OUTN_TRAC);
-        strcat(outfile,istr);
-        strcat(outfile,"_n=");
-        strcat(outfile,nstr);
-        strcat(outfile,".dat");
-        outfd = fopen(outfile,"w");
-        if (outfd == NULL)
-        {
-            fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-            return false;
-        }
-        printMatrix(outfd,phi[i],Nx,Nz);
-        fclose(outfd);
+        constructOutputName(outdir,OUTN_TRAC,i,n,outfile);
+        if (!writeOutputFile(outfile,phi[i],Nx,Nz)) return false;
     }
     
     // Write iteration data for the residual streamfunction
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_PSIR);
-    strcat(outfile,"_n=");
-    strcat(outfile,nstr);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,psi_r,Nx+1,Nz+1);
-    fclose(outfd);
+    constructOutputName(outdir,OUTN_PSIR,i,n,outfile);
+    if (!writeOutputFile(outfile,psi_r,Nx+1,Nz+1)) return false;
     
     // Write iteration data for the mean streamfunction
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_PSIM);
-    strcat(outfile,"_n=");
-    strcat(outfile,nstr);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,psi_m,Nx+1,Nz+1);
-    fclose(outfd);
-    
+    constructOutputName(outdir,OUTN_PSIM,i,n,outfile);
+    if (!writeOutputFile(outfile,psi_m,Nx+1,Nz+1)) return false;
+  
     // Write iteration data for the eddy streamfunction
-    strcpy(outfile,outdir);
-    strcat(outfile,"/");
-    strcat(outfile,OUTN_PSIE);
-    strcat(outfile,"_n=");
-    strcat(outfile,nstr);
-    strcat(outfile,".dat");
-    outfd = fopen(outfile,"w");
-    if (outfd == NULL)
-    {
-        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-        return false;
-    }
-    printMatrix(outfd,psi_e,Nx+1,Nz+1);
-    fclose(outfd);
-    
+    constructOutputName(outdir,OUTN_PSIE,i,n,outfile);
+    if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
+  
     return true;
 }
 
@@ -2167,12 +2172,27 @@ void printUsage (void)
      "  cflFrac            CFL number. The time step dt will be chosen at each\n"
      "                     iteration such that dt=cfl*dt_max, where dt_max is the\n"
      "                     estimated maximum stable time step. Must be >0.\n"
-     "  maxTime            Maximum time for the integration, in\n"
+     "  startTime          Time at which integration should start.\n"
+     "                     Optional. If unset or negative then the run is initialized\n"
+     "                     from the time of the pickup file, if restart is specified. If\n"
+     "                     startTime is set and >=0  then it overrides the pickup time.\n"
+     "  endTime            End time for the integration, in\n"
      "                     case the target residual is not achieved.\n"
      "  monitorFrequency   Frequency with which to write out iteration data. If\n"
      "                     set to zero, only the final data will be written.\n"
      "                     Otherwise must be >0.\n"
      "                     Optional, default is 0, must be >= 0.\n"
+     "  restart            Set to 0 to initialize the simulation from t=0\n"
+     "                     using input from the initFile parameter. Set to\n"
+     "                     1 to pick up from a previous run using output files\n"
+     "                     specified by startIdx as input files for this run.\n"
+     "                     Optional - default is 0.\n"
+     "  startIdx           Specifies the index of the output files to use as\n"
+     "                     input files for this run. The output index counts\n"
+     "                     the number of output files written in any given\n"
+     "                     simulation. If the startTime parameter is not specified\n"
+     "                     then the simulation start time is calculated as\n"
+     "                     startIdx*monitorFrequency. Optional - default is 0.\n"
      "  f0                 Reference Coriolis parameter.\n"
      "                     Optional, default is 10^{-4} rad/s, must be =/= 0.\n"
      "  h_c                Depth parameter controlling the range of depths over\n"
@@ -2250,17 +2270,21 @@ void printUsage (void)
 int main (int argc, char ** argv)
 {
     // Time parameters
-    real tmin = 0.0;        // Start time
+    real tmin = -1;        // Start time
     real tmax = 0;          // End time
     real t = 0;             // Time counter
     real dt = 0;            // Time step
     real dt_s = 0;          // Data save time step
-    real n_s = 0;           // Number of saves
     real t_next = 0;        // Next save time
     real cflFrac = 1;       // CFL number
     real wc = 0;            // Time-interpolation weights
     real wn = 0;
-    
+  
+    // Iteration parameters
+    bool restart = false;   // Restart flag
+    real n_s = 0;           // Save counter
+    uint n0 = 0;            // Initial save index
+  
     // Convergence parameters
     real * targetRes = 0;
     bool targetReached = false;
@@ -2318,8 +2342,11 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Lx","%lf",&Lx,false);
     setParam(params,paramcntr++,"Lz","%lf",&Lz,false);
     setParam(params,paramcntr++,"cflFrac","%lf",&cflFrac,false);
-    setParam(params,paramcntr++,"maxTime","%lf",&tmax,false);
+    setParam(params,paramcntr++,"startTime","%lf",&tmin,true);
+    setParam(params,paramcntr++,"endTime","%lf",&tmax,false);
     setParam(params,paramcntr++,"monitorFrequency","%lf",&dt_s,true);
+    setParam(params,paramcntr++,"restart","%d",&restart,true);
+    setParam(params,paramcntr++,"startIdx","%u",&n0,true);
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
@@ -2437,17 +2464,56 @@ int main (int argc, char ** argv)
     use_sml = Hsml > 0;
     use_bbl = Hbbl > 0;
   
-    // Current time and next save point
+    // Set the integration start time
+    // Note: If dt_s is not specified then this will just be zero
+    if (tmin < 0)
+    {
+      if (restart)
+      {
+        tmin = n0*dt_s;
+        if (tmin >= tmax)
+        {
+          fprintf(stderr,"Integration start time (=startIdx*monitorFrequency) exceeds integration end time (endTime)");
+          printUsage();
+          return 0;
+        }
+      }
+      else
+      {
+        tmin = 0;
+      }
+    }
+    else
+    {
+      if (tmin >= tmax)
+      {
+        fprintf(stderr,"Integration start time (startTime) exceeds integration end time (endTime)");
+        printUsage();
+        return 0;
+      }
+    }
     t = tmin;
+  
+    // Current time and next save point
     if (dt_s == 0.0)
     {
-        t_next = 2*tmax; // If no save interval is specified, only write final data
+        t_next = tmin + 2*tmax; // If no save interval is specified, only write final data
     }
     else
     {
         t_next = tmin + dt_s;
     }
-    
+  
+    // If restarting then initialize output count accordingly
+    if (restart)
+    {
+      n_s = n0;
+    }
+    else
+    {
+      n_s = 0;
+    }
+  
     ////////////////////////////////////////
     ///// END READING INPUT PARAMETERS /////
     ////////////////////////////////////////
@@ -2560,7 +2626,6 @@ int main (int argc, char ** argv)
     
     // Read input matrices and vectors
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
-        ( (strlen(initFile) > 0)        &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) ) ||
         ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
         ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
         ( (strlen(bgcFile) > 0)          &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
@@ -2573,9 +2638,36 @@ int main (int argc, char ** argv)
         printUsage();
         return 0;
     }
+  
+    // If a restart is specified then read from the output of a previous run
+    if (restart)
+    {
+      // Check initial state
+      for (i = 0; i < Ntracs; i ++)
+      {
+        // Overwrite initFile parameter as we won't be using it
+        constructOutputName(outdir,OUTN_TRAC,i,n0,initFile);
+        if (!readMatrix(initFile,phi_init[i],Nx,Nz,stderr))
+        {
+          fprintf(stderr,"Unable to read pickup files.\n");
+          printUsage();
+          return 0;
+        }
+      }
+    }
+    // Read from initialization files
+    else
+    {
+      if ( (strlen(initFile) > 0)  &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) )
+      {
+        fprintf(stderr,"Unable to read initialization files.\n");
+        printUsage();
+        return 0;
+      }
+    }
 
     // Default initial condition is zero tracer everywhere
-    if (strlen(initFile)==0)
+    if (!restart && strlen(initFile)==0)
     {
         memset(*(*phi_init),0,(Ntot)*sizeof(real));
     }
