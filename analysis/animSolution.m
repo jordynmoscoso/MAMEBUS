@@ -51,9 +51,31 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   hb_tr = hb(2:end-1); %%% Remove "ghost" points
   
   %%% Parameters related to number of iterations
-  dt_s = readparam(params_file,'monitorFrequency','%lf');
-  tmax = readparam(params_file,'maxTime','%lf');
+  [dt_s dt_s_found] = readparam(params_file,'monitorFrequency','%lf');
+  [startTime startTime_found] = readparam(params_file,'startTime','%lf');
+  [endTime endTime_found] = readparam(params_file,'endTime','%lf'); 
+  [restart restart_found] = readparam(params_file,'restart','%d');
+  [n0 n0_found] = readparam(params_file,'startIdx','%u');
+
+  %%% Default is that we're not picking up from a previous simulation
+  if (~restart_found)
+    restart = false;
+  end
+
+  %%% Default is that we pickup from the first output file
+  if (~n0_found)
+    n0 = 0;
+  end
   
+  %%% If the start time isn't specified then it may be specified implicitly
+  %%% by the pickup file
+  if (~startTime_found)
+    if (restart && dt_s_found)
+      startTime = n0*dt_s;
+    else
+      startTime = 0;
+    end
+  end
   
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
@@ -106,9 +128,9 @@ ncase = 1;
      n_var = var_id; 
   end
   
-  %%% Max number of time steps is the number of whole time steps that can
+  %%% Max number of output files is the number of whole time steps that can
   %%% fit into tmax, plus one initial save, plus one final save
-  Nt = floor(tmax/dt_s) + 2;
+  Noutput = floor(endTime/dt_s) + 2;
   
   %%% Make a movie of the data - allocate a movie array large enough to
   %%% hold the largest possible number of frames
@@ -116,12 +138,12 @@ ncase = 1;
   figure(nfig);
   clf;
   axes('FontSize',18);
-  M = moviein(Nt);  
+  M = moviein(Noutput);  
   
   %%% Tracks whether we should still read data
   stillReading = true;
   counter = 1;
-  n = 0;
+  n = n0;
   
   % Determines whether or not to make a movie and writes a new file to
   % store the data.
@@ -135,7 +157,7 @@ ncase = 1;
   while (stillReading)
       
     %%% Get the time value 
-    t = n*dt_s;
+    t = startTime + (n-n0)*dt_s;
     
     %%% If plot_trac==true, load the tracer specified by trac_num and plot
     %%% it

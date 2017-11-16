@@ -42,11 +42,17 @@ function setparams_physonly (local_home_dir,run_name)
   paramTypes;
   PARAMS = {};
   
-  %%% Domain dimensions
-  m1km = 1000; %%% Meters in 1 km
+  %%% Time parameters
   t1day = 86400; %%% Seconds in 1 day
-  m1day = 60*24;
   t1year = 365*t1day; %%% Seconds in 1 year
+  endTime = 100*t1year;
+  restart = false;
+  startIdx = 15;
+  outputFreq = 0.1*t1year;
+  
+  %%% Domain dimensions
+  m1km = 1000; %%% Meters in 1 km  
+  m1day = 60*24;  
   H = 4*m1km; %%% Depth, excluding the mixed layer
   Lx = 500*m1km; %%% Computational domain width
   
@@ -122,8 +128,10 @@ function setparams_physonly (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'maxTime',100*t1year,PARM_REALF);
-  PARAMS = addParameter(PARAMS,'monitorFrequency',0.1*t1year,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'endTime',endTime,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'monitorFrequency',outputFreq,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'restart',restart,PARM_INT);
+  PARAMS = addParameter(PARAMS,'startIdx',startIdx,PARM_INT);
   PARAMS = addParameter(PARAMS,'rho0',rho0,PARM_REALF);
   PARAMS = addParameter(PARAMS,'f0',f0,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'h_c',h_c,PARM_REALE);    
