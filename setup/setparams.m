@@ -18,8 +18,8 @@ function setparams (local_home_dir,run_name)
   MN = 1; %%% The number of nutrients in the model (must be 1).
   %%% The number of biogeochemical classes are entered here. 
   modeltype = 1; %%% This automatically defaults so that the model runs a size structured NPZD model
-  MP = 2;
-  MZ = 2;
+  MP = 5;
+  MZ = 5;
   MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
   spec_tot = MP + MZ + MD + MN; %%% Add one for nitrate
 
@@ -107,7 +107,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 75;
+  shelfdepth = 105;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
