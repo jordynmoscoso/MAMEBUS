@@ -20,6 +20,9 @@
 
 
 
+// TODO document input/output parameters in all functions
+// TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
+
 
 //////////////////////////////////
 ///// BEGIN GLOBAL VARIABLES /////
@@ -54,7 +57,7 @@ int nbgc; // Counts number of biogeochemical parameters
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
-real year = 31536000;             // Seconds in a year
+real year = 31449600;             // Seconds in a year (52 7-day weeks)
 
 
 // Parameter arrays
@@ -133,8 +136,6 @@ real ** HHx = NULL;           // Hyperbolic tracer fluxes
 real ** HHz = NULL;
 real ** PPx = NULL;           // Parabolic tracer fluxes
 real ** PPz = NULL;
-real ** FFx = NULL;           // Diabatic surface/bottom boundary layer fluxes
-real ** FFz = NULL;
 real ** psi_r = NULL;         // Residual streamfunction
 real ** u_r = NULL;
 real ** w_r = NULL;
@@ -175,7 +176,14 @@ real * db_dz = NULL;
 ////////////////////////////////
 
 
-void windInterp(const real t)
+
+/**
+ * windInterp
+ *
+ * TODO
+ *
+ */
+void windInterp (const real t)
 {
     int j = 0;
     int spec_week = 0;
@@ -196,11 +204,11 @@ void windInterp(const real t)
     }
     
     spec_week = floor(hold);
-    
+
     // Linearly interpolate based on the current time
     for (j = 0; j < Nx; j++)
     {
-        if (spec_week == 52)
+        if (spec_week == 51)
         {
             stau[j] = (tau[0][j] - tau[spec_week][j])*(hold-spec_week) + tau[spec_week][j];
         }
@@ -209,6 +217,8 @@ void windInterp(const real t)
             stau[j] = (tau[spec_week+1][j] - tau[spec_week][j])*(hold - spec_week) + tau[spec_week][j];
         }
     }
+  
+
 }
 
 
@@ -1233,8 +1243,13 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real N = 0;                              // Placeholder for Nitrate
     
     
-    switch(modeltype)
+    switch (modeltype)
     {
+        case NOBGC:
+        {
+            return;
+        }
+        
         case SINGLENITRATE:
         {
             
@@ -1358,7 +1373,7 @@ void do_adv_diff (  const real    t,
     // True isopycnal slope, relative to sigma coordinates
     real Siso_true = 0;
     real z;
-    
+
     /////////////////////////////////////////////////////
     ///// Arrays used by the Kurganov-Tadmor scheme /////
     /////////////////////////////////////////////////////
@@ -1428,7 +1443,7 @@ void do_adv_diff (  const real    t,
         }
     }
     
-    
+
     
     /////////////////////////////////
     ///// Calculation of fluxes /////
@@ -1444,8 +1459,6 @@ void do_adv_diff (  const real    t,
         HHx[Nx][k] = 0;
         PPx[0][k] = 0;
         PPx[Nx][k] = 0;
-        FFx[0][k] = 0;
-        FFx[Nx][k] = 0;
         
         for (j = 1; j < Nx; j ++)
         {
@@ -1537,8 +1550,6 @@ void do_adv_diff (  const real    t,
         HHz[j][Nz] = 0;
         PPz[j][0] = 0;
         PPz[j][Nz] = 0;
-        FFz[j][0] = 0;
-        FFz[j][Nz] = 0;
         
         // Interior gridpoints
         for (k = 1; k < Nz; k ++)
@@ -1628,9 +1639,7 @@ void do_adv_diff (  const real    t,
             dphi_dt[j][k] += ( - (HHx[j+1][k] - HHx[j][k]) * _dx * _dz_phi[j][k] // Hyperbolic fluxes
                               - (HHz[j][k+1] - HHz[j][k]) * _dz_phi[j][k]
                               + (PPx[j+1][k] - PPx[j][k]) * _dx * _dz_phi[j][k] // Parabolic fluxes
-                              + (PPz[j][k+1] - PPz[j][k]) * _dz_phi[j][k]
-                              - (FFx[j+1][k] - FFx[j][k]) * _dx * _dz_phi[j][k] // Diabatic BL fluxes
-                              - (FFz[j][k+1] - FFz[j][k]) * _dz_phi[j][k] );
+                              + (PPz[j][k+1] - PPz[j][k]) * _dz_phi[j][k] );
         }
     }
     
@@ -1721,17 +1730,11 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
         do_adv_diff(t,phi[i],dphi_dt[i],is_buoy,u_r,w_r,Kiso_u,Kiso_w,Siso_u,Siso_w);
     }
     
-    // Add tendency due to biogeochemistry
-    tderiv_bgc(t,phi,dphi_dt);
-    
-    // Add tendency due to relaxation
-    tderiv_relax(t,phi,dphi_dt);
-    
     //////////////////////////////////////
     ///// END CALCULATING TENDENCIES /////
     //////////////////////////////////////
     
-    
+
     
     //////////////////////////////////
     ///// BEGIN CALCULATING CFLS /////
@@ -1801,7 +1804,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_w = 0.5/w_dz_max;
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
-    
+  
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
     //    printf(" CFL condition is %f\n", cfl_phys);
@@ -1868,10 +1871,10 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     
     // Calculate tracer tendencies due to advection/diffusion
     cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
-    
+
     // Calculate tracer tendencies due to biogeochemistry
     tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
-    
+
     // Calculate tracer tendencies due to relaxation
     tderiv_relax (t, phi_wrk, dphi_dt_wrk);
     
@@ -2429,7 +2432,11 @@ int main (int argc, char ** argv)
     _dx = 1/dx;
     _2dx = 1/(2*dx);
     dxsq = dx*dx;
-    
+  
+    // SML/BBL flags
+    use_sml = Hsml > 0;
+    use_bbl = Hbbl > 0;
+  
     // Current time and next save point
     t = tmin;
     if (dt_s == 0.0)
@@ -2505,8 +2512,6 @@ int main (int argc, char ** argv)
     MATALLOC(HHz,Nx,Nz+1);
     MATALLOC(PPx,Nx+1,Nz);
     MATALLOC(PPz,Nx,Nz+1);
-    MATALLOC(FFx,Nx+1,Nz);
-    MATALLOC(FFz,Nx,Nz+1);
     MATALLOC(psi_r,Nx+1,Nz+1);
     MATALLOC(u_r,Nx+1,Nz);
     MATALLOC(w_r,Nx,Nz+1);
@@ -2568,8 +2573,7 @@ int main (int argc, char ** argv)
         printUsage();
         return 0;
     }
-    
-    
+
     // Default initial condition is zero tracer everywhere
     if (strlen(initFile)==0)
     {
@@ -2985,7 +2989,8 @@ int main (int argc, char ** argv)
             case METHOD_RKTVD2:
             {
                 dt = rktvd2(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-                //                printf("RK2 \n dt = %f \n",dt);
+//                printf("RK2 \n dt = %f \n",dt);fflush(stdout);
+              //printf("RK2 \n t = %lf dt = %lf \n",t,dt);fflush(stdout);
                 break;
             }
             case METHOD_RKTVD3:

@@ -220,6 +220,7 @@ ncase = 1;
              nstore = (sum(phi(sl_ind)))./(denom(1));
              Nstore = [Nstore nstore];
              tsave = [tsave t];
+          end
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
