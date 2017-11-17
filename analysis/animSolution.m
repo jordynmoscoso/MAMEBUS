@@ -175,7 +175,7 @@ ncase = 1;
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
 
-        case 2 %%% Nitrate
+        case 3 %%% Nitrate
               buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);              
               temp = readOutputFile (data_file,Nx,Nz);       
     
@@ -185,34 +185,7 @@ ncase = 1;
               eu_depth = 30*log(3.4./ir_surf);
               
               
-          if ncase == 0
-              %%% Import temperature file and irradiance file
-              a_temp = readparam(params_file,'a_temp','%lf');
-              b_temp = readparam(params_file,'b_temp','%lf');
-              c_temp = readparam(params_file,'c_temp','%lf');
-              T = a_temp.*(b_temp).^(c_temp.*temp);
-              
-              alpha = readparam(params_file,'alpha','%lf');
-              monod = readparam(params_file,'monod','%lf');
-              lk = T./alpha;
-              
-              II = irradiance./sqrt(irradiance.^2 + lk.^2);
-              
-              uptake = 0.3*T.*II.*phi;
-%               nstore = uptake*t1day;
-              nstore = -(sum(uptake(:,1))/ZZ_psi(end,1))*t1day;
-              
-              Nstore = [Nstore nstore(end,end)];
-              tsave = [tsave t];
-              
-              [C h] = contourf(XX_tr,ZZ_tr,uptake*t1day,10);
-%               hold on
-%               plot(XX_tr,eu_depth,'w','LineWidth',2)
-%               hold off
-              set(gca, 'CLim', [0,5.5]);
-              axis([0 Nx -120 0])
-          else
-            [C h] = contourf(XX_tr,ZZ_tr,phi,20);
+             [C h] = contourf(XX_tr,ZZ_tr,phi,20);
 
 %             hold on
 %             plot(XX_tr,eu_depth,'w','LineWidth',2)
@@ -222,7 +195,7 @@ ncase = 1;
              nstore = (sum(phi(sl_ind)))./(denom(1));
              Nstore = [Nstore nstore];
              tsave = [tsave t];
-          end
+             
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
