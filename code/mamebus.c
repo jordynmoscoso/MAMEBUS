@@ -2115,15 +2115,15 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     }
     
     // Write iteration data for the residual streamfunction
-    constructOutputName(outdir,OUTN_PSIR,i,n,outfile);
+    constructOutputName(outdir,OUTN_PSIR,-1,n,outfile);
     if (!writeOutputFile(outfile,psi_r,Nx+1,Nz+1)) return false;
     
     // Write iteration data for the mean streamfunction
-    constructOutputName(outdir,OUTN_PSIM,i,n,outfile);
+    constructOutputName(outdir,OUTN_PSIM,-1,n,outfile);
     if (!writeOutputFile(outfile,psi_m,Nx+1,Nz+1)) return false;
   
     // Write iteration data for the eddy streamfunction
-    constructOutputName(outdir,OUTN_PSIE,i,n,outfile);
+    constructOutputName(outdir,OUTN_PSIE,-1,n,outfile);
     if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
   
     return true;
