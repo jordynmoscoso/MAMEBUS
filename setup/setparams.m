@@ -17,7 +17,7 @@ function setparams (local_home_dir,run_name)
 
   MN = 1; %%% The number of nutrients in the model (must be 1).
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = 1; %%% This automatically defaults so that the model runs a size structured NPZD model
+  modeltype = 0; %%% This automatically defaults so that the model runs a size structured NPZD model
   MP = 5;
   MZ = 5;
   MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
@@ -81,12 +81,11 @@ function setparams (local_home_dir,run_name)
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 50; %%% Surface mixed layer thickness
-  Hbbl = 50; %%% Bottom boundary layer thickness
+  Hsml = 52; %%% Surface mixed layer thickness
+  Hbbl = 51; %%% Bottom boundary layer thickness
   
   %%% Biogeochemical Parameters
 
-  
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
   theta_s = 6; %%% Sigma coordinate surface stretching parameter (must be in [0,10])
@@ -107,7 +106,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 105;
+  shelfdepth = 100;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -172,7 +171,6 @@ function setparams (local_home_dir,run_name)
       case 1
         [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         disp('NPZD')
-        
         %%% Store phytoplankton size and zooplankton size to determine what size
         %%% pool of detritus they go into (large or small) when passed into
         %%% mamebus.c code.
@@ -182,8 +180,6 @@ function setparams (local_home_dir,run_name)
   writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
   PARAMS = addParameter(PARAMS,'bgcFile',bgcFile,PARM_STR);
   PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
-  
-  size(bgc_init)
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%
