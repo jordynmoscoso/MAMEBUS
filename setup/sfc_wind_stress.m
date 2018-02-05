@@ -12,9 +12,10 @@
 
 function [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi)
    %%% Determine the type of wind forcing used by MAMEBUS:
-   IDEALIZED = true;
-   SEASONAL = false;
-   DATA = false;
+   IDEALIZED = 1;
+   SEASONAL = 0;
+   DATA = 0;
+       
    
    %%% Determine the averaging on the wind stress (daily, monthly, etc.)
    %%% How many data points per year?
@@ -45,7 +46,7 @@ function [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi)
            tau(ii,:) = fcing(ii)*temp;
        end
    elseif (IDEALIZED)
-       temp = tau0*tanh(((Lx)-xx_psi)/(Lx/16));
+       temp = tau0*tanh(((Lx)-xx_psi)/(Lx/8));
        
        fcing = ones(size(tyear));   % Constant forcing to determine upwelling. 
        tau = zeros(length(fcing),length(xx_psi));
