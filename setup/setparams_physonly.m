@@ -45,30 +45,29 @@ function setparams_physonly (local_home_dir,run_name)
   %%% Time parameters
   t1day = 86400; %%% Seconds in 1 day
   t1year = 365*t1day; %%% Seconds in 1 year
-  endTime = 100*t1year;
+  endTime = 50*t1year;
   restart = false;
   startIdx = 15;
   outputFreq = 0.1*t1year;
   
   %%% Domain dimensions
-  m1km = 1000; %%% Meters in 1 km  
   m1day = 60*24;  
-  H = 4*m1km; %%% Depth, excluding the mixed layer
-  Lx = 500*m1km; %%% Computational domain width
+  m1km = 1000; %%% Meters in 1 km    
+  H = 3*m1km; %%% Depth, excluding the mixed layer
+  Lx = 300*m1km; %%% Computational domain width
   
   %%% Scalar parameter definitions 
-  tau0 = .5e-1; %%% Northward wind stress (N m^{-2})
+  tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
   rho0 = 1e3; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 500; %%% Reference GM diffusivity
-  Kiso0 = 500; %%% Reference surface isopycnal diffusivity m^2/s 
+  Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s 
+  Kiso_hb = 200; %%% Reference interior isopycnal diffusivity
   
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
-  s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 0; %%% Surface mixed layer thickness
-  Hbbl = 0; %%% Bottom boundary layer thickness  
+  s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope     
   
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
@@ -81,7 +80,7 @@ function setparams_physonly (local_home_dir,run_name)
 %   theta_b = 0; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
    
   %%% Grids  
-  Ntracs = 1; %%% Number of tracers (just one - buoyancy)
+  Ntracs = 2; %%% Two tracers, buoyancy and one dye tracer initalized as nitrate
   Nx = 40; %%% Number of latitudinal grid points 
   Nz = 40; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
@@ -90,7 +89,9 @@ function setparams_physonly (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 500;
+  shelfdepth = 200;
+  Hsml = 50; %%% Surface mixed layer thickness
+  Hbbl = 50; %%% Bottom boundary layer thickness 
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -98,9 +99,9 @@ function setparams_physonly (local_home_dir,run_name)
   end
   
   Xtopog = 200*m1km;
-  Ltopog = 50*m1km;
+  Ltopog = 25*m1km;
   Htopog = H-shelfdepth;  
-  hb = H - Htopog*0.5*(1-tanh((xx_topog-Xtopog)/(Ltopog)));
+  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
@@ -168,8 +169,13 @@ function setparams_physonly (local_home_dir,run_name)
   Tmin = 0;
   buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
   
+  Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
+  Ncline = 250; % Approximate guess of the depth of the nutracline
+  n_init = -Nmax*tanh(ZZ_tr./Ncline);
+  
   %%% Store physical tracers in 3D matrix
   phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
+  phi_init(2,:,:) = reshape(n_init,[1 Nx Nz]);
 
   %%% Write to data file
   initFile = 'initFile.dat';  
@@ -190,22 +196,28 @@ function setparams_physonly (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   %%% Load in the surface wind stress.
-  tlength = 52;
-  tyear = 0:1:tlength-1;
-  Lmax = 200*m1km;
-  temp = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
-  temp(xx_psi>2*Lmax) = 0;
-       
-  fcing = ones(size(tyear));   % Constant forcing to determine upwelling. 
-  tau = zeros(length(fcing),length(xx_psi));
+%   tlength = 52;
+%   tyear = 0:1:tlength-1;
+%   Lmax = 200*m1km;
+%   temp = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
+%   temp(xx_psi>2*Lmax) = 0;
+%        
+%   fcing = ones(size(tyear));   % Constant forcing to determine upwelling. 
+%   tau = zeros(length(fcing),length(xx_psi));
+% 
+%   for ii = 1:1:tlength
+%      tau(ii,:) = fcing(ii)*temp;
+%   end
 
-  for ii = 1:1:tlength
-     tau(ii,:) = fcing(ii)*temp;
+  [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
+  
+  tx = length(tau(end,:));
+  ws_curl = zeros(tx-1,1);
+  
+  for ii = 1:tx-1
+      ws_curl(ii) = (tau(end,ii+1) - tau(end,ii))/(dx);
   end
-  
-  figure(200)
-  plot(tau(end,:))
-  
+
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
   PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
@@ -216,7 +228,6 @@ function setparams_physonly (local_home_dir,run_name)
   %%%%% Tracer relaxation concentrations and timescales %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
-  
   %%% Buoyancy relaxation parameters
   L_relax = 50*m1km;  
   T_relax_max = 30*t1day; %%% Fastest relaxation time
@@ -226,13 +237,22 @@ function setparams_physonly (local_home_dir,run_name)
   T_relax_buoy = -ones(Nx,Nz);
   T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
   T_relax_buoy(XX_tr>=L_relax) = -1;
-   
+  
+  %%% Add relaxation to an atmospheric temperature profile
+  buoy_surf_max = 20;
+  buoy_surf_min = 15;
+  buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
+  buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
+  T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
+  
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
   phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
+  phi_relax_all(2,:,:) = reshape(n_init,[1 Nx Nz]);
   
   T_relax_all = zeros(Ntracs,Nx,Nz);
   T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);  
+  T_relax_all(2,:,:) = reshape(-ones(Nx,Nz),[1 Nx Nz]);
 
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
@@ -259,8 +279,12 @@ function setparams_physonly (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
   
-  %%% Uniform diffusivity
-  Kiso = Kiso0*ones(Nx+1,Nz+1);        
+%   %%% Uniform diffusivity
+%   Kiso = Kiso0*ones(Nx+1,Nz+1);      
+
+  %%% Hyperbolic diffusivity increasing toward the surface.
+  Kefold = 1000;
+  Kiso = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi./Kefold);
 
   
 %   Kiso = Kgm;
@@ -274,7 +298,29 @@ function setparams_physonly (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%      
 
   %%% Uniform diffusivity
-  Kdia = Kdia0*ones(Nx+1,Nz+1);   
+  Kdia = Kdia0*ones(Nx+1,Nz+1);  
+  Ksml = 1e-1;
+  Kbbl = 1e-1;
+  HB_psi = repmat(reshape(hb_psi,[Nx+1 1]),[1 Nz+1]);
+  
+  %%% Check if sml and bbl overlap and add the profiles and create crude
+  %%% mixed layers.
+  for ii = 1:Nx+1
+      if ZZ_psi(ii,1) > -(Hsml + Hbbl) % Overlapping boundary layers
+          H = -ZZ_psi(ii,1);
+          for jj = 1:Nz+1
+              Kdia(ii,jj) = Kdia0 + 2*(Ksml * -4*(ZZ_psi(ii,jj)/H).*(ZZ_psi(ii,jj)/H+1));
+          end
+      else
+          for jj = 1:Nz+1
+              if (ZZ_psi(ii,jj) > -Hsml) % Builds profile when sml and bbl don't overlap
+                  Kdia(ii,jj) = Kdia(ii,jj) + (Ksml * -4*(ZZ_psi(ii,jj)/Hsml).*(ZZ_psi(ii,jj)/Hsml+1));
+              elseif (ZZ_psi(ii,jj) < -hb_psi(ii)+Hbbl)
+                  Kdia(ii,jj) = Kdia(ii,jj) + Kbbl * -4*((ZZ_psi(ii,jj)+HB_psi(ii,jj))/Hbbl).*((ZZ_psi(ii,jj)+HB_psi(ii,jj))/Hbbl-1);
+              end
+          end
+      end
+  end  
   
   %%% Write to file
   KdiaFile = 'Kdia.dat';
@@ -328,5 +374,17 @@ function setparams_physonly (local_home_dir,run_name)
   pcolor(XX_tr,ZZ_tr,buoy_init);
   title('Initial Buoyancy with Grid')
   colorbar
+  
+  figure(fignum);
+  fignum = fignum+1;
+  plot(xx_psi(1,1:end-1),ws_curl)
+  title('Wind Stress Curl')
+  
+  figure(fignum);
+  pcolor(XX_tr,ZZ_tr,n_init);
+  title('Initial Dye Tracer')
+  colorbar
+  shading interp
+  
   
 end
