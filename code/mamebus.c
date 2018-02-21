@@ -952,12 +952,12 @@ real single_nitrate (const real t, const int j, const int k,
     remin = - flux / scale_height;
     r_flux = flux;             // Move to the next vertical grid cell
     
-    // Return any extra flux of nutrients to bottom grid cell
-    if (k == 0)
-    {
-        remin -= flux / dz;
-        r_flux = 0;           // Reset flux of nutrients at the surface to zero
-    }
+//    // Uncomment to Return any extra flux of nutrients to bottom grid cell
+//    if (k == 0)
+//    {
+//        remin -= flux / dz;
+//        r_flux = 0;           // Reset flux of nutrients at the surface to zero
+//    }
     
     //
     // Update the value of nitrate
