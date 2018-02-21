@@ -15,22 +15,31 @@
 function setparams (local_home_dir,run_name)  
 
 
-  MN = 1; %%% The number of nutrients in the model (must be 1).
+  MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
   %%% The number of biogeochemical classes are entered here. 
   modeltype = 0; %%% This automatically defaults so that the model runs a size structured NPZD model
-  MP = 5;
-  MZ = 5;
-  MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
-  spec_tot = MP + MZ + MD + MN; %%% Add one for nitrate
+  if modeltype
+      MP = 5;
+      MZ = 5;
+      MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
+      bio = MP+MZ+MD;
+      disp(['Number of: (Phytoplankton, Zooplankton) = (',num2str(MP),', ', num2str(MZ),')']);
+  else
+      MP = 0;
+      MZ = 0;
+      MD = 0;
+      bio = 0;
+  end
+  spec_tot = bio + MN; 
 
   %%% Check to see if a valid model type is indicated for biogeochemistry,
   %%% if not use the default single nitrate model (modeltype = 0)
-  if (MP < 1 || MZ < 1)
-      modeltype = 0;
-  end
+%   if (MP < 1 || MZ < 1)
+%       modeltype = 0;
+%   end
   
   
-  disp(['Number of: (Phytoplankton, Zooplankton) = (',num2str(MP),', ', num2str(MZ),')']);
+
       
   %%% Convenience scripts used in this function
   addpath ../utils;
@@ -59,7 +68,7 @@ function setparams (local_home_dir,run_name)
   %%% Time parameters
   t1day = 86400; %%% Seconds in 1 day
   t1year = 365*t1day; %%% Seconds in 1 year
-  endTime = 100*t1year;
+  endTime = 50*t1year;
   restart = false;
   startIdx = 15;
   outputFreq = 0.1*t1year;
@@ -81,8 +90,8 @@ function setparams (local_home_dir,run_name)
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 52; %%% Surface mixed layer thickness
-  Hbbl = 51; %%% Bottom boundary layer thickness
+  Hsml = 50; %%% Surface mixed layer thickness
+  Hbbl = 50; %%% Bottom boundary layer thickness
   
   %%% Biogeochemical Parameters
 
@@ -106,7 +115,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 100;
+  shelfdepth = 150;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -120,6 +129,10 @@ function setparams (local_home_dir,run_name)
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
+  % calculate shelf slope:
+  hb_slope = (hb_psi(2:end) - hb_psi(1:end-1))./(dx);
+  min(hb_slope)
+  
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
                     = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);  % Full output [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w]
@@ -131,6 +144,7 @@ function setparams (local_home_dir,run_name)
   disp(['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))])
+  disp(['Max Topographic Slope : ' num2str(min(hb_slope))])
   
   %%% ZZ_tr size: 40 40 (centers)
   %%% ZZ_psi size: 41 41 (edges) n = 0 is base, n = N is top
@@ -167,6 +181,7 @@ function setparams (local_home_dir,run_name)
   switch(modeltype)
       case 0
         [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
+        
         disp('Nitrate only')
       case 1
         [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
@@ -215,6 +230,7 @@ function setparams (local_home_dir,run_name)
   switch (modeltype)
       case 0
           phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
+          phi_init(4,:,:) = reshape(bgc_init,[1,Nx,Nz]);
       case 1
           bgc_tracs = MP + MZ + MD + 1;
           for ii = 1:bgc_tracs
@@ -285,6 +301,7 @@ function setparams (local_home_dir,run_name)
   switch (modeltype)
       case 0
           phi_relax_all(3,:,:) = reshape(bgc_relax,[1 Nx Nz]);
+          phi_relax_all(4,:,:) = reshape(bgc_relax,[1 Nx Nz]);
       case 1
           phi_relax_all(3:end,:,:) = reshape(bgc_relax,[spec_tot Nx Nz]);
   end
@@ -294,7 +311,8 @@ function setparams (local_home_dir,run_name)
   T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
   switch (modeltype)
       case 0
-          T_relax_all(3,:,:) = -ones(1,Nx,Nz); % Total nitrate conserved
+          T_relax_all(3,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(4,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case 1
           T_relax_all(3:end,:,:) = -ones(spec_tot,Nx,Nz);
   end
@@ -393,30 +411,59 @@ function setparams (local_home_dir,run_name)
   %%%
   
   % Wind Stress Profile
+  
+  set(0,'DefaultAxesFontSize',14)
+  
   figure(fignum);
   fignum = fignum+1;
-  plot(xx_psi,tau(1,:))
-  shading interp
-  title('Surface Wind Stress')
-  view(2)
+  plot(xx_psi,tau(1,:),'k','LineWidth',2)
+%   title('Surface Wind Stress')
   axis tight
+  xticks([])
+  yticks([-0.09 -0.05 0])
+  
+  % Wind Stress Curl
+  figure(fignum)
+  fignum = fignum + 1;
+  wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);
+  wsc'
+  plot(xx_psi(1:end-1),wsc)
+  
+  %%% Plot Buoyancy relaxation profile
+
+  figure(fignum)
+  fignum = fignum + 1;
+  pcolor(XX_tr(1:10,:),ZZ_tr(1:10,:),buoy_relax(1:10,:))
+%   title('Buoyancy Restoring Profile')
+  colorbar('westoutside')
+  shading interp
+  yticks([])
+  xticks([])
   
   %%% Plot diapynal and isopycnal diffusivities together.
   % Diapycnal Diffusivities
   figure(fignum)
   subplot(1,2,1)
   pcolor(XX_psi,ZZ_psi,Kdia)
-  title('Diapycnal diffusivity')
+  title('Diapycnal diffusivity, \kappa_{\nu}')
   shading interp
   colorbar
+%   caxis([-7 -2])
+%   c = [0 1e-4 1e-3 1e-2];
+%   ctick = [-7 -4 -3 -2];
+%   colorbar('FontSize',14,'Ytick', ctick, 'YTickLabel',c);
+%   caxis([0,1e-3])
+  ylabel('Depth (m)')
+  xlabel('Distance (km)')
   
   % Isopycnal diffusivity
   figure(fignum);
   subplot(1,2,2)
   pcolor(XX_psi,ZZ_psi,Kiso)
-  title('Isopycnal Diffusivity')
+  title('Isopycnal Diffusivity, \kappa_{iso}')
   shading interp
   colorbar
+  xlabel('Distance (km)')
   fignum = fignum+1;
   
   % Initial buoyancy
@@ -425,5 +472,19 @@ function setparams (local_home_dir,run_name)
   pcolor(XX_tr,ZZ_tr,buoy_init);
   title('Initial Buoyancy with Grid')
   colorbar
+  
+  figure(fignum)
+  fignum = fignum+1;
+  contourf(XX_tr,ZZ_tr,dtr_init,-(0:200:H));
+  colorbar
+  title('Depth Tracer, t = 0')
+  xlabel('Distance (km)')
+  ylabel('Depth (m)')
+  
+%   % Slope
+%   figure(fignum)
+%   fignum = fignum+1;
+%   plot(xx_tr,hb_slope)
+%   title('Topographic Slope')
   
 end
