@@ -46,7 +46,14 @@ function [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi)
            tau(ii,:) = fcing(ii)*temp;
        end
    elseif (IDEALIZED)
-       temp = tau0*tanh(((Lx)-xx_psi)/(Lx/8));
+       temp = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+%        temp = tau0*ones(1,length(xx_psi));
+
+%        m1km = 1000; %%% Meters in 1 km    
+%        Lmax = 200*m1km;
+%        temp = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
+%        temp(xx_psi>2*Lmax) = 0;
+       
        
        fcing = ones(size(tyear));   % Constant forcing to determine upwelling. 
        tau = zeros(length(fcing),length(xx_psi));
