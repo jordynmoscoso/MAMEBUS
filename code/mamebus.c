@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 38
+#define NPARAMS 39
 
 
 
@@ -79,7 +79,9 @@ real * stau = NULL;                  // Seasonal tau
 real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
 bool limSlopes = false;    // Use Cox slope limiting
 real Smax = 0.1;        // Max isopycnal slope
-const int idx_buoy = 0;   // Index of buoyancy variable in list of tracers
+const int idx_uvel = 0;   // Index of buoyancy variable in list of tracers
+const int idx_vvel = 1;   // Index of buoyancy variable in list of tracers
+const int idx_buoy = 2;   // Index of buoyancy variable in list of tracers
 
 // Sigma-coordinate grid parameters
 real h_c = 1e16;
@@ -113,11 +115,14 @@ real ** ZZ_w = NULL;
 // Name of the program (for error messages)
 char * progname = NULL;
 
-// Time-stepping method
+// Time-stepping scheme
 uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
 
-// Spatial discretisation
+// Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
+
+// Momentum scheme
+uint momentumScheme = MOMENTUM_NONE;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -1844,6 +1849,52 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
 
 
 
+/**
+ * tderiv_mom
+ *
+ * Calculates the time tendency of momentum tracers.
+ *
+ */
+void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
+{
+  // Looping variables
+  int i, j, k;
+  
+  // Pointers to velocity and buoyancy matrices
+  real ** uvel = NULL;
+  real ** vvel = NULL;
+  real ** buoy = NULL;
+  real ** du_dt = NULL;
+  real ** dv_dt = NULL;
+
+  
+  
+
+  // Pointers to velocity and buoyancy matrices
+  uvel = phi[idx_uvel];
+  vvel = phi[idx_vvel];
+  buoy = phi[idx_buoy];
+  du_dt = dphi_dt[idx_uvel];
+  dv_dt = dphi_dt[idx_vvel];
+  
+  
+  
+  
+  // TODO add tendencies due to Coriolis force, baroclinic pressure, surface/bottom momentum fluxes
+  
+
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1866,14 +1917,17 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
 {
     // CFL timesteps
     real cfl_dt = 0;
-    
+  
     // Construct output matrix from the dt_data vector
     memset(dt_data,0,numvars*sizeof(real));
     vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
     
     // Copy tracer data from the 'data' array to the work array
     memcpy(phi_wrk_V,data,Ntot*sizeof(real));
-    
+  
+    // Calculate momentum tendencies
+    tderiv_mom (t, phi_wrk, dphi_dt_wrk);
+  
     // Calculate tracer tendencies due to advection/diffusion
     cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
 
@@ -2169,7 +2223,9 @@ void printUsage (void)
      "  \n"
      "  name               value\n"
      "  \n"
-     "  Ntracs                Number of tracer variables in the simulation. Must be >0.\n"
+     "  Ntracs                Number of tracer variables in the simulation. Must be >3,\n"
+     "                        as the first 3 tracers are reserved for zonal velocity,\n"
+     "                        meridional velocity, and buoyancy.\n"
      "  Nx                    Number of grid cells in the y-direction. Must be >0.\n"
      "  Nz                    Number of grid cells in the z-direction. Must be >0.\n"
      "  Lx                    Domain width. Must be >0.\n"
@@ -2230,6 +2286,8 @@ void printUsage (void)
      "                        identifiers. Default is TIMESTEPPING_RKTVD2.\n"
      "  advectionScheme       Selects advection scheme. See defs.h for\n"
      "                        identifiers. Default is ADVECTION_KT00.\n"
+     "  momentumScheme        Selects momentum scheme. See defs.h for\n"
+     "                        identifiers. Default is MOMENTUM_NONE.\n"
      "  bgcModel              Selects biogeochemical model type. See SWdefs.h for\n"
      "                        numerical identifiers. Default is BGC_NONE.\n"
      "  KT00_sigma            Kurganov-Tadmor (2000) minmod parameter.\n"
@@ -2410,6 +2468,7 @@ int main (int argc, char ** argv)
     // Scheme selectors
     setParam(params,paramcntr++,"timeSteppingScheme","%u",&timeSteppingScheme,true);
     setParam(params,paramcntr++,"advectionScheme","%u",&advectionScheme,true);
+    setParam(params,paramcntr++,"momentumScheme","%u",&momentumScheme,true);
     setParam(params,paramcntr++,"bgcModel","%u",&bgcModel,true);
     setParam(params,paramcntr++,"KT00_sigma","%lf",&KT00_sigma,true);
   
@@ -2429,7 +2488,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
-    setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);    
+    setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
     
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
@@ -2485,7 +2544,7 @@ int main (int argc, char ** argv)
     }
     
     // Check that required parameters take legal values
-    if (  (Ntracs <= 0) ||
+    if (  (Ntracs < 3) ||
           (Nx <= 0) ||
           (Nz <= 0) ||
           (Lx <= 0) ||
