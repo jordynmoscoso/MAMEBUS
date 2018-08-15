@@ -14,19 +14,18 @@
 #define MAX_PARAMETER_FILENAME_LENGTH 256
 
 // Time-integration method identifiers
-#define METHOD_RKTVD1 0
-#define METHOD_RKTVD2 1
-#define METHOD_RKTVD3 2
+#define TIMESTEPPING_RKTVD1 0
+#define TIMESTEPPING_RKTVD2 1
+#define TIMESTEPPING_RKTVD3 2
 
 // Biogeochemical method identifiers
-#define NOBGC -1 // No biogeochemistry
-#define SINGLENITRATE 0 // Single nitrate model as a "base" model when MP,MZ = 0.
-#define NPZD 1 // Size structured NPZD model 
+#define BGC_NONE 0 // No biogeochemistry
+#define BGC_NITRATEONLY 1 // Single nitrate model
+#define BGC_NPZD 2 // Size structured NPZD model
 
 // Spatial discretisation method identifiers
-#define METHOD_CENTERED 0 // Fluxes based on mean phi at cell boundaries
-#define METHOD_KT 1 // Kurganov-Tadmor scheme for conservation laws (see K&T 2000)
-#define METHOD_CTU 2 // Corner-transport upwind scheme for advection (see Leveque 2002) [not implemented!]
+#define ADVECTION_CENTERED 0 // Fluxes based on mean phi at cell boundaries
+#define ADVECTION_KT00 1 // Kurganov-Tadmor scheme for conservation laws (see K&T 2000)
 
 // Handy constants
 #define _PI  3.14159265358979323846

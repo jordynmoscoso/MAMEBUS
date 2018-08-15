@@ -14,10 +14,18 @@
 %%%
 function setparams (local_home_dir,run_name)  
 
+  %%% Convenience scripts used in this function
+  addpath ../utils;
+  
+  %%% Load globally-defined constants
+  paramTypes;
+  
+  
+%%% TODO this definitely ought to appear later in this script
 
   MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = 0; %%% This automatically defaults so that the model runs a size structured NPZD model
+  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs a size structured NPZD model
   if modeltype
       MP = 5;
       MZ = 5;
@@ -40,9 +48,7 @@ function setparams (local_home_dir,run_name)
   
   
 
-      
-  %%% Convenience scripts used in this function
-  addpath ../utils;
+        
   
   %%% For plotting figures of setup
   fignum = 1;
@@ -61,8 +67,7 @@ function setparams (local_home_dir,run_name)
   pfname = fullfile(local_run_dir,[run_name,'_in']);   
   mkdir(local_run_dir);
 
-  %%% To store parameters
-  paramTypes;
+  %%% To store parameters  
   PARAMS = {};
   
   %%% Time parameters
@@ -156,8 +161,7 @@ function setparams (local_home_dir,run_name)
   %%% Define parameter
   PARAMS = addParameter(PARAMS,'Ntracs',Ntracs,PARM_INT);
   PARAMS = addParameter(PARAMS,'Nx',Nx,PARM_INT);
-  PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);
-  PARAMS = addParameter(PARAMS,'H',H,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);  
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
   PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
@@ -174,7 +178,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
   
   %%% Indicate number of phytoplankton, zooplankton and detrital pools
-  PARAMS = addParameter(PARAMS,'modeltype',modeltype,PARM_INT);
+  PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
   PARAMS = addParameter(PARAMS,'MP',MP,PARM_INT);
   PARAMS = addParameter(PARAMS,'MZ',MZ,PARM_INT);
   %%% Save biogeochemical parameters in vector form call bgc_setup function
