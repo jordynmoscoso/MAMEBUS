@@ -16,12 +16,14 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 35
+#define NPARAMS 38
 
 
 
+// TODO document BGC input parameters
 // TODO document input/output parameters in all functions
 // TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
+
 
 
 //////////////////////////////////
@@ -37,7 +39,6 @@ int Ntot = 0;
 // Physical parameters
 real Lx = 0;
 real Lz = 0;
-real H = 0;
 real Kconv0 = 10;
 real rho0 = 1e3;
 real f0 = 1e-4;
@@ -48,7 +49,7 @@ real Hbbl = 50.0;
 int tlength = 0;
 
 // Biogeochemical parameters
-int modeltype = 0;
+uint bgcModel = 0;
 int MP = 0;
 int MZ = 0;
 int MD = 2;  // Always have one small detrital group and one large.
@@ -75,17 +76,17 @@ real * bgc_params = NULL;     // Vector containing biogeochemical parameters, al
 real * stau = NULL;                  // Seasonal tau
 
 // Numerical parameters
-real sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter (sigma = 1.4)
+real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
 bool limSlopes = false;    // Use Cox slope limiting
 real Smax = 0.1;        // Max isopycnal slope
 const int idx_buoy = 0;   // Index of buoyancy variable in list of tracers
 
-// Grid parameters
+// Sigma-coordinate grid parameters
 real h_c = 1e16;
 real theta_s = 0;
 real theta_b = 0;
 
-// Grid spacings
+// Grids and grid spacings
 real ds = 0;
 real dx = 0;
 real _dx = 0;
@@ -113,10 +114,10 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping method
-const uint method_t = METHOD_RKTVD2;
+uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
 
 // Spatial discretisation
-const uint method_s = METHOD_KT;
+uint advectionScheme = ADVECTION_KT00;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -174,6 +175,8 @@ real * db_dz = NULL;
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
 ////////////////////////////////
+
+
 
 
 
@@ -900,6 +903,8 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
 }
 
 
+
+
 /*
  * single_nitrate
  *
@@ -945,7 +950,7 @@ real single_nitrate (const real t, const int j, const int k,
     remin_in_box = (1-f) * uptake;
     
     // Scale Height for Remin
-    scale_height = -(150/H) * ZZ_phi[j][k] + 50;
+    scale_height = -(150/Lz) * ZZ_phi[j][k] + 50;
     dz = 1/_dz_phi[j][k];
     
     flux = (r_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
@@ -1243,14 +1248,14 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real N = 0;                              // Placeholder for Nitrate
     
     
-    switch (modeltype)
+    switch (bgcModel)
     {
-        case NOBGC:
+        case BGC_NONE:
         {
             return;
         }
         
-        case SINGLENITRATE:
+        case BGC_NITRATEONLY:
         {
             
             // Parameters
@@ -1283,7 +1288,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             //
             //
             
-        case NPZD: // NPZD Model
+        case BGC_NPZD: // NPZD Model
         {
             // Determine whether MP or MZ is larger in order to unpack the uptake parameters and all of that
             if (MP > MZ)
@@ -1378,7 +1383,7 @@ void do_adv_diff (  const real    t,
     ///// Arrays used by the Kurganov-Tadmor scheme /////
     /////////////////////////////////////////////////////
     
-    if (method_s == METHOD_KT)
+    if (advectionScheme == ADVECTION_KT00)
     {
         // Near-boundary derivatives
         for (j = 0; j < Nx; j ++)
@@ -1399,9 +1404,9 @@ void do_adv_diff (  const real    t,
         {
             for (k = 0; k < Nz; k ++)
             {
-                dphi_dx[j][k] = minmod( sigma * (phi[j+1][k]-phi[j][k]) * _dx,
+                dphi_dx[j][k] = minmod( KT00_sigma * (phi[j+1][k]-phi[j][k]) * _dx,
                                        (phi[j+1][k]-phi[j-1][k]) * _2dx,
-                                       sigma * (phi[j][k]-phi[j-1][k]) * _dx  );
+                                       KT00_sigma * (phi[j][k]-phi[j-1][k]) * _dx  );
             }
         }
         
@@ -1412,9 +1417,9 @@ void do_adv_diff (  const real    t,
         {
             for (k = 1; k < Nz-1; k ++)
             {
-                dphi_dz[j][k] = minmod( sigma * (phi[j][k+1]-phi[j][k]) * _dz_w[j][k+1],
+                dphi_dz[j][k] = minmod( KT00_sigma * (phi[j][k+1]-phi[j][k]) * _dz_w[j][k+1],
                                        (phi[j][k+1]-phi[j][k-1]) * _2dz_phi[j][k],
-                                       sigma * (phi[j][k]-phi[j][k-1]) * _dz_w[j][k]  );
+                                       KT00_sigma * (phi[j][k]-phi[j][k-1]) * _dz_w[j][k]  );
             }
         }
         
@@ -1469,9 +1474,9 @@ void do_adv_diff (  const real    t,
             Siso_true = Siso_u[j][k] - (ZZ_phi[j][k]-ZZ_phi[j-1][k])*_dx;
             
             // Flux calculation depends on spatial discretisation method
-            switch (method_s)
+            switch (advectionScheme)
             {
-                case METHOD_CENTERED:
+                case ADVECTION_CENTERED:
                 {
                     // Hyperbolic fluxes
                     HHx[j][k] = u_r[j][k] * 0.5*(phi[j][k]+phi[j+1][k]);
@@ -1504,7 +1509,7 @@ void do_adv_diff (  const real    t,
                     
                     break;
                 }
-                case METHOD_KT:
+                case ADVECTION_KT00:
                 {
                     // Hyperbolic fluxes
                     HHx[j][k] = 0.5*( u_r[j][k]*(phi_xm[j][k]+phi_xp[j][k])
@@ -1561,9 +1566,9 @@ void do_adv_diff (  const real    t,
             Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
             
             // Flux calculation depends on spatial discretisation method
-            switch (method_s)
+            switch (advectionScheme)
             {
-                case METHOD_CENTERED:
+                case ADVECTION_CENTERED:
                 {
                     HHz[j][k] = w_r[j][k] * 0.5*(phi[j][k-1]+phi[j][k]);
                     
@@ -1594,7 +1599,7 @@ void do_adv_diff (  const real    t,
                     
                     break;
                 }
-                case METHOD_KT:
+                case ADVECTION_KT00:
                 {
                     HHz[j][k] = 0.5*( w_r[j][k]*(phi_zm[j][k]+phi_zp[j][k])
                                      - fabs(w_r[j][k])*(phi_zp[j][k]-phi_zm[j][k]) );
@@ -1675,7 +1680,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // True isopycnal slope, relative to sigma coordinates
     real Sgm_true = 0;
     real Siso_true = 0;
-    
+  
     // For CFL calculations
     real cfl_dt = 0;
     real cfl_u = 0;
@@ -2164,83 +2169,105 @@ void printUsage (void)
      "  \n"
      "  name               value\n"
      "  \n"
-     "  Ntracs             Number of tracer variables in the simulation. Must be >0.\n"
-     "  Nx                 Number of grid cells in the y-direction. Must be >0.\n"
-     "  Nz                 Number of grid cells in the z-direction. Must be >0.\n"
-     "  Lx                 Domain length. Must be > 0.\n"
-     "  Lz                 Domain height. Must be >0.\n"
-     "  cflFrac            CFL number. The time step dt will be chosen at each\n"
-     "                     iteration such that dt=cfl*dt_max, where dt_max is the\n"
-     "                     estimated maximum stable time step. Must be >0.\n"
-     "  startTime          Time at which integration should start.\n"
-     "                     Optional. If unset or negative then the run is initialized\n"
-     "                     from the time of the pickup file, if restart is specified. If\n"
-     "                     startTime is set and >=0  then it overrides the pickup time.\n"
-     "  endTime            End time for the integration, in\n"
-     "                     case the target residual is not achieved.\n"
-     "  monitorFrequency   Frequency with which to write out iteration data. If\n"
-     "                     set to zero, only the final data will be written.\n"
-     "                     Otherwise must be >0.\n"
-     "                     Optional, default is 0, must be >= 0.\n"
-     "  restart            Set to 0 to initialize the simulation from t=0\n"
-     "                     using input from the initFile parameter. Set to\n"
-     "                     1 to pick up from a previous run using output files\n"
-     "                     specified by startIdx as input files for this run.\n"
-     "                     Optional - default is 0.\n"
-     "  startIdx           Specifies the index of the output files to use as\n"
-     "                     input files for this run. The output index counts\n"
-     "                     the number of output files written in any given\n"
-     "                     simulation. If the startTime parameter is not specified\n"
-     "                     then the simulation start time is calculated as\n"
-     "                     startIdx*monitorFrequency. Optional - default is 0.\n"
-     "  f0                 Reference Coriolis parameter.\n"
-     "                     Optional, default is 10^{-4} rad/s, must be =/= 0.\n"
-     "  h_c                Depth parameter controlling the range of depths over\n"
-     "                     which the vertical coordinate the coordinate is\n"
-     "                     approximately aligned with geopotentials.\n"
-     "                     Must be >0. Default is 1e16 (pure sigma coordinate).\n"
-     "  theta_s            Surface sigma coordinate stretching parameter,\n"
-     "                     defined `meaningfully' between 0 and 10.\n"
-     "                     Default is 0 (no surface stretching).\n"
-     "  theta_b            Bottom sigma coordinate stretching parameter,\n"
-     "                     defined `meaningfully' between 0 and 4.\n"
-     "  Hsml               Depth of the surface mixed layer. Must be >=0.\n"
-     "                     If equal to 0 then no SML is imposed\n"
-     "  Hbbl               Depth of the bottom boundary layer. Must be >=0.\n"
-     "                     If equal to 0 then no BBL is imposed\n"
-     "  targetResFile      File containing an Ntracs x 1 vector of target L2\n"
-     "                     errors between successive iterations. The\n"
-     "                     calculation will stop when this condition is met\n"
-     "                     for all tracers.\n"
-     "  initFile           File containing an Ntracs x Nx x Nz array of initial\n"
-     "                     tracer values over the whole domain.\n"
-     "                     Optional, default is 0 everywhere.\n"
-     "  topogFile          File containing an Nx+1 x 1 array of ocean depths\n"
-     "                     at grid cell corners. All elements must be > 0.\n"
-     "                     Optional, default is Lz everywhere.\n"
-     "  tauFile            File containing an Nx+1 x tlength array of wind stresses\n"
-     "                     at grid cell corners.\n"
-     "                     Optional, default is 0 everywhere.\n"
-     "  KgmFile            File containing an Nx+1 x Nz+1 array of GM eddy\n"
-     "                     diffusivities at grid cell corners. All\n"
-     "                     elements must be >=0.\n"
-     "                     Optional, default is 0 everywhere.\n"
-     "  KisoFile           File containing an Nx+1 x Nz+1 array of isopycnal\n"
-     "                     diffusivities at grid cell corners. All\n"
-     "                     elements must be >=0.\n"
-     "                     Optional, default is 0 everywhere.\n"
-     "  KdiaFile           File containing an Nx+1 x Nz+1 matrix of diapycnal\n"
-     "                     diffusivities at grid cell corners. All\n"
-     "                     elements must be >= 0.\n"
-     "                     Optional, default is 0 everywhere.\n"
-     "  relaxTracerFile    File containing an Ntracers x Nx x Nz array of tracer\n"
-     "                     relaxation target values over the whole domain.\n"
-     "                     Optional, default is 0 everywhere.\n"
-     "  relaxTimeFile      File containing an Ntracers x Nx x Nz array of tracer\n"
-     "                     relaxation time scales over the whole domain. Negative \n"
-     "                     values imply no relaxation. Zero values imply\n"
-     "                     instantaneous relaxation. Optional, default is -1\n"
-     "                     (no relaxation) everywhere.\n"
+     "  Ntracs                Number of tracer variables in the simulation. Must be >0.\n"
+     "  Nx                    Number of grid cells in the y-direction. Must be >0.\n"
+     "  Nz                    Number of grid cells in the z-direction. Must be >0.\n"
+     "  Lx                    Domain width. Must be >0.\n"
+     "  Lz                    Domain height. Must be >0.\n"
+     "  \n"
+     "  cflFrac               CFL number. The time step dt will be chosen at each\n"
+     "                        iteration such that dt=cfl*dt_max, where dt_max is the\n"
+     "                        estimated maximum stable time step. Must be >0.\n"
+     "  startTime             Time at which integration should start.\n"
+     "                        Optional. If unset or negative then the run is initialized\n"
+     "                        from the time of the pickup file, if restart is specified. If\n"
+     "                        startTime is set and >=0  then it overrides the pickup time.\n"
+     "  endTime               End time for the integration, in\n"
+     "                        case the target residual is not achieved.\n"
+     "  monitorFrequency      Frequency with which to write out iteration data. If\n"
+     "                        set to zero, only the final data will be written.\n"
+     "                        Otherwise must be >0.\n"
+     "                        Optional, default is 0, must be >= 0.\n"
+     "  restart               Set to 0 to initialize the simulation from t=0\n"
+     "                        using input from the initFile parameter. Set to\n"
+     "                        1 to pick up from a previous run using output files\n"
+     "                        specified by startIdx as input files for this run.\n"
+     "                        Optional - default is 0.\n"
+     "  startIdx              Specifies the index of the output files to use as\n"
+     "                        input files for this run. The output index counts\n"
+     "                        the number of output files written in any given\n"
+     "                        simulation. If the startTime parameter is not specified\n"
+     "                        then the simulation start time is calculated as\n"
+     "                        startIdx*monitorFrequency. Optional - default is 0.\n"
+     "  checkConvergence      Set true to check whether the model has converged to a steady\n"
+     "                        state after each time step. Convergence criteria for each\n"
+     "                        are set via the targetResFile parameter. Default is 0\n"
+     "                        (no convergence checking).\n"
+
+     "  \n"
+     "  f0                    Coriolis parameter.\n"
+     "                        Optional, default is 10^{-4} rad/s, must be =/= 0.\n"
+     "  rho0                  Reference density.\n"
+     "                        Optional, default is 1000 kg/m^3, must be > 0.\n"
+     "  Kconv0                Convective adjustment diffusivity.\n"
+     "                        Optional, default is 10 m^2/s, must be > 0.\n"
+     "  Hsml                  Depth of the surface mixed layer. Must be >=0.\n"
+     "                        If equal to 0 then no SML is imposed\n"
+     "  Hbbl                  Depth of the bottom boundary layer. Must be >=0.\n"
+     "                        If equal to 0 then no BBL is imposed\n"
+     "  \n"
+     "  h_c                   Depth parameter controlling the range of depths over\n"
+     "                        which the vertical coordinate the coordinate is\n"
+     "                        approximately aligned with geopotentials.\n"
+     "                        Must be >0. Default is 1e16 (pure sigma coordinate).\n"
+     "  theta_s               Surface sigma coordinate stretching parameter,\n"
+     "                        defined `meaningfully' between 0 and 10.\n"
+     "                        Default is 0 (no surface stretching).\n"
+     "  theta_b               Bottom sigma coordinate stretching parameter,\n"
+     "                        defined `meaningfully' between 0 and 4.\n"
+     "  \n"
+     "  timeStepppingScheme   Selects time stepping scheme. See defs.h for\n"
+     "                        identifiers. Default is TIMESTEPPING_RKTVD2.\n"
+     "  advectionScheme       Selects advection scheme. See defs.h for\n"
+     "                        identifiers. Default is ADVECTION_KT00.\n"
+     "  bgcModel              Selects biogeochemical model type. See SWdefs.h for\n"
+     "                        numerical identifiers. Default is BGC_NONE.\n"
+     "  KT00_sigma            Kurganov-Tadmor (2000) minmod parameter.\n"
+     "                        Should be >=1 and <=2. Default is 1.\n"
+     "  \n"
+     "  targetResFile         File containing an Ntracs x 1 vector of target L2\n"
+     "                        errors between successive iterations. The\n"
+     "                        calculation will stop when this condition is met\n"
+     "                        for all tracers.\n"
+     "  initFile              File containing an Ntracs x Nx x Nz array of initial\n"
+     "                        tracer values over the whole domain.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  topogFile             File containing an Nx+1 x 1 array of ocean depths\n"
+     "                        at grid cell corners. All elements must be > 0.\n"
+     "                        Optional, default is Lz everywhere.\n"
+     "  tauFile               File containing an Nx+1 x tlength array of wind stresses\n"
+     "                        at grid cell corners.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  KgmFile               File containing an Nx+1 x Nz+1 array of GM eddy\n"
+     "                        diffusivities at grid cell corners. All\n"
+     "                        elements must be >=0.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  KisoFile              File containing an Nx+1 x Nz+1 array of isopycnal\n"
+     "                        diffusivities at grid cell corners. All\n"
+     "                        elements must be >=0.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  KdiaFile              File containing an Nx+1 x Nz+1 matrix of diapycnal\n"
+     "                        diffusivities at grid cell corners. All\n"
+     "                        elements must be >= 0.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  relaxTracerFile       File containing an Ntracers x Nx x Nz array of tracer\n"
+     "                        relaxation target values over the whole domain.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  relaxTimeFile         File containing an Ntracers x Nx x Nz array of tracer\n"
+     "                        relaxation time scales over the whole domain. Negative \n"
+     "                        values imply no relaxation. Zero values imply\n"
+     "                        instantaneous relaxation. Optional, default is -1\n"
+     "                        (no relaxation) everywhere.\n"
      " \n"
      " \n"
      ,
@@ -2263,12 +2290,20 @@ void printUsage (void)
  * main
  *
  * Program entry point. Initialises all of the required memory,
- * reads in input parameters, performs iterations of the required
- * numerical method, and finally cleans up.
+ * reads in input parameters, performs time integration loop, 
+ * and finally cleans up.
  *
  */
 int main (int argc, char ** argv)
 {
+  
+  
+  
+  
+    ///////////////////////////////////////////
+    ///// BEGIN MAIN VARIABLE DEFINITIONS /////
+    ///////////////////////////////////////////
+  
     // Time parameters
     real tmin = -1;        // Start time
     real tmax = 0;          // End time
@@ -2287,6 +2322,7 @@ int main (int argc, char ** argv)
   
     // Convergence parameters
     real * targetRes = 0;
+    bool checkConvergence = false;
     bool targetReached = false;
     real * res = 0;
     uint nIters = 0;
@@ -2315,7 +2351,8 @@ int main (int argc, char ** argv)
     
     // Stores data required for parsing input parameters
     paramdata params[NPARAMS];
-    
+    int paramcntr = 0;
+  
     // Filename holders for input parameter arrays
     char targetResFile[MAX_PARAMETER_FILENAME_LENGTH];
     char initFile[MAX_PARAMETER_FILENAME_LENGTH];
@@ -2327,35 +2364,62 @@ int main (int argc, char ** argv)
     char KdiaFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTimeFile[MAX_PARAMETER_FILENAME_LENGTH];
-    
-    
+  
     // To store current time
     time_t now;
     FILE * tfile = NULL;
-    
-    // Define input parameter data
-    int paramcntr = 0;
+  
+    /////////////////////////////////////////
+    ///// END MAIN VARIABLE DEFINITIONS /////
+    /////////////////////////////////////////
+  
+  
+  
+    ///////////////////////////////////////////
+    ///// BEGIN DEFINING INPUT PARAMETERS /////
+    ///////////////////////////////////////////
+  
+    // Domain dimensions and grid sizes
     setParam(params,paramcntr++,"Ntracs","%u",&Ntracs,false);
     setParam(params,paramcntr++,"Nx","%u",&Nx,false);
     setParam(params,paramcntr++,"Nz","%u",&Nz,false);
-    setParam(params,paramcntr++,"H","%lf",&H,false);
     setParam(params,paramcntr++,"Lx","%lf",&Lx,false);
     setParam(params,paramcntr++,"Lz","%lf",&Lz,false);
+  
+    // Time stepping/output parameters
     setParam(params,paramcntr++,"cflFrac","%lf",&cflFrac,false);
     setParam(params,paramcntr++,"startTime","%lf",&tmin,true);
     setParam(params,paramcntr++,"endTime","%lf",&tmax,false);
     setParam(params,paramcntr++,"monitorFrequency","%lf",&dt_s,true);
     setParam(params,paramcntr++,"restart","%d",&restart,true);
     setParam(params,paramcntr++,"startIdx","%u",&n0,true);
+    setParam(params,paramcntr++,"checkConvergence","%d",&checkConvergence,true);
+  
+    // Physical constants
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
+    setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
+    setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
+  
+    // Sigma-coordinate parameters
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
     setParam(params,paramcntr++,"theta_s","%lf",&theta_s,true);
     setParam(params,paramcntr++,"theta_b","%lf",&theta_b,true);
-    setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
-    setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
-    setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,false);
+  
+    // Scheme selectors
+    setParam(params,paramcntr++,"timeSteppingScheme","%u",&timeSteppingScheme,true);
+    setParam(params,paramcntr++,"advectionScheme","%u",&advectionScheme,true);
+    setParam(params,paramcntr++,"bgcModel","%u",&bgcModel,true);
+    setParam(params,paramcntr++,"KT00_sigma","%lf",&KT00_sigma,true);
+  
+    // Biogeochemical parameter inputs
+    setParam(params,paramcntr++,"MP","%u",&MP,false);
+    setParam(params,paramcntr++,"MZ","%u",&MZ,false);
+    setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
+  
+    // Input file names
+    setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,true);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
     setParam(params,paramcntr++,"tlength","%u",&tlength,false);
@@ -2365,14 +2429,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
     setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
-    setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
-    
-    // Biogeochemical parameter inputs
-    setParam(params,paramcntr++,"MP","%u",&MP,false);
-    setParam(params,paramcntr++,"MZ","%u",&MZ,false);
-    setParam(params,paramcntr++,"modeltype","%u",&modeltype,false);
-    setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
-    
+    setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);    
     
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
@@ -2385,7 +2442,17 @@ int main (int argc, char ** argv)
     KdiaFile[0] = '\0';
     relaxTracerFile[0] = '\0';
     relaxTimeFile[0] = '\0';
-    
+  
+    /////////////////////////////////////////
+    ///// END DEFINING INPUT PARAMETERS /////
+    /////////////////////////////////////////
+  
+  
+  
+    //////////////////////////////////////////
+    ///// BEGIN READING INPUT PARAMETERS /////
+    //////////////////////////////////////////
+  
     // First program argument always carries the program name
     progname = argv[0];
     
@@ -2409,11 +2476,6 @@ int main (int argc, char ** argv)
         fflush(tfile);
     }
     
-    
-    //////////////////////////////////////////
-    ///// BEGIN READING INPUT PARAMETERS /////
-    //////////////////////////////////////////
-    
     // Attempt to read input parameter data. Errors will be printed
     // to stderr, and will result in 'false' being returned.
     if (!readParams(argv[1],params,NPARAMS,stderr))
@@ -2424,26 +2486,26 @@ int main (int argc, char ** argv)
     
     // Check that required parameters take legal values
     if (  (Ntracs <= 0) ||
-        (Nx <= 0) ||
-        (Nz <= 0) ||
-        (Lx <= 0) ||
-        (Lz <= 0) ||
-        (dt_s < 0.0) ||
-        (tmax <= 0.0) ||
-        (cflFrac <= 0.0) ||
-        (rho0 <= 0.0) ||
-        (f0 == 0.0) ||
-        (h_c <= 0.0) ||
-        (strlen(targetResFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(initFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(topogFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(tauFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(KgmFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
+          (Nx <= 0) ||
+          (Nz <= 0) ||
+          (Lx <= 0) ||
+          (Lz <= 0) ||
+          (dt_s < 0.0) ||
+          (tmax <= 0.0) ||
+          (cflFrac <= 0.0) ||
+          (rho0 <= 0.0) ||
+          (f0 == 0.0) ||
+          (h_c <= 0.0) ||
+          (strlen(targetResFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(initFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(topogFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(tauFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(KgmFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+          (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
     {
         fprintf(stderr,"ERROR: Invalid input parameter values\n");
         printUsage();
@@ -2626,14 +2688,14 @@ int main (int argc, char ** argv)
     
     // Read input matrices and vectors
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
-        ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-        ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
-        ( (strlen(bgcFile) > 0)          &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
-        ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
-        ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
-        ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
-        ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
-        ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
+          ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
+          ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
+          ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
+          ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
+          ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
+          ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
+          ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
+          ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
     {
         printUsage();
         return 0;
@@ -2727,16 +2789,19 @@ int main (int argc, char ** argv)
     }
     
     // Target residuals must be positive
-    for (i = 0; i < Ntracs; i ++)
+    if (checkConvergence)
     {
-        if (targetRes[i]<=0)
+        for (i = 0; i < Ntracs; i ++)
         {
-            fprintf(stderr,"targetResFile may contain only values that are >0.");
-            printUsage();
-            return 0;
+            if (targetRes[i]<=0)
+            {
+                fprintf(stderr,"targetResFile may contain only values that are >0.");
+                printUsage();
+                return 0;
+            }
         }
     }
-    
+  
 #pragma parallel
     
     // Diffusivities must be positive
@@ -2779,7 +2844,9 @@ int main (int argc, char ** argv)
     //////////////////////////////////////
     ///// END READING PARAMETER DATA /////
     //////////////////////////////////////
-    
+  
+  
+  
     
     
     ////////////////////////////
@@ -2921,7 +2988,8 @@ int main (int argc, char ** argv)
             }
         }
     }
-    
+  
+    // Write model grid to output files for post-simulation analysis
     if (!writeModelGrid(ZZ_phi,ZZ_psi,ZZ_u,ZZ_w,outdir))
     {
         fprintf(stderr,"Unable to write model grid");
@@ -3010,7 +3078,9 @@ int main (int argc, char ** argv)
     //////////////////////////
     ///// END GRID SETUP /////
     //////////////////////////
-    
+  
+  
+  
     
     
     ////////////////////////////////////
@@ -3035,60 +3105,65 @@ int main (int argc, char ** argv)
         }
     }
     
-    // Convergence residuals
-    for (i = 0; i < Ntracs; i ++)
+    // Initialize convergence residuals
+    if (checkConvergence)
     {
-        res[i] = 10*targetRes[i];
+        for (i = 0; i < Ntracs; i ++)
+        {
+            res[i] = 10*targetRes[i];
+        }
     }
-    
-    //////////////////////////////////
-    ///// END INITIAL CONDITIONS /////
-    //////////////////////////////////
-    
-    
-    
+ 
     // Write out the initial data if a save interval is specified
     if (dt_s > 0.0)
     {
-        if (!writeModelState(t,0,phi_in,outdir))
-        {
-            fprintf(stderr,"Unable to write model initial state");
-            printUsage();
-            return 0;
-        }
+      if (!writeModelState(t,0,phi_in,outdir))
+      {
+        fprintf(stderr,"Unable to write model initial state");
+        printUsage();
+        return 0;
+      }
     }
     
     // Write initial time to time file
     if (tfile != NULL)
     {
-        fprintf(tfile,"%e ",t);
-        fflush(tfile);
+      fprintf(tfile,"%e ",t);
+      fflush(tfile);
     }
+  
+    //////////////////////////////////
+    ///// END INITIAL CONDITIONS /////
+    //////////////////////////////////
     
+  
+  
+  
+    ///////////////////////////////////////
+    ///// BEGIN TIME INTEGRATION LOOP /////
+    ///////////////////////////////////////
+    
+  
     // Numerical time-integration loop - keep going while the residual exceeds
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
     {
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
-        switch (method_t)
+        switch (timeSteppingScheme)
         {
-            case METHOD_RKTVD1:
+            case TIMESTEPPING_RKTVD1:
             {
                 dt = rktvd1(&t,phi_in_V,phi_out_V,cflFrac,Ntot,&tderiv);
-                //                printf("RK1 \n");
                 break;
             }
-            case METHOD_RKTVD2:
+            case TIMESTEPPING_RKTVD2:
             {
                 dt = rktvd2(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-//                printf("RK2 \n dt = %f \n",dt);fflush(stdout);
-              //printf("RK2 \n t = %lf dt = %lf \n",t,dt);fflush(stdout);
                 break;
             }
-            case METHOD_RKTVD3:
+            case TIMESTEPPING_RKTVD3:
             {
                 dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-                //                printf("RK3 \n");
                 break;
             }
             default:
@@ -3121,35 +3196,38 @@ int main (int argc, char ** argv)
         
 #pragma parallel
         
-        // Step 4: Calculate the residuals as an L2-norm between adjacent iterations
-        targetReached = true;
-        for (i = 0; i < Ntracs; i ++)
+        // Step 4 (optional): Calculate the residuals as an L2-norm between adjacent iterations
+        if (checkConvergence)
         {
-            res[i] = 0;
-            for (j = 0; j < Nx; j ++)
-            {
-                for (k = 0; k < Nz; k ++)
-                {
-                    res[i] += SQUARE((phi_in[i][j][k]-phi_out[i][j][k])/dt);
-                }
-            }
-            res[i] = sqrt(res[i]/(Nx*Nz));
-            
-            // Check whether we've reached ALL target residuals for the various tracers
-            if (res[i] > targetRes[i])
-            {
-                targetReached = false;
-            }
-            
-            // NaN residual clearly indicates a problem
-            if (isnan(res[i]))
-            {
-                fprintf(stderr,"ERROR: Computation blew up: residual==NaN\n");
-                printUsage();
-                return 0;
-            }
+          targetReached = true;
+          for (i = 0; i < Ntracs; i ++)
+          {
+              res[i] = 0;
+              for (j = 0; j < Nx; j ++)
+              {
+                  for (k = 0; k < Nz; k ++)
+                  {
+                      res[i] += SQUARE((phi_in[i][j][k]-phi_out[i][j][k])/dt);
+                  }
+              }
+              res[i] = sqrt(res[i]/(Nx*Nz));
+              
+              // Check whether we've reached ALL target residuals for the various tracers
+              if (res[i] > targetRes[i])
+              {
+                  targetReached = false;
+              }
+              
+              // NaN residual clearly indicates a problem
+              if (isnan(res[i]))
+              {
+                  fprintf(stderr,"ERROR: Computation blew up: residual==NaN\n");
+                  printUsage();
+                  return 0;
+              }
+          }
         }
-        
+      
         // Step 5: If the time step has taken us past a save point (or multiple
         // save points), interpolate and write out the data
         while ((dt_s > 0) && (t >= t_next))
@@ -3203,7 +3281,19 @@ int main (int argc, char ** argv)
         // Increment iteration count
         nIters += 1;
     }
-    
+  
+    ////////////////////////////////
+    ///// END TIME INTEGRATION /////
+    ////////////////////////////////
+  
+  
+  
+  
+  
+    /////////////////////////
+    ///// BEGIN CLEANUP /////
+    /////////////////////////
+  
     // Write out the final model state
     if (dt_s == 0)
     {
@@ -3227,8 +3317,14 @@ int main (int argc, char ** argv)
         }
         fclose(tfile);
     }
-    
-    
+  
+    ///////////////////////
+    ///// END CLEANUP /////
+    ///////////////////////
+  
+  
+  
+  
     
     return 0;
 }
