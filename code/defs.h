@@ -14,18 +14,22 @@
 #define MAX_PARAMETER_FILENAME_LENGTH 256
 
 // Time-integration method identifiers
-#define TIMESTEPPING_RKTVD1 0
-#define TIMESTEPPING_RKTVD2 1
-#define TIMESTEPPING_RKTVD3 2
+#define TIMESTEPPING_RKTVD1 0   // First-order total-variation-diminishing Runge-Kutta
+#define TIMESTEPPING_RKTVD2 1   // Second-order total-variation-diminishing Runge-Kutta
+#define TIMESTEPPING_RKTVD3 2   // Third-order total-variation-diminishing Runge-Kutta
 
 // Biogeochemical method identifiers
-#define BGC_NONE 0 // No biogeochemistry
-#define BGC_NITRATEONLY 1 // Single nitrate model
-#define BGC_NPZD 2 // Size structured NPZD model
+#define BGC_NONE 0              // No biogeochemistry
+#define BGC_NITRATEONLY 1       // Single nitrate model
+#define BGC_NPZD 2              // Size structured NPZD model
 
-// Spatial discretisation method identifiers
-#define ADVECTION_CENTERED 0 // Fluxes based on mean phi at cell boundaries
-#define ADVECTION_KT00 1 // Kurganov-Tadmor scheme for conservation laws (see K&T 2000)
+// Tracer advection scheme identifiers
+#define ADVECTION_CENTERED 0    // Fluxes based on mean phi at cell boundaries
+#define ADVECTION_KT00 1        // Kurganov-Tadmor scheme for conservation laws (see K&T 2000)
+
+// Momentum scheme identifiers
+#define MOMENTUM_NONE 0         // No explicit momentum time stepping, mean velocities have prescribed boundary layer structure only
+#define MOMENTUM_TTTW 1         // Momentum evolves under time-dependend turbulent thermal wind approximation
 
 // Handy constants
 #define _PI  3.14159265358979323846

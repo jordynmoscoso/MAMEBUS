@@ -23,3 +23,7 @@ BGC_NPZD = 1;             %%% Size structured NPZD model
 %%% Advection scheme identifiers
 ADVECTION_CENTERED = 0;   %%% Centered differencing of tracers
 ADVECTION_KT00  = 1;      %%% Kurganov-Tadmor scheme for conservation laws (see K&T 2000)
+
+%%% Momentum scheme identifiers
+MOMENTUM_NONE = 0;        %%% No explicit momentum time stepping, mean velocities have prescribed boundary layer structure only
+MOMENTUM_TTTW = 1;        %%% Momentum evolves under time-dependend turbulent thermal wind approximation

@@ -111,7 +111,7 @@ function setparams (local_home_dir,run_name)
 %   theta_b = 0; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
    
   %%% Grids  
-  Ntracs = 2 + spec_tot; %%% Number of tracers (2 physical and the rest are bgc, plus one for nitrate)
+  Ntracs = 4 + spec_tot; %%% Number of tracers (2 physical and the rest are bgc, plus one for nitrate)
   Nx = 40; %%% Number of latitudinal grid points 
   Nz = 40; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
