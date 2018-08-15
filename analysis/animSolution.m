@@ -63,7 +63,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   end
 
   %%% Default is that we pickup from the first output file
-  if (~n0_found)
+  if ((~restart) || (~n0_found))
     n0 = 0;
   end
   
@@ -164,9 +164,9 @@ ncase = 1;
     if (plot_trac)    
 
       %%% Data file name
-      data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
+      data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat'])
       phi = readOutputFile(data_file,Nx,Nz);       
-      
+      size(phi)
       %%% Plot the tracer     
       switch (var_id)
         case 0 %%% Buoyancy (temperature)
