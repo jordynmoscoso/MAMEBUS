@@ -23,6 +23,8 @@
 // TODO document BGC input parameters
 // TODO document input/output parameters in all functions
 // TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
+// TODO remove depth-averaged component of u after each time step - needs a new function
+// TODO determine psim from uvel if using TTTW
 
 
 
@@ -1678,7 +1680,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // Looping variables
     int i, j, k;
     
-    // Pointer to buoyancy matrix
+    // Pointers to velocity and buoyancy matrices
+    real ** uvel = NULL;
+    real ** vvel = NULL;
     real ** buoy = NULL;
     bool is_buoy = false;
     
@@ -1705,7 +1709,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     ///// BEGIN CALCULATING TENDENCIES /////
     ////////////////////////////////////////
     
-    // Pointer to buoyancy matrix
+    // Pointers to velocity and buoyancy matrices
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
     
     // Calculate Gent-McWilliams diffusivity Kgm
@@ -1926,7 +1932,10 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     memcpy(phi_wrk_V,data,Ntot*sizeof(real));
   
     // Calculate momentum tendencies
-    tderiv_mom (t, phi_wrk, dphi_dt_wrk);
+    if (momentumScheme != MOMENTUM_NONE)
+    {
+        tderiv_mom (t, phi_wrk, dphi_dt_wrk);
+    }
   
     // Calculate tracer tendencies due to advection/diffusion
     cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
