@@ -25,7 +25,8 @@
 // TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
 // TODO remove depth-averaged component of u after each time step - needs a new function
 // TODO determine psim from uvel if using TTTW
-
+// TODO need to add inputs for along-shore tracer gradients and pressure gradients
+// TODO need to add along-slope advection
 
 
 //////////////////////////////////
@@ -190,7 +191,8 @@ real * db_dz = NULL;
 /**
  * windInterp
  *
- * TODO
+ * TODO I don't like the global variable for stau
+ * TODO need to come up with a more general approach to time-variable forcing,
  *
  */
 void windInterp (const real t)
@@ -236,8 +238,6 @@ void windInterp (const real t)
 
 
 // TODO ened to add surface bottom BLs
-// TODO need to add meridional pressure gradient term here
-// TODO solve diffusion equation to calculate u and v through water column
 
 
 /**
@@ -247,48 +247,65 @@ void windInterp (const real t)
  * The result is stored in the psi_m matrix.
  *
  */
-void calcPsim (const real t, real ** buoy, real ** psi_m)
+void calcPsim (const real t, real ** uvel, real ** psi_m)
 {
     int j,k;
     real z;
-    
-    windInterp(t);
-    
+  
     // Zero streamfunction at top/bottom boundaries
     for (j = 0; j < Nx+1; j ++)
     {
-        psi_m[j][0] = 0;
-        psi_m[j][Nz] = 0;
+      psi_m[j][0] = 0;
+      psi_m[j][Nz] = 0;
     }
     // Zero streamfunction at east/west boundaries
     for (k = 0; k < Nz+1; k ++)
     {
-        psi_m[0][k] = 0;
-        psi_m[Nx][k] = 0;
+      psi_m[0][k] = 0;
+      psi_m[Nx][k] = 0;
     }
-    
-#pragma parallel
-    
-    // Current implementation: uniform horizontal velocity in SML and BBL
-    for (j = 1; j < Nx; j ++)
+  
+    // If we are not evolving momentum explicitly then we prescribe simple
+    // uniform Ekman velocities in the SML and BBL
+    if (momentumScheme == MOMENTUM_NONE)
     {
+      
+      windInterp(t);
+      
+#pragma parallel
+      
+      // Current implementation: uniform horizontal velocity in SML and BBL
+      for (j = 1; j < Nx; j ++)
+      {
+          for (k = 1; k < Nz; k ++)
+          {
+              z = ZZ_psi[j][k];
+              
+              psi_m[j][k] = stau[j]/(rho0*f0);
+              
+              if (use_sml && (z > -Hsml))
+              {
+                  psi_m[j][k] *= (-z/Hsml);
+              }
+              if (use_bbl && (z < -hb_psi[j] + Hbbl))
+              {
+                  psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
+              }
+          }
+      }
+    }
+    // Otherwise just integrate u-velocity to get the mean streamfunction
+    else
+    {
+      for (j = 1; j < Nx; j ++)
+      {
         for (k = 1; k < Nz; k ++)
         {
-            z = ZZ_psi[j][k];
-            
-            psi_m[j][k] = stau[j]/(rho0*f0);
-            
-            if (use_sml && (z > -Hsml))
-            {
-                psi_m[j][k] *= (-z/Hsml);
-            }
-            if (use_bbl && (z < -hb_psi[j] + Hbbl))
-            {
-                psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
-            }
+          psi_m[j][k] = psi_m[j][k-1] - dz_u[j][k-1]*uvel[j][k-1];
         }
+      }
     }
-    
+  
 }
 
 
@@ -302,7 +319,7 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
 
 
 
-
+/// TODO allow selection of different scheme for prescribing Kgm
 
 /**
  *
@@ -1724,7 +1741,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
     
     // Calculate mean and eddy components of overturning streamfunction
-    calcPsim(t,buoy,psi_m);
+    calcPsim(t,uvel,psi_m);
     calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
     
     // Compute residual streamfunction and velocities
@@ -1733,6 +1750,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // Loop over tracers and calculate advective/diffusive tendency
     for (i = 0; i < Ntracs; i ++)
     {
+        // No advection/diffusion for momentum - their tendency is handled separately in tderiv_mom
+        if ((i == idx_uvel) || (i == idx_vvel))
+        {
+            continue;
+        }
+      
         // Advection/diffusion depends on whether the tracer is the buoyancy variable
         if (i == idx_buoy)
         {
@@ -2224,10 +2247,12 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     FILE * outfd = NULL;
     
     // Calculate residual streamfunction
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
     calcKgm(t,buoy,Kgm_psi,Kgm_u,Kgm_w);
     calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
-    calcPsim(t,buoy,psi_m);
+    calcPsim(t,uvel,psi_m);
     calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
     calcPsir(psi_m,psi_e,psi_r,u_r,w_r);
     
