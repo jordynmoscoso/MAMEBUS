@@ -14,6 +14,9 @@
 %%%
 function setparams (local_home_dir,run_name)  
 
+%%% TODO move depth tracer and dye tracer to end of tracer matrix as
+%%% examples of how to prescribe arbitrary tracer inputs
+
   %%% Convenience scripts used in this function
   addpath ../utils;
   
@@ -23,22 +26,32 @@ function setparams (local_home_dir,run_name)
   
 %%% TODO this definitely ought to appear later in this script
 
-  MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
+
+  
   %%% The number of biogeochemical classes are entered here. 
   modeltype = BGC_NONE; %%% This automatically defaults so that the model runs a size structured NPZD model
-  if modeltype
+  switch (modeltype)
+    case BGC_NPZD
+      MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
       MP = 5;
       MZ = 5;
       MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
       bio = MP+MZ+MD;
       disp(['Number of: (Phytoplankton, Zooplankton) = (',num2str(MP),', ', num2str(MZ),')']);
-  else
+    case BGC_NITRATEONLY
+      MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
+      MP = 0;
+      MZ = 0;
+      MD = 0;
+      bio = 0;
+    case BGC_NONE
+      MN = 0;
       MP = 0;
       MZ = 0;
       MD = 0;
       bio = 0;
   end
-  spec_tot = bio + MN; 
+  Nbgc = bio + MN; 
 
   %%% Check to see if a valid model type is indicated for biogeochemistry,
   %%% if not use the default single nitrate model (modeltype = 0)
@@ -90,7 +103,6 @@ function setparams (local_home_dir,run_name)
   Kgm0 = 500; %%% Reference GM diffusivity
   Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s
   Kiso_hb = 200; %%% Reference interior isopycnal diffusivity
-  
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
@@ -111,7 +123,8 @@ function setparams (local_home_dir,run_name)
 %   theta_b = 0; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
    
   %%% Grids  
-  Ntracs = 4 + spec_tot; %%% Number of tracers (2 physical and the rest are bgc, plus one for nitrate)
+  Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
+  Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
   Nx = 40; %%% Number of latitudinal grid points 
   Nz = 40; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
@@ -181,13 +194,19 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
   PARAMS = addParameter(PARAMS,'MP',MP,PARM_INT);
   PARAMS = addParameter(PARAMS,'MZ',MZ,PARM_INT);
+  
   %%% Save biogeochemical parameters in vector form call bgc_setup function
+  %%% TODO do we really need a switch here?
   switch(modeltype)
-      case 0
+      case BGC_NONE
+        bgc_params = [];
+        nbgc = 0;
+        bgc_init = [];
+      case BGC_NITRATEONLY
         [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         
         disp('Nitrate only')
-      case 1
+      case BGC_NPZD
         [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         disp('NPZD')
         %%% Store phytoplankton size and zooplankton size to determine what size
@@ -201,14 +220,14 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
   
   
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  %%%%% Target residuals %%%%%
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
-  targetRes = 1e-16 * ones(Ntracs,1);
-  targetResFile = 'targetRes.dat';  
-  writeDataFile(fullfile(local_run_dir,targetResFile),targetRes);
-  PARAMS = addParameter(PARAMS,'targetResFile',targetResFile,PARM_STR); 
+  
+  
+  
+  
+  
+  
+  
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Tracer initial conditions %%%%%
@@ -216,6 +235,10 @@ function setparams (local_home_dir,run_name)
   
   %%% To store all tracers
   phi_init = zeros(Ntracs,Nx,Nz);
+  
+  %%% Initial velocities
+  uvel_init = zeros(Nx,Nz);
+  vvel_init = zeros(Nx,Nz);
   
   %%% Initial buoyancy
   Hexp = 500;
@@ -227,26 +250,39 @@ function setparams (local_home_dir,run_name)
   dtr_init = ZZ_tr;
   
   %%% Store physical tracers in 3D matrix
-  phi_init(1,:,:) = reshape(buoy_init,[1 Nx Nz]);
-  phi_init(2,:,:) = reshape(dtr_init,[1 Nx Nz]);
+  phi_init(IDX_UVEL,:,:) = reshape(uvel_init,[1 Nx Nz]);
+  phi_init(IDX_VVEL,:,:) = reshape(vvel_init,[1 Nx Nz]);
+  phi_init(IDX_BUOY,:,:) = reshape(buoy_init,[1 Nx Nz]);  
   
   %%% Count number of bgc tracers
+  %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
-      case 0
+      case BGC_NITRATEONLY
           phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
           phi_init(4,:,:) = reshape(bgc_init,[1,Nx,Nz]);
-      case 1
+      case BGC_NPZD
           bgc_tracs = MP + MZ + MD + 1;
           for ii = 1:bgc_tracs
               phi_init(ii+2,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
           end
   end
-  
+
+  %%% Additional tracers
+  phi_init(Nphys+Nbgc+1,:,:) = reshape(dtr_init,[1 Nx Nz]);
+  Nphys
+  Nbgc
+  Ntracs
   %%% Write to data file
   initFile = 'initFile.dat';  
   writeDataFile(fullfile(local_run_dir,initFile),phi_init);
   PARAMS = addParameter(PARAMS,'initFile',initFile,PARM_STR);  
     
+  
+  
+  
+  
+  
+  
   
   %%%%%%%%%%%%%%%%%%%%%%
   %%%%% Topography %%%%%
@@ -255,6 +291,13 @@ function setparams (local_home_dir,run_name)
   topogFile = 'topog.dat';  
   writeDataFile(fullfile(local_run_dir,topogFile),hb);
   PARAMS = addParameter(PARAMS,'topogFile',topogFile,PARM_STR);  
+  
+  
+  
+  
+  
+  
+  
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Surface wind stress %%%%%
@@ -268,6 +311,12 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
 
+  
+  
+  
+  
+  
+  
 
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% Tracer relaxation concentrations and timescales %%%%%
@@ -279,6 +328,8 @@ function setparams (local_home_dir,run_name)
   T_relax_max = 30*t1day; %%% Fastest relaxation time
 
   %%% Relax to initial buoyancy at the western boundary
+  uvel_relax = uvel_init;
+  vvel_relax = vvel_init;
   buoy_relax = buoy_init;
   T_relax_buoy = -ones(Nx,Nz);
   T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
@@ -300,26 +351,33 @@ function setparams (local_home_dir,run_name)
  
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
-  phi_relax_all(1,:,:) = reshape(buoy_relax,[1 Nx Nz]);
-  phi_relax_all(2,:,:) = reshape(dtr_relax,[1 Nx Nz]);
+  phi_relax_all(IDX_UVEL,:,:) = reshape(uvel_relax,[1 Nx Nz]);
+  phi_relax_all(IDX_VVEL,:,:) = reshape(vvel_relax,[1 Nx Nz]);
+  phi_relax_all(IDX_BUOY,:,:) = reshape(buoy_relax,[1 Nx Nz]);  
+  %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
-      case 0
+      case BGC_NITRATEONLY
           phi_relax_all(3,:,:) = reshape(bgc_relax,[1 Nx Nz]);
           phi_relax_all(4,:,:) = reshape(bgc_relax,[1 Nx Nz]);
-      case 1
-          phi_relax_all(3:end,:,:) = reshape(bgc_relax,[spec_tot Nx Nz]);
+      case BGC_NPZD
+          phi_relax_all(3:end,:,:) = reshape(bgc_relax,[Nbgc Nx Nz]);
   end
+  phi_relax_all(Nphys+Nbgc+1,:,:) = reshape(dtr_relax,[1 Nx Nz]);
   
+  %%% Store tracer relaxation timescales
   T_relax_all = zeros(Ntracs,Nx,Nz);
-  T_relax_all(1,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);
-  T_relax_all(2,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
+  T_relax_all(IDX_UVEL,:,:) = -ones(1,Nx,Nz);
+  T_relax_all(IDX_VVEL,:,:) = -ones(1,Nx,Nz);
+  T_relax_all(IDX_BUOY,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);  
+  %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
-      case 0
+      case BGC_NITRATEONLY
           T_relax_all(3,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
           T_relax_all(4,:,:) = -ones(1,Nx,Nz); % Total dye conserved
-      case 1
-          T_relax_all(3:end,:,:) = -ones(spec_tot,Nx,Nz);
+      case BGC_NPZD
+          T_relax_all(3:end,:,:) = -ones(Nbgc,Nx,Nz);
   end
+  T_relax_all(Nphys+Nbgc+1,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
 
   relaxTracerFile = 'relaxTracer.dat';
   relaxTimeFile = 'relaxTime.dat';
@@ -327,6 +385,14 @@ function setparams (local_home_dir,run_name)
   writeDataFile(fullfile(local_run_dir,relaxTimeFile),T_relax_all);
   PARAMS = addParameter(PARAMS,'relaxTracerFile',relaxTracerFile,PARM_STR);     
   PARAMS = addParameter(PARAMS,'relaxTimeFile',relaxTimeFile,PARM_STR);
+  
+  
+  
+  
+  
+  
+  
+  
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -339,6 +405,14 @@ function setparams (local_home_dir,run_name)
   KgmFile = 'Kgm.dat';
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
   PARAMS = addParameter(PARAMS,'KgmFile',KgmFile,PARM_STR);
+  
+  
+  
+  
+  
+  
+  
+  
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -362,6 +436,13 @@ function setparams (local_home_dir,run_name)
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
+  
+  
+  
+  
+  
+  
+  
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -401,6 +482,13 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'KdiaFile',KdiaFile,PARM_STR); 
   
   
+  
+  
+  
+  %%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%% Create scripts %%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%
+  
   %%% Create a run script
   createRunScript (local_home_dir,run_name,exec_name, ...
                    use_cluster,cluster_username,cluster_address, ...
@@ -408,6 +496,16 @@ function setparams (local_home_dir,run_name)
 
   %%% Create the input parameter file
   writeParamFile(pfname,PARAMS);    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   
   %%% 
   %%% The following is for visualization purposes and can be commented out.
@@ -429,8 +527,7 @@ function setparams (local_home_dir,run_name)
   % Wind Stress Curl
   figure(fignum)
   fignum = fignum + 1;
-  wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);
-  wsc'
+  wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);  
   plot(xx_psi(1:end-1),wsc)
   
   %%% Plot Buoyancy relaxation profile

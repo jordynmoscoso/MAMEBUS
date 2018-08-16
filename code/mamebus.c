@@ -23,7 +23,10 @@
 // TODO document BGC input parameters
 // TODO document input/output parameters in all functions
 // TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
-
+// TODO remove depth-averaged component of u after each time step - needs a new function
+// TODO determine psim from uvel if using TTTW
+// TODO need to add inputs for along-shore tracer gradients and pressure gradients
+// TODO need to add along-slope advection
 
 
 //////////////////////////////////
@@ -188,7 +191,8 @@ real * db_dz = NULL;
 /**
  * windInterp
  *
- * TODO
+ * TODO I don't like the global variable for stau
+ * TODO need to come up with a more general approach to time-variable forcing,
  *
  */
 void windInterp (const real t)
@@ -234,8 +238,6 @@ void windInterp (const real t)
 
 
 // TODO ened to add surface bottom BLs
-// TODO need to add meridional pressure gradient term here
-// TODO solve diffusion equation to calculate u and v through water column
 
 
 /**
@@ -245,48 +247,65 @@ void windInterp (const real t)
  * The result is stored in the psi_m matrix.
  *
  */
-void calcPsim (const real t, real ** buoy, real ** psi_m)
+void calcPsim (const real t, real ** uvel, real ** psi_m)
 {
     int j,k;
     real z;
-    
-    windInterp(t);
-    
+  
     // Zero streamfunction at top/bottom boundaries
     for (j = 0; j < Nx+1; j ++)
     {
-        psi_m[j][0] = 0;
-        psi_m[j][Nz] = 0;
+      psi_m[j][0] = 0;
+      psi_m[j][Nz] = 0;
     }
     // Zero streamfunction at east/west boundaries
     for (k = 0; k < Nz+1; k ++)
     {
-        psi_m[0][k] = 0;
-        psi_m[Nx][k] = 0;
+      psi_m[0][k] = 0;
+      psi_m[Nx][k] = 0;
     }
-    
-#pragma parallel
-    
-    // Current implementation: uniform horizontal velocity in SML and BBL
-    for (j = 1; j < Nx; j ++)
+  
+    // If we are not evolving momentum explicitly then we prescribe simple
+    // uniform Ekman velocities in the SML and BBL
+    if (momentumScheme == MOMENTUM_NONE)
     {
+      
+      windInterp(t);
+      
+#pragma parallel
+      
+      // Current implementation: uniform horizontal velocity in SML and BBL
+      for (j = 1; j < Nx; j ++)
+      {
+          for (k = 1; k < Nz; k ++)
+          {
+              z = ZZ_psi[j][k];
+              
+              psi_m[j][k] = stau[j]/(rho0*f0);
+              
+              if (use_sml && (z > -Hsml))
+              {
+                  psi_m[j][k] *= (-z/Hsml);
+              }
+              if (use_bbl && (z < -hb_psi[j] + Hbbl))
+              {
+                  psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
+              }
+          }
+      }
+    }
+    // Otherwise just integrate u-velocity to get the mean streamfunction
+    else
+    {
+      for (j = 1; j < Nx; j ++)
+      {
         for (k = 1; k < Nz; k ++)
         {
-            z = ZZ_psi[j][k];
-            
-            psi_m[j][k] = stau[j]/(rho0*f0);
-            
-            if (use_sml && (z > -Hsml))
-            {
-                psi_m[j][k] *= (-z/Hsml);
-            }
-            if (use_bbl && (z < -hb_psi[j] + Hbbl))
-            {
-                psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
-            }
+          psi_m[j][k] = psi_m[j][k-1] - dz_u[j][k-1]*uvel[j][k-1];
         }
+      }
     }
-    
+  
 }
 
 
@@ -300,7 +319,7 @@ void calcPsim (const real t, real ** buoy, real ** psi_m)
 
 
 
-
+/// TODO allow selection of different scheme for prescribing Kgm
 
 /**
  *
@@ -1678,7 +1697,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // Looping variables
     int i, j, k;
     
-    // Pointer to buoyancy matrix
+    // Pointers to velocity and buoyancy matrices
+    real ** uvel = NULL;
+    real ** vvel = NULL;
     real ** buoy = NULL;
     bool is_buoy = false;
     
@@ -1705,7 +1726,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     ///// BEGIN CALCULATING TENDENCIES /////
     ////////////////////////////////////////
     
-    // Pointer to buoyancy matrix
+    // Pointers to velocity and buoyancy matrices
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
     
     // Calculate Gent-McWilliams diffusivity Kgm
@@ -1718,7 +1741,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
     
     // Calculate mean and eddy components of overturning streamfunction
-    calcPsim(t,buoy,psi_m);
+    calcPsim(t,uvel,psi_m);
     calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
     
     // Compute residual streamfunction and velocities
@@ -1727,6 +1750,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // Loop over tracers and calculate advective/diffusive tendency
     for (i = 0; i < Ntracs; i ++)
     {
+        // No advection/diffusion for momentum - their tendency is handled separately in tderiv_mom
+        if ((i == idx_uvel) || (i == idx_vvel))
+        {
+            continue;
+        }
+      
         // Advection/diffusion depends on whether the tracer is the buoyancy variable
         if (i == idx_buoy)
         {
@@ -1915,29 +1944,32 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
  */
 real tderiv (const real t, const real * data, real * dt_data, const uint numvars)
 {
-    // CFL timesteps
-    real cfl_dt = 0;
+  // CFL timesteps
+  real cfl_dt = 0;
   
-    // Construct output matrix from the dt_data vector
-    memset(dt_data,0,numvars*sizeof(real));
-    vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
-    
-    // Copy tracer data from the 'data' array to the work array
-    memcpy(phi_wrk_V,data,Ntot*sizeof(real));
+  // Construct output matrix from the dt_data vector
+  memset(dt_data,0,numvars*sizeof(real));
+  vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
   
-    // Calculate momentum tendencies
+  // Copy tracer data from the 'data' array to the work array
+  memcpy(phi_wrk_V,data,Ntot*sizeof(real));
+  
+  // Calculate momentum tendencies
+  if (momentumScheme != MOMENTUM_NONE)
+  {
     tderiv_mom (t, phi_wrk, dphi_dt_wrk);
+  }
   
-    // Calculate tracer tendencies due to advection/diffusion
-    cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
-
-    // Calculate tracer tendencies due to biogeochemistry
-    tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
-
-    // Calculate tracer tendencies due to relaxation
-    tderiv_relax (t, phi_wrk, dphi_dt_wrk);
-    
-    return cfl_dt;
+  // Calculate tracer tendencies due to advection/diffusion
+  cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
+  
+  // Calculate tracer tendencies due to biogeochemistry
+  tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
+  
+  // Calculate tracer tendencies due to relaxation
+  tderiv_relax (t, phi_wrk, dphi_dt_wrk);
+  
+  return cfl_dt;
 }
 
 
@@ -1995,6 +2027,63 @@ void do_impl_diff (real t, real dt, real *** phi)
 }
 
 
+
+
+
+
+/**
+ *
+ * do_pressure_correct
+ *
+ * Applies zonal pressure gradient correction to enforce non-divergence of the zonal/vertical mean flow.
+ * This amounts to simply subtracting the depth-averaged velocity from each u-point.
+ *
+ */
+void do_pressure_correct (real *** phi)
+{
+  int j,k;
+  real ** uvel = NULL;
+  real * udz = NULL;
+  real u_avg = 0;
+  
+  // Extract zonal velocity matrix
+  uvel = phi[idx_uvel];
+  
+  // We'll abuse the zonal velocity at the western edge of the domain,
+  // which is just zero everywhere, to serve as a work vector for
+  // calculating depth-integrated velocities
+  udz = uvel[0];
+  
+#pragma parallel
+  
+  // Loop through columns
+  for (j = 1; j < Nx; j ++)
+  {
+
+    // Implicit vertical diffusion coefficients
+    for (k = 0; k < Nz; k ++)
+    {
+      udz[k] = uvel[j][k] * dz_u[j][k];
+    }
+    
+    // Calculate depth-averaged velocity via Kahan summation to ensure numerical accuracy
+    u_avg = kahanSum(udz,Nz) / hb_psi[j];
+    
+    // Subtract average velocity from each u-point
+    for (k = 0; k < Nz; k ++)
+    {
+      uvel[j][k] -= u_avg;
+    }
+    
+  }
+  
+  // Zero zonal velocity at the western wall
+  for (k = 0; k < Nz; k ++)
+  {
+    uvel[0][k] = 0;
+  }
+  
+}
 
 
 
@@ -2158,10 +2247,12 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     FILE * outfd = NULL;
     
     // Calculate residual streamfunction
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
     calcKgm(t,buoy,Kgm_psi,Kgm_u,Kgm_w);
     calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
-    calcPsim(t,buoy,psi_m);
+    calcPsim(t,uvel,psi_m);
     calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
     calcPsir(psi_m,psi_e,psi_r,u_r,w_r);
     
@@ -2221,7 +2312,7 @@ void printUsage (void)
      "  All matrix parameters should be formatted in column-major\n"
      "  order.\n"
      "  \n"
-     "  name               value\n"
+     "  name                  value\n"
      "  \n"
      "  Ntracs                Number of tracer variables in the simulation. Must be >3,\n"
      "                        as the first 3 tracers are reserved for zonal velocity,\n"
@@ -3231,14 +3322,23 @@ int main (int argc, char ** argv)
                 break;
             }
         }
-        
+      
+      
+      
         // Step 2: Add implicit vertical diffusion
         do_impl_diff(t,dt,phi_out);
-        
-        
+      
+      
+      
+      
+        // Step 3 (optional): apply zonal barotropic pressure gradient correction
+        do_pressure_correct(phi_out);
+      
+      
+      
 #pragma parallel
         
-        // Step 3: Enforce zero tendency where relaxation time is zero
+        // Step 4: Enforce zero tendency where relaxation time is zero
         for (i = 0; i < Ntracs; i ++)
         {
             for (j = 0; j < Nx; j ++)
@@ -3252,10 +3352,12 @@ int main (int argc, char ** argv)
                 }
             }
         }
-        
+      
+      
+      
 #pragma parallel
         
-        // Step 4 (optional): Calculate the residuals as an L2-norm between adjacent iterations
+        // Step 5 (optional): Calculate the residuals as an L2-norm between adjacent iterations
         if (checkConvergence)
         {
           targetReached = true;
@@ -3287,7 +3389,9 @@ int main (int argc, char ** argv)
           }
         }
       
-        // Step 5: If the time step has taken us past a save point (or multiple
+      
+      
+        // Step 6: If the time step has taken us past a save point (or multiple
         // save points), interpolate and write out the data
         while ((dt_s > 0) && (t >= t_next))
         {
@@ -3332,7 +3436,9 @@ int main (int argc, char ** argv)
             printf("%e, time = %f \n",res[idx_buoy],t/day);
             fflush(stdout);
         }
-        
+      
+      
+      
         // Copy the next iteration from phi_out back to phi_in,
         // ready for the next time step
         memcpy(phi_in_V,phi_out_V,Ntot*sizeof(real));

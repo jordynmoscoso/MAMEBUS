@@ -1,14 +1,15 @@
 %%%
 %%% paramTypes.m
 %%%
-%%% Defines integers used to specify different input parameter types for
+%%% Defines integers used to specify different parameter types for
 %%% MAMEBUS.
 %%%
 
-PARM_INT = 1; %%% Integer number
-PARM_REALF = 2; %%% Real number, decimal form
-PARM_REALE = 3; %%% Real number, floating-point form
-PARM_STR = 4; %%% String literal
+%%% Input parameter types
+PARM_INT = 1;             %%% Integer number
+PARM_REALF = 2;           %%% Real number, decimal form
+PARM_REALE = 3;           %%% Real number, floating-point form
+PARM_STR = 4;             %%% String literal
 
 %%% Time-stepping scheme identifiers
 TIMESTEPPING_RKTVD1 = 0;  %%% First-order total-variation-diminishing Runge-Kutta
@@ -27,3 +28,8 @@ ADVECTION_KT00  = 1;      %%% Kurganov-Tadmor scheme for conservation laws (see 
 %%% Momentum scheme identifiers
 MOMENTUM_NONE = 0;        %%% No explicit momentum time stepping, mean velocities have prescribed boundary layer structure only
 MOMENTUM_TTTW = 1;        %%% Momentum evolves under time-dependend turbulent thermal wind approximation
+
+%%% Fixed tracer array indices
+IDX_UVEL = 1;             %%% Zonal velocity
+IDX_VVEL = 2;             %%% Meridional velocity
+IDX_BUOY = 3;             %%% Buoyancy

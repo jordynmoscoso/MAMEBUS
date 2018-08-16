@@ -121,6 +121,9 @@ real min3 (real v1, real v2, real v3);
 real minmod (real v1, real v2, real v3);
 real limMin (real val, real minVal);
 
+// Kahan summation
+real kahanSum (real * vec, int N);
+
 // Thomas algorithm
 void thomas (const real * a, const real * b, real * c, real * d, real * x, unsigned int n);
 
