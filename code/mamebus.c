@@ -1921,32 +1921,32 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
  */
 real tderiv (const real t, const real * data, real * dt_data, const uint numvars)
 {
-    // CFL timesteps
-    real cfl_dt = 0;
+  // CFL timesteps
+  real cfl_dt = 0;
   
-    // Construct output matrix from the dt_data vector
-    memset(dt_data,0,numvars*sizeof(real));
-    vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
-    
-    // Copy tracer data from the 'data' array to the work array
-    memcpy(phi_wrk_V,data,Ntot*sizeof(real));
+  // Construct output matrix from the dt_data vector
+  memset(dt_data,0,numvars*sizeof(real));
+  vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
   
-    // Calculate momentum tendencies
-    if (momentumScheme != MOMENTUM_NONE)
-    {
-        tderiv_mom (t, phi_wrk, dphi_dt_wrk);
-    }
+  // Copy tracer data from the 'data' array to the work array
+  memcpy(phi_wrk_V,data,Ntot*sizeof(real));
   
-    // Calculate tracer tendencies due to advection/diffusion
-    cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
-
-    // Calculate tracer tendencies due to biogeochemistry
-    tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
-
-    // Calculate tracer tendencies due to relaxation
-    tderiv_relax (t, phi_wrk, dphi_dt_wrk);
-    
-    return cfl_dt;
+  // Calculate momentum tendencies
+  if (momentumScheme != MOMENTUM_NONE)
+  {
+    tderiv_mom (t, phi_wrk, dphi_dt_wrk);
+  }
+  
+  // Calculate tracer tendencies due to advection/diffusion
+  cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
+  
+  // Calculate tracer tendencies due to biogeochemistry
+  tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
+  
+  // Calculate tracer tendencies due to relaxation
+  tderiv_relax (t, phi_wrk, dphi_dt_wrk);
+  
+  return cfl_dt;
 }
 
 
@@ -2004,6 +2004,63 @@ void do_impl_diff (real t, real dt, real *** phi)
 }
 
 
+
+
+
+
+/**
+ *
+ * do_pressure_correct
+ *
+ * Applies zonal pressure gradient correction to enforce non-divergence of the zonal/vertical mean flow.
+ * This amounts to simply subtracting the depth-averaged velocity from each u-point.
+ *
+ */
+void do_pressure_correct (real *** phi)
+{
+  int j,k;
+  real ** uvel = NULL;
+  real * udz = NULL;
+  real u_avg = 0;
+  
+  // Extract zonal velocity matrix
+  uvel = phi[idx_uvel];
+  
+  // We'll abuse the zonal velocity at the western edge of the domain,
+  // which is just zero everywhere, to serve as a work vector for
+  // calculating depth-integrated velocities
+  udz = uvel[0];
+  
+#pragma parallel
+  
+  // Loop through columns
+  for (j = 1; j < Nx; j ++)
+  {
+
+    // Implicit vertical diffusion coefficients
+    for (k = 0; k < Nz; k ++)
+    {
+      udz[k] = uvel[j][k] * dz_u[j][k];
+    }
+    
+    // Calculate depth-averaged velocity via Kahan summation to ensure numerical accuracy
+    u_avg = kahanSum(udz,Nz) / hb_psi[j];
+    
+    // Subtract average velocity from each u-point
+    for (k = 0; k < Nz; k ++)
+    {
+      uvel[j][k] -= u_avg;
+    }
+    
+  }
+  
+  // Zero zonal velocity at the western wall
+  for (k = 0; k < Nz; k ++)
+  {
+    uvel[0][k] = 0;
+  }
+  
+}
 
 
 
@@ -2230,7 +2287,7 @@ void printUsage (void)
      "  All matrix parameters should be formatted in column-major\n"
      "  order.\n"
      "  \n"
-     "  name               value\n"
+     "  name                  value\n"
      "  \n"
      "  Ntracs                Number of tracer variables in the simulation. Must be >3,\n"
      "                        as the first 3 tracers are reserved for zonal velocity,\n"
@@ -3240,14 +3297,23 @@ int main (int argc, char ** argv)
                 break;
             }
         }
-        
+      
+      
+      
         // Step 2: Add implicit vertical diffusion
         do_impl_diff(t,dt,phi_out);
-        
-        
+      
+      
+      
+      
+        // Step 3 (optional): apply zonal barotropic pressure gradient correction
+        do_pressure_correct(phi_out);
+      
+      
+      
 #pragma parallel
         
-        // Step 3: Enforce zero tendency where relaxation time is zero
+        // Step 4: Enforce zero tendency where relaxation time is zero
         for (i = 0; i < Ntracs; i ++)
         {
             for (j = 0; j < Nx; j ++)
@@ -3261,10 +3327,12 @@ int main (int argc, char ** argv)
                 }
             }
         }
-        
+      
+      
+      
 #pragma parallel
         
-        // Step 4 (optional): Calculate the residuals as an L2-norm between adjacent iterations
+        // Step 5 (optional): Calculate the residuals as an L2-norm between adjacent iterations
         if (checkConvergence)
         {
           targetReached = true;
@@ -3296,7 +3364,9 @@ int main (int argc, char ** argv)
           }
         }
       
-        // Step 5: If the time step has taken us past a save point (or multiple
+      
+      
+        // Step 6: If the time step has taken us past a save point (or multiple
         // save points), interpolate and write out the data
         while ((dt_s > 0) && (t >= t_next))
         {
@@ -3341,7 +3411,9 @@ int main (int argc, char ** argv)
             printf("%e, time = %f \n",res[idx_buoy],t/day);
             fflush(stdout);
         }
-        
+      
+      
+      
         // Copy the next iteration from phi_out back to phi_in,
         // ready for the next time step
         memcpy(phi_in_V,phi_out_V,Ntot*sizeof(real));

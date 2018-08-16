@@ -27,16 +27,25 @@ function setparams (local_home_dir,run_name)
 %%% TODO this definitely ought to appear later in this script
 
 
-  MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
+  
   %%% The number of biogeochemical classes are entered here. 
   modeltype = BGC_NONE; %%% This automatically defaults so that the model runs a size structured NPZD model
-  if modeltype
+  switch (modeltype)
+    case BGC_NPZD
+      MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
       MP = 5;
       MZ = 5;
       MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
       bio = MP+MZ+MD;
       disp(['Number of: (Phytoplankton, Zooplankton) = (',num2str(MP),', ', num2str(MZ),')']);
-  else
+    case BGC_NITRATEONLY
+      MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
+      MP = 0;
+      MZ = 0;
+      MD = 0;
+      bio = 0;
+    case BGC_NONE
+      MN = 0;
       MP = 0;
       MZ = 0;
       MD = 0;
@@ -260,7 +269,9 @@ function setparams (local_home_dir,run_name)
 
   %%% Additional tracers
   phi_init(Nphys+Nbgc+1,:,:) = reshape(dtr_init,[1 Nx Nz]);
-  
+  Nphys
+  Nbgc
+  Ntracs
   %%% Write to data file
   initFile = 'initFile.dat';  
   writeDataFile(fullfile(local_run_dir,initFile),phi_init);
@@ -516,8 +527,7 @@ function setparams (local_home_dir,run_name)
   % Wind Stress Curl
   figure(fignum)
   fignum = fignum + 1;
-  wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);
-  wsc'
+  wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);  
   plot(xx_psi(1:end-1),wsc)
   
   %%% Plot Buoyancy relaxation profile
