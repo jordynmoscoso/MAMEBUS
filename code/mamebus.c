@@ -1845,6 +1845,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_w = 0.5/w_dz_max;
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
+    
+//    printf("t = %f :: cfl_u = %f, cfl_w = %f, cfl_y = %f, cfl_z = %f \n",t,cfl_u,cfl_w,cfl_y,cfl_z);
   
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -1911,7 +1913,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                        // the hortizontal cell interfaces, or in the 'w' positions.
     real px[Nx][Nz];   // across-shore pressure gradient
     // real py[Nx][Nz];   // along-shore pressure gradient (this should be an input from setparams)
-    real alpha = -1e-4; // thermal expansion coefficient (negative give postive pressure during integration)
+    real alpha = 1e-4; // thermal expansion coefficient (negative gives postive pressure during integration)
     real b[Nx][Nz]; // the 'buoy' vector is actually temperature, so we need to convert to buoyancy (ie. g*alpha*buoy = b).
     real pz = 0; // placeholder for the vertical pressure gradient.
     
@@ -1937,6 +1939,11 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             pz = (b[j-1][k] + b[j][k])/2; // interpolate b onto the u grid points
             px[j][k] = 0.5*( (pa[j][k+1] - pa[j-1][k+1])*_dx + (pa[j][k] - pa[j-1][k])*_dx );
             px[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz;
+            
+            if (j == 1){
+                px[0][k] = px[1][k];
+            }
+            
         }
     }
     
@@ -1946,17 +1953,21 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     for (j = 0; j < Nx; j++){
         for (k = 0; k < Nz; k++){
             du_dt[j][k] += f0*vvel[j][k] - px[j][k];
-            dv_dt[j][k] += -f0*uvel[j][k]; // TO DO add along-shore pressure gradient term
+            dv_dt[j][k] += -f0*uvel[j][k]; //- stau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
+//            printf("j = %d, k = %d, uvel[j][k] = %f \n",j,k,uvel[j][k]);
         }
     }
     
+    // Should bottom momentum fluxes be in the implicit diffusion term?
+    
     // Add surface/bottom momentum fluxes
-    for (j = 0; j < Nx; j++){
-        du_dt[j][0] += r_bbl*uvel[j][0]; // bottom momentum flux
-        dv_dt[j][0] += r_bbl*vvel[j][0];
-        
-        du_dt[j][Nz] += stau[j]/rho0; // surface momentum flux due to wind forcing
-    }
+//    for (j = 0; j < Nx; j++){
+//        du_dt[j][0] += r_bbl*uvel[j][0]; // bottom momentum flux
+//        dv_dt[j][0] += r_bbl*vvel[j][0];
+//
+//        du_dt[j][Nz] += stau[j]/rho0; // surface momentum flux due to wind forcing
+//
+//    }
   
     
 
@@ -3385,7 +3396,6 @@ int main (int argc, char ** argv)
       
         // Step 3 (optional): apply zonal barotropic pressure gradient correction
         do_pressure_correct(phi_out);
-      
       
       
 #pragma parallel
