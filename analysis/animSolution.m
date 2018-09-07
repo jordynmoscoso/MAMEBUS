@@ -165,59 +165,19 @@ ncase = 1;
 
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat'])
-      phi = readOutputFile(data_file,Nx,Nz);       
-      size(phi)
+      phi = readOutputFile(data_file,Nx,Nz);
       %%% Plot the tracer     
       switch (var_id)
         case 0 %%% Buoyancy (temperature)
-          [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
+%           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
+          pcolor(XX_tr,ZZ_tr,phi)
+          shading interp
           set(gca, 'CLim', [0, 20]);
+          pause
         case 1 %%% Depth tracer
           [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
           set(gca, 'CLim', [-H,0]);
         case 2 %%% Nitrate
-              buoy_file = fullfile(dirpath,['TRAC',num2str(0),'_n=',num2str(n),'.dat']);    
-              temp = readOutputFile (buoy_file,Nx,Nz);   
-              a_temp = 0.6;
-              b_temp = 1.066;
-              c_temp = 1;
-              alpha = 0.025; % s^-1 (W/m^2)^-1
-              monod = 0;
-    
-              kw = 0.04;
-              kc = 0.03;
-              efold = 30;
-              I0 = 340;
-              K = kw + kc.*phi;
-              
-              IR = I0*exp(K.*ZZ_tr/efold);
-              
-%               figure(100)
-%               pcolor(XX_tr,ZZ_tr,IR)
-%               view(2)
-%               shading interp
-              
-              eu_depth = 30*log(3.4./IR(:,end));
-              
-              t_uptake = a_temp.*b_temp.^(c_temp.*temp);
-              lk = t_uptake./alpha;
-              l_uptake = IR./sqrt(IR.^2 + lk.^2);
-              
-              
-              uptake = (l_uptake.*t_uptake).*phi;
-%               [C h] = contourf(XX_tr,ZZ_tr,phi,10);
-              
-             [C h] = contourf(XX_tr,ZZ_tr,uptake,10);
-%              hold on
-%              plot(XX_tr,eu_depth,'w','LineWidth',2)
-%              hold off
-%              axis([0 3e5 -600 0])
-             set(0,'DefaultAxesFontSize',14)
-             set(gca, 'CLim', [0,14]);
-            
-             nstore = (sum(phi(sl_ind)))./(denom(1));
-             Nstore = [Nstore nstore];
-             tsave = [tsave t];
              
       end
 %       clabel(C,h,'Color','w');  
@@ -269,8 +229,7 @@ ncase = 1;
     ylabel('Depth (m)');        
     axis tight;
     set(gca,'XTick',0:Lx/5:Lx);
-    set(gca,'YTick',-H:H/5:0);
-    title(strcat('NPP  mmol N/(m^3 d)'));           
+    set(gca,'YTick',-H:H/5:0);       
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 
