@@ -254,8 +254,10 @@ ncase = 1;
       psi_r_lim = max(psi_r_lim,-limval);
 %       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
       figure(1)
-      pcolor(XX_psi,ZZ_psi,psi_r_lim);
-      shading interp;     
+%       pcolor(XX_psi,ZZ_psi,psi_r_lim);
+      [SS,XX] = meshgrid(-1:1/Nz:0,XX_psi(:,1));
+      pcolor(XX,SS,psi_r_lim)
+%       shading interp;     
       colormap redblue;
       h=colorbar;        
       caxis([-limval limval]);
