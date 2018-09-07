@@ -27,6 +27,9 @@
 // TODO determine psim from uvel if using TTTW
 // TODO need to add inputs for along-shore tracer gradients and pressure gradients
 // TODO need to add along-slope advection
+// TODO I think the multi-step schemes may cause issues, as at intermediate steps the tracers will be advected by a divergent velocity field - best to calculate mean streamfunction before rktvd call?
+// TODO we might need Sasha's high-order extrapolation to calculate buoyancy gradients close to the slope
+// TODO it may be best to think about splitting mamebus.c into a global variables file, a main() file, a tendency calculation file, and a BGC file (or more? one file for each function?)
 
 
 //////////////////////////////////
