@@ -29,7 +29,7 @@ function setparams (local_home_dir,run_name)
 
   
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs a size structured NPZD model
+  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
   switch (modeltype)
     case BGC_NPZD
       MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
@@ -109,6 +109,7 @@ function setparams (local_home_dir,run_name)
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
   Hsml = 50; %%% Surface mixed layer thickness
   Hbbl = 50; %%% Bottom boundary layer thickness
+  r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   %%% Biogeochemical Parameters
 
@@ -189,6 +190,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'theta_b',theta_b,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hsml',Hsml,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'r_bbl',r_bbl,PARM_REALF);
   
   %%% Indicate number of phytoplankton, zooplankton and detrital pools
   PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
@@ -436,12 +438,6 @@ function setparams (local_home_dir,run_name)
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
-  
-  
-  
-  
-  
-  
   
   
   
