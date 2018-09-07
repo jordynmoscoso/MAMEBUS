@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 39
+#define NPARAMS 40
 
 
 
@@ -50,6 +50,7 @@ bool use_bbl = true;
 real Hsml = 50.0;
 real Hbbl = 50.0;
 int tlength = 0;
+real r_bbl = 0; // drag coefficient
 
 // Biogeochemical parameters
 uint bgcModel = 0;
@@ -62,7 +63,7 @@ int nbgc; // Counts number of biogeochemical parameters
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
 real year = 31449600;             // Seconds in a year (52 7-day weeks)
-
+real grav = 9.8;                     // m/s^2 (gravity)
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
@@ -125,7 +126,7 @@ uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
 uint advectionScheme = ADVECTION_KT00;
 
 // Momentum scheme
-uint momentumScheme = MOMENTUM_NONE;
+uint momentumScheme = MOMENTUM_TTTW;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -305,6 +306,7 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
         }
       }
     }
+    
   
 }
 
@@ -1886,31 +1888,77 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
  */
 void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 {
-  // Looping variables
-  int i, j, k;
+    // Looping variables
+    int i, j, k;
   
-  // Pointers to velocity and buoyancy matrices
-  real ** uvel = NULL;
-  real ** vvel = NULL;
-  real ** buoy = NULL;
-  real ** du_dt = NULL;
-  real ** dv_dt = NULL;
+    // Pointers to velocity and buoyancy matrices
+    real ** uvel = NULL;
+    real ** vvel = NULL;
+    real ** buoy = NULL;
+    real ** du_dt = NULL;
+    real ** dv_dt = NULL;
 
-  
-  
 
-  // Pointers to velocity and buoyancy matrices
-  uvel = phi[idx_uvel];
-  vvel = phi[idx_vvel];
-  buoy = phi[idx_buoy];
-  du_dt = dphi_dt[idx_uvel];
-  dv_dt = dphi_dt[idx_vvel];
+    // Pointers to velocity and buoyancy matrices
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
+    buoy = phi[idx_buoy];
+    du_dt = dphi_dt[idx_uvel];
+    dv_dt = dphi_dt[idx_vvel];
   
+    // Working variables and matrices
+    real pa[Nx][Nz+1]; // Working matrix for the pressure. Pressure is located
+                       // the hortizontal cell interfaces, or in the 'w' positions.
+    real px[Nx][Nz];   // across-shore pressure gradient
+    // real py[Nx][Nz];   // along-shore pressure gradient (this should be an input from setparams)
+    real alpha = -1e-4; // thermal expansion coefficient (negative give postive pressure during integration)
+    real b[Nx][Nz]; // the 'buoy' vector is actually temperature, so we need to convert to buoyancy (ie. g*alpha*buoy = b).
+    real pz = 0; // placeholder for the vertical pressure gradient.
+    
   
+    // Calculate the baroclinic pressure from the buoyancy profile
+    for (j = 0; j < Nx; j++){
+        for (k = Nz; k >= 0; k--){
+            if (k == Nz){
+                pa[j][k] = 0; // set the surface pressure to zero.
+            }
+            else{
+                b[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
+                pa[j][k] = pa[j][k+1] - b[j][k]/_dz_phi[j][k];
+            }
+        }
+    }
+    
+    
+    
+    // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary.
+    for (j = 1; j < Nx; j++){
+        for (k = 0; k < Nz; k++){
+            pz = (b[j-1][k] + b[j][k])/2; // interpolate b onto the u grid points
+            px[j][k] = 0.5*( (pa[j][k+1] - pa[j-1][k+1])*_dx + (pa[j][k] - pa[j-1][k])*_dx );
+            px[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz;
+        }
+    }
+    
+    
+    
+    // Calculate the tendency due to the coriolis force and add to the pressure term
+    for (j = 0; j < Nx; j++){
+        for (k = 0; k < Nz; k++){
+            du_dt[j][k] += f0*vvel[j][k] - px[j][k];
+            dv_dt[j][k] += -f0*uvel[j][k]; // TO DO add along-shore pressure gradient term
+        }
+    }
+    
+    // Add surface/bottom momentum fluxes
+    for (j = 0; j < Nx; j++){
+        du_dt[j][0] += r_bbl*uvel[j][0]; // bottom momentum flux
+        dv_dt[j][0] += r_bbl*vvel[j][0];
+        
+        du_dt[j][Nz] += stau[j]/rho0; // surface momentum flux due to wind forcing
+    }
   
-  
-  // TODO add tendencies due to Coriolis force, baroclinic pressure, surface/bottom momentum fluxes
-  
+    
 
 }
 
@@ -2247,6 +2295,8 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     FILE * outfd = NULL;
     
     // Calculate residual streamfunction
+    real ** uvel = NULL;
+    real ** vvel = NULL;
     uvel = phi[idx_uvel];
     vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
@@ -2362,6 +2412,7 @@ void printUsage (void)
      "                        If equal to 0 then no SML is imposed\n"
      "  Hbbl                  Depth of the bottom boundary layer. Must be >=0.\n"
      "                        If equal to 0 then no BBL is imposed\n"
+     "  r_bbl                 Drag coefficient in the bottom boundary layer \n"
      "  \n"
      "  h_c                   Depth parameter controlling the range of depths over\n"
      "                        which the vertical coordinate the coordinate is\n"
@@ -2550,6 +2601,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
     setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
     setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
+    setParam(params,paramcntr++,"r_bbl","%lf",&r_bbl,true);
   
     // Sigma-coordinate parameters
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
