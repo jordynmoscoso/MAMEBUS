@@ -172,11 +172,12 @@ ncase = 1;
 %           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
-          set(gca, 'CLim', [0, 20]);
-          pause
+          colorbar
+%           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
-          [C h] = contourf(XX_tr,ZZ_tr,phi,-(0:200:H));
-          set(gca, 'CLim', [-H,0]);
+          pcolor(XX_tr,ZZ_tr,phi)
+          shading interp
+          colorbar
         case 2 %%% Nitrate
              
       end
