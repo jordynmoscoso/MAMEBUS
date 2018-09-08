@@ -173,13 +173,16 @@ ncase = 1;
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
+          caxis([-1 1])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
-        case 2 %%% Nitrate
-             
+        case 2 %%% Buoyancy
+          pcolor(XX_tr,ZZ_tr,phi)
+          shading interp
+          colorbar
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
