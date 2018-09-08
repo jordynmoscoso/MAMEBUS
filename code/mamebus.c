@@ -1900,7 +1900,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     real ** du_dt = NULL;
     real ** dv_dt = NULL;
 
-
     // Pointers to velocity and buoyancy matrices
     uvel = phi[idx_uvel];
     vvel = phi[idx_vvel];
@@ -1913,14 +1912,18 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                        // the hortizontal cell interfaces, or in the 'w' positions.
     real px[Nx][Nz];   // across-shore pressure gradient
     // real py[Nx][Nz];   // along-shore pressure gradient (this should be an input from setparams)
-    real alpha = 1e-4; // thermal expansion coefficient (negative gives postive pressure during integration)
+    real alpha = 1e-4; // thermal expansion coefficient
     real b[Nx][Nz]; // the 'buoy' vector is actually temperature, so we need to convert to buoyancy (ie. g*alpha*buoy = b).
     real pz = 0; // placeholder for the vertical pressure gradient.
     
   
+    windInterp(t); // interpolate the wind stress
+    
     // Calculate the baroclinic pressure from the buoyancy profile
-    for (j = 0; j < Nx; j++){
-        for (k = Nz; k >= 0; k--){
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = Nz; k >= 0; k--)
+        {
             if (k == Nz){
                 pa[j][k] = 0; // set the surface pressure to zero.
             }
@@ -1934,8 +1937,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     
     // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary.
-    for (j = 1; j < Nx; j++){
-        for (k = 0; k < Nz; k++){
+    for (j = 1; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
             pz = (b[j-1][k] + b[j][k])/2; // interpolate b onto the u grid points
             px[j][k] = 0.5*( (pa[j][k+1] - pa[j-1][k+1])*_dx + (pa[j][k] - pa[j-1][k])*_dx );
             px[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz;
@@ -1950,24 +1955,28 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     
     // Calculate the tendency due to the coriolis force and add to the pressure term
-    for (j = 0; j < Nx; j++){
-        for (k = 0; k < Nz; k++){
-            du_dt[j][k] += f0*vvel[j][k] - px[j][k];
-            dv_dt[j][k] += -f0*uvel[j][k]; //- stau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
-//            printf("j = %d, k = %d, uvel[j][k] = %f \n",j,k,uvel[j][k]);
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            du_dt[j][k] = f0*vvel[j][k]; // - px[j][k];
+            dv_dt[j][k] = -f0*uvel[j][k]; //- stau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
         }
     }
     
     // Should bottom momentum fluxes be in the implicit diffusion term?
     
     // Add surface/bottom momentum fluxes
-//    for (j = 0; j < Nx; j++){
-//        du_dt[j][0] += r_bbl*uvel[j][0]; // bottom momentum flux
-//        dv_dt[j][0] += r_bbl*vvel[j][0];
-//
-//        du_dt[j][Nz] += stau[j]/rho0; // surface momentum flux due to wind forcing
-//
-//    }
+    for (j = 0; j < Nx; j++)
+    {
+        du_dt[j][0] += r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
+        dv_dt[j][0] += r_bbl*vvel[j][0]/(ZZ_w[j][1] - ZZ_w[j][0]);
+
+        dv_dt[j][Nz-1] += stau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
+
+    }
+    
+//    printf("dphi_dt[0][10][Nz-1] = %f, du_dt[10][Nz-1] = %f, stau[j] = %f; \n",dphi_dt[0][10][Nz-1],du_dt[10][Nz-1],stau[10]);
   
     
 
