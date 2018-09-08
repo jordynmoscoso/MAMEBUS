@@ -89,7 +89,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 0.1*t1year;
+  outputFreq = 1e-3*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -145,6 +145,7 @@ function setparams (local_home_dir,run_name)
   Ltopog = 25*m1km;
   Htopog = H-shelfdepth;  
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+  hb = H*ones(size(hb));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
@@ -315,7 +316,7 @@ function setparams (local_home_dir,run_name)
 
   
   
-  
+ 
   
   
   
