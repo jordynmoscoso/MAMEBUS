@@ -68,7 +68,7 @@ real grav = 9.8;                     // m/s^2 (gravity)
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
 real * hb_in = NULL;          // Ocean depth
-real ** tau = NULL;           // Surface wind stress
+real * tau = NULL;           // Surface wind stress
 real ** Kgm_psi_ref = NULL;   // Reference GM diffusivity
 real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
@@ -77,7 +77,6 @@ real *** T_relax = NULL;      // Tracer relaxation time scale
 real * bgc_params = NULL;     // Vector containing biogeochemical parameters, all read in as a vector for
 // storage purposes and to make code adapable for a single nitrate model and NPZ model
 
-real * stau = NULL;                  // Seasonal tau
 
 // Numerical parameters
 real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
@@ -120,7 +119,7 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping scheme
-uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
+uint timeSteppingScheme = TIMESTEPPING_RKTVD1;
 
 // Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
@@ -192,44 +191,13 @@ real * db_dz = NULL;
 /**
  * windInterp
  *
- * TODO I don't like the global variable for stau
+ * TODO I don't like the global variable for tau
  * TODO need to come up with a more general approach to time-variable forcing,
  *
  */
 void windInterp (const real t)
 {
-    int j = 0;
-    int spec_week = 0;
-    int spec_year = 0;
-    real hold = 0;
-    real week = day*7;
-    
-    // Determine the year and normalize to determine the date within a year
-    spec_year = floor(t/year);
-    if (spec_year >= 1)
-    {
-        hold = (t - spec_year*year)/week;     // Determine the date in a year
-        // based on week fraction.
-    }
-    else
-    {
-        hold = t/week;
-    }
-    
-    spec_week = floor(hold);
 
-    // Linearly interpolate based on the current time
-    for (j = 0; j < Nx; j++)
-    {
-        if (spec_week == 51)
-        {
-            stau[j] = (tau[0][j] - tau[spec_week][j])*(hold-spec_week) + tau[spec_week][j];
-        }
-        else
-        {
-            stau[j] = (tau[spec_week+1][j] - tau[spec_week][j])*(hold - spec_week) + tau[spec_week][j];
-        }
-    }
   
 
 }
@@ -271,7 +239,6 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
     if (momentumScheme == MOMENTUM_NONE)
     {
       
-      windInterp(t);
       
 #pragma parallel
       
@@ -282,7 +249,7 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
           {
               z = ZZ_psi[j][k];
               
-              psi_m[j][k] = stau[j]/(rho0*f0);
+              psi_m[j][k] = tau[j]/(rho0*f0);
               
               if (use_sml && (z > -Hsml))
               {
@@ -1916,8 +1883,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     real b[Nx][Nz]; // the 'buoy' vector is actually temperature, so we need to convert to buoyancy (ie. g*alpha*buoy = b).
     real pz = 0; // placeholder for the vertical pressure gradient.
     
-  
-    windInterp(t); // interpolate the wind stress
     
     // Calculate the baroclinic pressure from the buoyancy profile
     for (j = 0; j < Nx; j++)
@@ -1959,8 +1924,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         for (k = 0; k < Nz; k++)
         {
-            du_dt[j][k] = f0*vvel[j][k]; // - px[j][k];
-            dv_dt[j][k] = -f0*uvel[j][k]; //- stau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
+            du_dt[j][k] = f0*vvel[j][k] - px[j][k];
+            dv_dt[j][k] = -f0*uvel[j][k]; //- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
         }
     }
     
@@ -1969,14 +1934,20 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     // Add surface/bottom momentum fluxes
     for (j = 0; j < Nx; j++)
     {
-        du_dt[j][0] += r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
-        dv_dt[j][0] += r_bbl*vvel[j][0]/(ZZ_w[j][1] - ZZ_w[j][0]);
+        du_dt[j][0] -= r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
+        dv_dt[j][0] -= r_bbl*vvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]);
 
-        dv_dt[j][Nz-1] += stau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
+
+        dv_dt[j][Nz-1] += tau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
 
     }
     
-//    printf("dphi_dt[0][10][Nz-1] = %f, du_dt[10][Nz-1] = %f, stau[j] = %f; \n",dphi_dt[0][10][Nz-1],du_dt[10][Nz-1],stau[10]);
+    for (k = 0; k < Nz; k++) // u tendencies are zero at the western wall
+    {
+        du_dt[0][k] = 0;
+    }
+    
+//    printf("dphi_dt[0][10][Nz-1] = %f, du_dt[10][Nz-1] = %f, tau[j] = %f; \n",dphi_dt[0][10][Nz-1],du_dt[10][Nz-1],tau[10]);
   
     
 
@@ -2824,10 +2795,9 @@ int main (int argc, char ** argv)
     VECALLOC(targetRes,Ntracs);
     MATALLOC3(phi_init,Ntracs,Nx,Nz);
     VECALLOC(hb_in,Nx+2);
-    VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
+    VECALLOC(tau,Nx+1);  // REMOVED STAU
     VECALLOC(bgc_params,nbgc);
     
-    MATALLOC(tau,tlength,Nx+1);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
@@ -2911,7 +2881,7 @@ int main (int argc, char ** argv)
     // Read input matrices and vectors
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
           ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-          ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
+          ( (strlen(tauFile) > 0)         &&  !readVector(tauFile,tau,Nx+1,stderr) ) ||
           ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
           ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
           ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
