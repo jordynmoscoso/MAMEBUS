@@ -89,7 +89,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1e-3*t1year;
+  outputFreq = 1e-2*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -108,7 +108,7 @@ function setparams (local_home_dir,run_name)
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
   Hsml = 50; %%% Surface mixed layer thickness
-  Hbbl = 50; %%% Bottom boundary layer thickness
+  Hbbl = 60; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   %%% Biogeochemical Parameters
@@ -126,8 +126,8 @@ function setparams (local_home_dir,run_name)
   %%% Grids  
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  Nx = 40; %%% Number of latitudinal grid points 
-  Nz = 40; %%% Number of vertical grid points
+  Nx = 100; %%% Number of latitudinal grid points 
+  Nz = 100; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
@@ -307,7 +307,9 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   %%% Load in the surface wind stress.
-  [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
+%   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
+  tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+  tlength = length(tau);
   
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
@@ -542,7 +544,7 @@ function setparams (local_home_dir,run_name)
   % Diapycnal Diffusivities
   figure(fignum)
   subplot(1,2,1)
-  pcolor(XX_psi,ZZ_psi,Kdia)
+  contourf(XX_psi,ZZ_psi,Kdia,10)
   title('Diapycnal diffusivity, \kappa_{\nu}')
   shading interp
   colorbar
