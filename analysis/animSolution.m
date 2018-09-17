@@ -164,7 +164,7 @@ ncase = 1;
     if (plot_trac)    
 
       %%% Data file name
-      data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat'])
+      data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
       phi = readOutputFile(data_file,Nx,Nz);
       %%% Plot the tracer     
       switch (var_id)
@@ -173,12 +173,13 @@ ncase = 1;
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
-          caxis([-1 1])
+          caxis([-.01 .01])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
+          caxis([-.1 .1])
         case 2 %%% Buoyancy
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
