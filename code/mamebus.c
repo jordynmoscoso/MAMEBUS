@@ -1818,7 +1818,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
     //    printf(" CFL condition is %f\n", cfl_phys);
-    cfl_dt = cfl_phys;
+    cfl_dt = 0.5*cfl_phys;
     
     ////////////////////////////////
     ///// END CALCULATING CFLS /////
@@ -1887,14 +1887,16 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     // Calculate the baroclinic pressure from the buoyancy profile
     for (j = 0; j < Nx; j++)
     {
-        for (k = Nz; k >= 0; k--)
+        for (k = Nz+1; k >= 0; k--)
         {
-            if (k == Nz){
+            if (k == Nz+1){
                 pa[j][k] = 0; // set the surface pressure to zero.
             }
             else{
                 b[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
-                pa[j][k] = pa[j][k+1] - b[j][k]/_dz_phi[j][k];
+                pa[j][k] = pa[j][k+1] - b[j][k]/(ZZ_w[j][k+1] - ZZ_w[j][k]);
+                
+                printf("Pressure at j = %d, k = %d, is %f, dz = %f \n: ",j,k,pa[j][k],_dz_w[j][k]);
             }
         }
     }
@@ -1907,11 +1909,11 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         for (k = 0; k < Nz; k++)
         {
             pz = (b[j-1][k] + b[j][k])/2; // interpolate b onto the u grid points
-            px[j][k] = 0.5*( (pa[j][k+1] - pa[j-1][k+1])*_dx + (pa[j][k] - pa[j-1][k])*_dx );
-            px[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz;
+            px[j][k] = 0.5*( (pa[j][k+1] - pa[j-1][k+1])*_dx + (pa[j][k] - pa[j-1][k])*_dx ); // interpolated to u,v grid points
+            px[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
             
             if (j == 1){
-                px[0][k] = px[1][k];
+                px[0][k] = px[1][k]; // should we do this?
             }
             
         }
