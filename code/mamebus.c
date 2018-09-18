@@ -169,6 +169,9 @@ real ** Kgm_w = NULL;
 real ** Kiso_u = NULL;        // Isopycnal diffusivity
 real ** Kiso_w = NULL;
 real ** Kdia_w = NULL;        // Diapycnal diffusivity
+real ** BPa = NULL;           // Baroclinic Pressure
+real ** BPx = NULL;           // Baroclinic Pressure gradient
+real ** BBy = NULL;           // Baroclinic buoyancy
 
 // Boundary layer work arrays
 uint * k_sml = NULL;
@@ -1818,7 +1821,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
     //    printf(" CFL condition is %f\n", cfl_phys);
-    cfl_dt = 0.5*cfl_phys;
+    cfl_dt = cfl_phys;
     
     ////////////////////////////////
     ///// END CALCULATING CFLS /////
@@ -1875,13 +1878,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     dv_dt = dphi_dt[idx_vvel];
   
     // Working variables and matrices
-    real pa[Nx][Nz+1]; // Working matrix for the pressure. Pressure is located
-                       // the hortizontal cell interfaces, or in the 'w' positions.
-    real px[Nx][Nz];   // across-shore pressure gradient
-    // real py[Nx][Nz];   // along-shore pressure gradient (this should be an input from setparams)
-    real alpha = 1e-4; // thermal expansion coefficient
-    real b[Nx][Nz]; // the 'buoy' vector is actually temperature, so we need to convert to buoyancy (ie. g*alpha*buoy = b).
     real pz = 0; // placeholder for the vertical pressure gradient.
+    real alpha = 1e-4; // thermal expansion coefficient
     
     
     // Calculate the baroclinic pressure from the buoyancy profile
@@ -1890,13 +1888,13 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         for (k = Nz+1; k >= 0; k--)
         {
             if (k == Nz+1){
-                pa[j][k] = 0; // set the surface pressure to zero.
+                BPa[j][k] = 0; // set the surface pressure to zero.
             }
             else{
-                b[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
-                pa[j][k] = pa[j][k+1] - b[j][k]/(ZZ_w[j][k+1] - ZZ_w[j][k]);
+                BBy[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
+                BPa[j][k] = BPa[j][k+1] - BBy[j][k]/_dz_w[j][k];
                 
-                printf("Pressure at j = %d, k = %d, is %f, dz = %f \n: ",j,k,pa[j][k],_dz_w[j][k]);
+//                printf("Pressure at j = %d, k = %d, is %f, dz = %f \n: ",j,k,BPa[j][k],_dz_w[j][k]);
             }
         }
     }
@@ -1908,12 +1906,12 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         for (k = 0; k < Nz; k++)
         {
-            pz = (b[j-1][k] + b[j][k])/2; // interpolate b onto the u grid points
-            px[j][k] = 0.5*( (pa[j][k+1] - pa[j-1][k+1])*_dx + (pa[j][k] - pa[j-1][k])*_dx ); // interpolated to u,v grid points
-            px[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
+            pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
+            BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
+            BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
             
             if (j == 1){
-                px[0][k] = px[1][k]; // should we do this?
+                BPx[0][k] = BPx[1][k]; // should we do this?
             }
             
         }
@@ -1926,7 +1924,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         for (k = 0; k < Nz; k++)
         {
-            du_dt[j][k] = f0*vvel[j][k] - px[j][k];
+            du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
             dv_dt[j][k] = -f0*uvel[j][k]; //- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
         }
     }
@@ -2858,6 +2856,9 @@ int main (int argc, char ** argv)
     MATALLOC(Kiso_u,Nx+1,Nz);
     MATALLOC(Kiso_w,Nx,Nz+1);
     MATALLOC(Kdia_w,Nx,Nz+1);
+    MATALLOC(BPa,Nx,Nz+1);
+    MATALLOC(BPx,Nx,Nz);
+    MATALLOC(BBy,Nx,Nz);
     
     // Boundary layer work arrays
     k_sml = malloc((Nx+1)*sizeof(uint));
