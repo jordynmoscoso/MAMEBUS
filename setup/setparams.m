@@ -337,15 +337,15 @@ function setparams (local_home_dir,run_name)
   vvel_relax = vvel_init;
   buoy_relax = buoy_init;
   T_relax_buoy = -ones(Nx,Nz);
-%   T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
-%   T_relax_buoy(XX_tr>=L_relax) = -1;
+  T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
+  T_relax_buoy(XX_tr>=L_relax) = -1;
   
   %%% Add relaxation to an atmospheric temperature profile
   buoy_surf_max = 20;
   buoy_surf_min = 15;
   buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
   buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
-%   T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
+  T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
   
   %%% Depth tracer relaxation  
   dtr_relax = dtr_init;
