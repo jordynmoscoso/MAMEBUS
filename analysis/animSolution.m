@@ -171,9 +171,10 @@ ncase = 1;
         case 0 %%% Buoyancy (temperature)
 %           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
           pcolor(XX_tr,ZZ_tr,phi)
+          phi(1,1)
           shading interp
           colorbar
-          caxis([-.01 .01])
+%           caxis([-.01 .01])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           pcolor(XX_tr,ZZ_tr,phi)
