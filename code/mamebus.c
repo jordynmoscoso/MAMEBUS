@@ -171,7 +171,7 @@ real ** Kiso_w = NULL;
 real ** Kdia_w = NULL;        // Diapycnal diffusivity
 real ** BPa = NULL;           // Baroclinic Pressure
 real ** BPx = NULL;           // Baroclinic Pressure gradient
-real ** BBy = NULL;           // Baroclinic buoyancy
+real ** BBy = NULL;           // Buoyancy
 
 // Boundary layer work arrays
 uint * k_sml = NULL;
@@ -1924,7 +1924,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         for (k = 0; k < Nz; k++)
         {
-            du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
+            du_dt[j][k] = f0*vvel[j][k]; // - BPx[j][k];
             dv_dt[j][k] = -f0*uvel[j][k]; //- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
         }
     }
