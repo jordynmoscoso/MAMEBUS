@@ -309,6 +309,9 @@ function setparams (local_home_dir,run_name)
   %%% Load in the surface wind stress.
 %   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
   tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+%   Lmax = 300*m1km;
+%   tau = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
+%   tau(xx_psi<50) = 0;
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -345,7 +348,7 @@ function setparams (local_home_dir,run_name)
   buoy_surf_min = 15;
   buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
   buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
-  T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
+  T_relax_buoy((xx_tr>=L_relax),Nz) = 1*t1day; 
   
   %%% Depth tracer relaxation  
   dtr_relax = dtr_init;
