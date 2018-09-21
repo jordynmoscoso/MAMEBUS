@@ -29,7 +29,7 @@ function setparams (local_home_dir,run_name)
 
   
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs a size structured NPZD model
+  modeltype = BGC_NITRATEONLY; %%% This automatically defaults so that the model runs a size structured NPZD model
   switch (modeltype)
     case BGC_NPZD
       MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
@@ -89,7 +89,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 0.1*t1year;
+  outputFreq = 1*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    

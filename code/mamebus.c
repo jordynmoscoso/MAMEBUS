@@ -119,7 +119,7 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping scheme
-uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
+uint timeSteppingScheme = TIMESTEPPING_RKTVD1;
 
 // Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
@@ -1297,8 +1297,8 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 {
                     
                     // Temperature and Irradiance
-                    T = phi[0][j][k];    // temperature in grid box
-                    N = phi[2][j][k];
+                    T = phi[2][j][k];    // temperature in grid box
+                    N = phi[3][j][k];
                     
                     // Calculate the tendency for the single nitrate model
                     r_flux = single_nitrate(t,j,k,phi,dphi_dt,N,T,a_temp,b_temp,c_temp,alpha,monod,r_flux);
@@ -2245,6 +2245,8 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     char nstr[MAX_PARAMETER_FILENAME_LENGTH];
     char istr[MAX_PARAMETER_FILENAME_LENGTH];
     FILE * outfd = NULL;
+    real ** uvel = NULL;
+    real ** vvel = NULL;
     
     // Calculate residual streamfunction
     uvel = phi[idx_uvel];
