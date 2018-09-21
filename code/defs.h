@@ -21,7 +21,8 @@
 // Biogeochemical method identifiers
 #define BGC_NONE 0              // No biogeochemistry
 #define BGC_NITRATEONLY 1       // Single nitrate model
-#define BGC_NPZD 2              // Size structured NPZD model
+#define BGC_NPZD 2              // NPZD model
+#define BGC_SSEM 3              // Size structured ecosystem model
 
 // Tracer advection scheme identifiers
 #define ADVECTION_CENTERED 0    // Fluxes based on mean phi at cell boundaries

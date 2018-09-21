@@ -23,7 +23,7 @@ switch (model_type)
     %%%%%%%%%%%%%%%%%%%% Nitrate %%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    case 0 %%% Nitrate Only Model
+    case 1 %%% Nitrate Only Model
         a_temp = 0.6/t1day;
         b_temp = 1.066;
         c_temp = 1;
@@ -44,7 +44,7 @@ switch (model_type)
     %%%%%%%%%%%%%%%%%%%%% NPZ %%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    case 1 %%% Size Structured NPZ model based on Banas
+    case 3 %%% Size Structured NPZ model based on Banas
         nparams = 0; 
         
         % Zooplankton Spectra

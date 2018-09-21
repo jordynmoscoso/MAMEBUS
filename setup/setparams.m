@@ -29,9 +29,9 @@ function setparams (local_home_dir,run_name)
 
   
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+  modeltype = BGC_NITRATEONLY; %%% This automatically defaults so that the model runs without biogeochemistry
   switch (modeltype)
-    case BGC_NPZD
+    case BGC_SSEM
       MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
       MP = 5;
       MZ = 5;
@@ -107,8 +107,8 @@ function setparams (local_home_dir,run_name)
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 100; %%% Surface mixed layer thickness
-  Hbbl = 100; %%% Bottom boundary layer thickness
+  Hsml = 60; %%% Surface mixed layer thickness
+  Hbbl = 60; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   %%% Biogeochemical Parameters
@@ -134,7 +134,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 200;
+  shelfdepth = 150;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -145,7 +145,7 @@ function setparams (local_home_dir,run_name)
   Ltopog = 25*m1km;
   Htopog = H-shelfdepth;  
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
-  hb = H*ones(size(hb));
+%   hb = H*ones(size(hb));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
@@ -209,7 +209,7 @@ function setparams (local_home_dir,run_name)
         [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         
         disp('Nitrate only')
-      case BGC_NPZD
+      case BGC_SSEM
         [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         disp('NPZD')
         %%% Store phytoplankton size and zooplankton size to determine what size
@@ -263,7 +263,7 @@ function setparams (local_home_dir,run_name)
       case BGC_NITRATEONLY
           phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
           phi_init(4,:,:) = reshape(bgc_init,[1,Nx,Nz]);
-      case BGC_NPZD
+      case BGC_SSEM
           bgc_tracs = MP + MZ + MD + 1;
           for ii = 1:bgc_tracs
               phi_init(ii+2,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
@@ -367,7 +367,7 @@ function setparams (local_home_dir,run_name)
       case BGC_NITRATEONLY
           phi_relax_all(3,:,:) = reshape(bgc_relax,[1 Nx Nz]);
           phi_relax_all(4,:,:) = reshape(bgc_relax,[1 Nx Nz]);
-      case BGC_NPZD
+      case BGC_SSEM
           phi_relax_all(3:end,:,:) = reshape(bgc_relax,[Nbgc Nx Nz]);
   end
   phi_relax_all(Nphys+Nbgc+1,:,:) = reshape(dtr_relax,[1 Nx Nz]);
@@ -382,7 +382,7 @@ function setparams (local_home_dir,run_name)
       case BGC_NITRATEONLY
           T_relax_all(3,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
           T_relax_all(4,:,:) = -ones(1,Nx,Nz); % Total dye conserved
-      case BGC_NPZD
+      case BGC_SSEM
           T_relax_all(3:end,:,:) = -ones(Nbgc,Nx,Nz);
   end
   T_relax_all(Nphys+Nbgc+1,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);

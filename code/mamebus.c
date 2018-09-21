@@ -119,13 +119,13 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping scheme
-uint timeSteppingScheme = TIMESTEPPING_RKTVD1;
+uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
 
 // Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
 
 // Momentum scheme
-uint momentumScheme = MOMENTUM_TTTW;
+uint momentumScheme = MOMENTUM_NONE;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -976,17 +976,101 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-
-
-
-
-
-
-
-
-
-
 void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
+           int NMAX, real N, real T,
+           real lp, real * lz, real vmax, real kn, real gmax, real kp)
+{
+    int i;                  // counters
+    
+    real tref = 20;         // Reference temperature
+    real qsw = 340;         // surface irradiance
+    real r = 0.05;          // temperature dependence
+    real kpar = 0;          // light attenuation
+    real ir = 0;            // irradiance profile in cell
+    real temp = 0;          // temperature coefficient
+    real atten = 0;         // biomass amount to attenuate light
+    real I0 = 0;            // Available light at every grid level
+    real wsink = 10;        // sinking speed (m/s)
+    real r_remin = 0.04;    // remineralization
+    real delta_x = 0.25;    // width of grazing profile
+    real lambda = 0.33;     // grazing efficiency
+    real mu = 0.02;         // mortality
+    
+    real U = 0;             // updake
+    real R = 0;             // remineralization
+    real G = 0;             // grazing
+    real MZ = 0;            // mortality
+    real MP = 0
+    real theta = 0;         // lp to lz comparison
+    real bio = 0;           // available biomass
+    real zeta = 0;          // zooplankton mortality holder
+    
+    // placeholders for PZD and time tendencies
+    real ** P = NULL;
+    real ** Z = NULL;
+    real ** D = NULL;
+    real ** dN_dt = NULL;
+    real ** dP_dt = NULL;
+    real ** dZ_dt = NULL;
+    real ** dD_dt = NULL;
+    
+    
+    // Assign pointers
+    P = phi[4];
+    Z = phi[5];
+    D = phi[6];
+    dN_dt = dphi_dt[3][j][k];
+    
+    // Calculate the amount of biomass above the current grid cell
+    for (i = Nz; i > k; i--)
+    {
+        atten += P[j][i] + Z[j][i] + D[j][i];
+    }
+    
+    // Light Calculation
+    kpar = 0.04 + 0.03*atten;
+    I0 = (0.45*qsw/(kpar*h_sml));
+    ir = I0*exp(kpar*ZZ_phi[j][k]);
+    
+    // Temperature calculation
+    temp = exp( r*(T-tref) );
+    
+    // Uptake
+    U = ir*temp*( N/( kn+N ) )*P[j][k];
+    
+    // Remineralization
+    R = r_remin*D[j][k];
+    
+    /////// Nitrate Equation ///////
+    dN_dt =
+    
+    // Grazing
+    theta = log(lp/lz)/delta_x;
+    bio = exp(-theta^2);
+    G = ( gmax*bio/( bio*P[j][k]+kp ) )*( 1-exp( -P[j][k] ) );
+    
+    // Mortality
+    zeta = lambda*gmax^2/(4*vmax*kp);
+    MP = mu*P[j][k];
+    MZ = zeta*Z[j][k]^2;
+    
+    
+    // Add sinking tendencies
+    if (k < Nz)
+    {
+        dphi_dt[6][j][k] -= rsink*(D[j][k] - D[j][k+1])*_dz_phi[j][k];
+    }
+}
+
+
+
+
+
+
+
+
+
+void ssem (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
            int NMAX, real N, real T,
            real * lp, real * lz, real * vmax, real * kn, real * gmax, real * preyopt, real * kp)
 {
@@ -1269,8 +1353,8 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 {
                     
                     // Temperature and Irradiance
-                    T = phi[0][j][k];    // temperature in grid box
-                    N = phi[2][j][k];
+                    T = phi[2][j][k];    // temperature in grid box
+                    N = phi[3][j][k];
                     
                     // Calculate the tendency for the single nitrate model
                     r_flux = single_nitrate(t,j,k,phi,dphi_dt,N,T,a_temp,b_temp,c_temp,alpha,monod,r_flux);
@@ -1280,11 +1364,19 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         }
             //
             //
-            // NPZ MODEL STARTS HERE
+            // NPZD MODEL STARTS HERE
             //
             //
+        case BGC_NPZD:
+        {
             
-        case BGC_NPZD: // NPZD Model
+        }
+            //
+            //
+            // SSEM MODEL STARTS HERE
+            //
+            //
+        case BGC_SSEM: // Size structured Model
         {
             // Determine whether MP or MZ is larger in order to unpack the uptake parameters and all of that
             if (MP > MZ)
@@ -1325,7 +1417,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 {
                     T = phi[0][j][k];    // temperature in grid box
                     N = phi[2][j][k];    // Nitrate in grid box
-                    npzd(t,j,k,phi,dphi_dt,NMAX,N,T,lp,lz,vmax,kn,gmax,preyopt,kp);
+                    ssem(t,j,k,phi,dphi_dt,NMAX,N,T,lp,lz,vmax,kn,gmax,preyopt,kp);
                 }
             }
             
