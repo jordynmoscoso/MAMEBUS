@@ -119,7 +119,7 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping scheme
-uint timeSteppingScheme = TIMESTEPPING_RKTVD2;
+uint timeSteppingScheme = TIMESTEPPING_RKTVD1;
 
 // Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
@@ -1000,7 +1000,7 @@ void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real R = 0;             // remineralization
     real G = 0;             // grazing
     real MZ = 0;            // mortality
-    real MP = 0
+    real MP = 0;
     real theta = 0;         // lp to lz comparison
     real bio = 0;           // available biomass
     real zeta = 0;          // zooplankton mortality holder
@@ -1014,52 +1014,7 @@ void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real ** dZ_dt = NULL;
     real ** dD_dt = NULL;
     
-    
-    // Assign pointers
-    P = phi[4];
-    Z = phi[5];
-    D = phi[6];
-    dN_dt = dphi_dt[3][j][k];
-    
-    // Calculate the amount of biomass above the current grid cell
-    for (i = Nz; i > k; i--)
-    {
-        atten += P[j][i] + Z[j][i] + D[j][i];
-    }
-    
-    // Light Calculation
-    kpar = 0.04 + 0.03*atten;
-    I0 = (0.45*qsw/(kpar*h_sml));
-    ir = I0*exp(kpar*ZZ_phi[j][k]);
-    
-    // Temperature calculation
-    temp = exp( r*(T-tref) );
-    
-    // Uptake
-    U = ir*temp*( N/( kn+N ) )*P[j][k];
-    
-    // Remineralization
-    R = r_remin*D[j][k];
-    
-    /////// Nitrate Equation ///////
-    dN_dt =
-    
-    // Grazing
-    theta = log(lp/lz)/delta_x;
-    bio = exp(-theta^2);
-    G = ( gmax*bio/( bio*P[j][k]+kp ) )*( 1-exp( -P[j][k] ) );
-    
-    // Mortality
-    zeta = lambda*gmax^2/(4*vmax*kp);
-    MP = mu*P[j][k];
-    MZ = zeta*Z[j][k]^2;
-    
-    
-    // Add sinking tendencies
-    if (k < Nz)
-    {
-        dphi_dt[6][j][k] -= rsink*(D[j][k] - D[j][k+1])*_dz_phi[j][k];
-    }
+
 }
 
 
@@ -2632,6 +2587,14 @@ int main (int argc, char ** argv)
     real *** phi_out = NULL;
     real *** phi_int = NULL;
     
+    // Work arrays and variables for AB methods
+    real * dt_vars = NULL;
+    real * dt_vars_1 = NULL;
+    real * dt_vars_2 = NULL;
+    real h = 0;
+    real h1 = 0;
+    real h2 = 0;
+    
     // Stores data required for parsing input parameters
     paramdata params[NPARAMS];
     int paramcntr = 0;
@@ -2881,6 +2844,11 @@ int main (int argc, char ** argv)
     vec2mat3(phi_in_V,&phi_in,Ntracs,Nx,Nz);
     vec2mat3(phi_out_V,&phi_out,Ntracs,Nx,Nz);
     vec2mat3(phi_int_V,&phi_int,Ntracs,Nx,Nz);
+    
+    // Allocate arrays for AB methods
+    VECALLOC(dt_vars,Ntot);
+    VECALLOC(dt_vars_1,Ntot);
+    VECALLOC(dt_vars_2,Ntot);
     
     // Allocate parameter arrays
     VECALLOC(res,Ntracs);
@@ -3451,6 +3419,56 @@ int main (int argc, char ** argv)
             case TIMESTEPPING_RKTVD3:
             {
                 dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
+                break;
+            }
+            case TIMESTEPPING_AB1:
+            {
+                dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
+                break;
+            }
+            case TIMESTEPPING_AB2:
+            {
+                // calculate the first few timesteps with lower order schemes
+                if (nIters == 1)
+                {
+                    dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                }
+                else
+                {
+                    dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,numvars,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                }
+                break;
+            }
+            case TIMESTEPPING_AB3:
+            {
+                // calculate the first few timesteps with lower order schemes
+                if (nIters == 1)
+                {
+                    dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                    // copy over data for the next timestep
+                    memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
+                    memcpy(dt_vars_2,dt_vars,Ntot*sizeof(real)); // save this data for the n == 3 time step.
+                }
+                else if (nIters == 2)
+                {
+                    dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,Ntot,&tderiv);
+                    // Save h2 and h1 for the next time step.
+                    h2 = h1;
+                    h1 = dt;
+                }
+                else  // Once we have the other two iterations, we can use the third order step
+                {
+                    dt = ab3(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,dt_vars_2,cflFrac,h1,h2,Ntot,&tderiv);
+                    // save for next time step
+                    h2 = h1;
+                    h1 = dt;
+                }
                 break;
             }
             default:
