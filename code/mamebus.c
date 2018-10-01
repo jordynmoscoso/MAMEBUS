@@ -12,6 +12,7 @@
 
 #include "rktvd.h"
 #include "defs.h"
+#include "ab.c"
 
 
 
@@ -119,13 +120,13 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping scheme
-uint timeSteppingScheme = TIMESTEPPING_RKTVD1;
+uint timeSteppingScheme = TIMESTEPPING_AB3;
 
 // Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
 
 // Momentum scheme
-uint momentumScheme = MOMENTUM_NONE;
+uint momentumScheme = MOMENTUM_TTTW;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -3429,15 +3430,19 @@ int main (int argc, char ** argv)
             case TIMESTEPPING_AB2:
             {
                 // calculate the first few timesteps with lower order schemes
-                if (nIters == 1)
+                if (nIters == 0)
                 {
                     dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
                     // Save h1 for the next time step.
                     h1 = dt;
+                    printf("dt = %f \n",dt);
+
+                    // copy over data for the next timestep
+                    memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
                 }
                 else
                 {
-                    dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,numvars,&tderiv);
+                    dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,Ntot,&tderiv);
                     // Save h1 for the next time step.
                     h1 = dt;
                 }
@@ -3446,20 +3451,22 @@ int main (int argc, char ** argv)
             case TIMESTEPPING_AB3:
             {
                 // calculate the first few timesteps with lower order schemes
-                if (nIters == 1)
+                if (nIters == 0)
                 {
                     dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
                     // Save h1 for the next time step.
                     h1 = dt;
                     // copy over data for the next timestep
                     memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
-                    memcpy(dt_vars_2,dt_vars,Ntot*sizeof(real)); // save this data for the n == 3 time step.
+
+                    // save this data for the n == 3 time step
+                    memcpy(dt_vars_2,dt_vars,Ntot*sizeof(real));
+                    h2 = dt; // time step
                 }
-                else if (nIters == 2)
+                else if (nIters == 1)
                 {
                     dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,Ntot,&tderiv);
-                    // Save h2 and h1 for the next time step.
-                    h2 = h1;
+                    // Save h1 for the next time step.
                     h1 = dt;
                 }
                 else  // Once we have the other two iterations, we can use the third order step

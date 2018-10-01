@@ -13,37 +13,37 @@
 #include <stdio.h>
 #include <string.h>
 
-void ab1 (  real *                  t,
-            real *                  x,
-            real *                  xout,
-            real *                  dxdt,
-            const real              h,
-            const uint              numvars,
-            DERIVATIVE_FUNCTION     f);
+real ab1 (  real *                      t,
+            real *                      x,
+            real *                      xout,
+            real *                      dxdt,
+            const real                  h,
+            const uint                  numvars,
+            DERIVATIVE_FUNCTION_CFL     f);
 
-void ab2 (  real *                  t,
-            real *                  x,
-            real *                  xout,
-            real *                  dxdt,
-            real *                  dxdt_1,
-            const real              h,
-            const real              h1,
-            const uint              numvars,
-            DERIVATIVE_FUNCTION     f);
+real ab2 (  real *                      t,
+            real *                      x,
+            real *                      xout,
+            real *                      dxdt,
+            real *                      dxdt_1,
+            const real                  h,
+            const real                  h1,
+            const uint                  numvars,
+            DERIVATIVE_FUNCTION_CFL     f);
 
-void ab3 (  real *                  t,
-            real *                  x,
-            real *                  xout,
-            real *                  dxdt,
-            real *                  dxdt_1,
-            real *                  dxdt_2,
-            const real              h,
-            const real              h1,
-            const real              h2,
-            const uint              numvars,
-            DERIVATIVE_FUNCTION     f);
+real ab3 (  real *                      t,
+            real *                      x,
+            real *                      xout,
+            real *                      dxdt,
+            real *                      dxdt_1,
+            real *                      dxdt_2,
+            const real                  h,
+            const real                  h1,
+            const real                  h2,
+            const uint                  numvars,
+            DERIVATIVE_FUNCTION_CFL     f);
 
- /*void ab4 (  real *                  t,
+ /*real ab4 (  real *                  t,
             real *                  x,
             real *                  xout,
             real *                  dxdt,

@@ -46,19 +46,20 @@
  **                      the xout array.
  **
  ****************************************************************************************/
-real ab1 (  real *                  t,
-            real *                  x,
-            real *                  xout,
-            real *                  dxdt,
-            const real              cfl,
-            const uint              numvars,
-            DERIVATIVE_FUNCTION     f)
+real ab1 (  real *                      t,
+            real *                      x,
+            real *                      xout,
+            real *                      dxdt,
+            const real                  cfl,
+            const uint                  numvars,
+            DERIVATIVE_FUNCTION_CFL     f)
 {
     // For looping
     uint i;
     
     // Actual time step
     real h;
+    real dt_w;
     
     // Calculate the derivatives of x at t
     dt_w = (*f)(*t, x, dxdt, numvars);
@@ -124,21 +125,22 @@ real ab1 (  real *                  t,
  **                      the xout array.
  **
  ****************************************************************************************/
-real ab2 (  real *                  t,
-            real *                  x,
-            real *                  xout,
-            real *                  dxdt,
-            real *                  dxdt_1,
-            const real              cfl,
-            const real              h1,
-            const uint              numvars,
-            DERIVATIVE_FUNCTION     f)
+real ab2 (  real *                      t,
+            real *                      x,
+            real *                      xout,
+            real *                      dxdt,
+            real *                      dxdt_1,
+            const real                  cfl,
+            const real                  h1,
+            const uint                  numvars,
+            DERIVATIVE_FUNCTION_CFL     f)
 {
     // For looping
     uint i;
     
     // Real cfl condition
     real h;
+    real dt_w;
     
     // Calculate dx/dt = f(x,t)
     dt_w = (*f)(*t, x, dxdt, numvars);
@@ -146,8 +148,9 @@ real ab2 (  real *                  t,
     // Calculate the current time step
     h = cfl*dt_w;
     
+    
     // To avoid multiple calculation
-    real c0 = 0.5*(h/h1);
+    real c0 = h/(2*h1);
     
 #pragma parallel
     
@@ -214,17 +217,17 @@ real ab2 (  real *                  t,
  **                      the xout array.
  **
  ****************************************************************************************/
-real ab3 (  real *                  t,
-            real *                  x,
-            real *                  xout,
-            real *                  dxdt,
-            real *                  dxdt_1,
-            real *                  dxdt_2,
-            const real              cfl,
-            const real              h1,
-            const real              h2,
-            const uint              numvars,
-            DERIVATIVE_FUNCTION     f)
+real ab3 (  real *                      t,
+            real *                      x,
+            real *                      xout,
+            real *                      dxdt,
+            real *                      dxdt_1,
+            real *                      dxdt_2,
+            const real                  cfl,
+            const real                  h1,
+            const real                  h2,
+            const uint                  numvars,
+            DERIVATIVE_FUNCTION_CFL     f)
 {
     
     // For looping
@@ -232,6 +235,7 @@ real ab3 (  real *                  t,
     
     //Real cfl condition
     real h;
+    real dt_w;
     
     // Calculate dx/dt = f(x,t)
     dt_w = (*f)(*t, x, dxdt, numvars);
@@ -240,9 +244,9 @@ real ab3 (  real *                  t,
     h = dt_w*cfl;
     
     // To avoid multiple calculation
-    c2 = ( h*h )*( 2*h + 3*h1 )/( 6*h2*( h1+h2 ) );
-    c1 = ( h*h )*( 2*h + 3*h1 + 3*h1 )/( 6*h1*h2 );
-    c0 = h*( 2*h*h + 6*h*h1 + 3*h*h2 + 6*h1*h1 + 6*h1*h2 )/( 6*( h1 + h2)*h1 );
+    real c2 = ( h*h )*( 2*h + 3*h1 )/( 6*h2*( h1+h2 ) );
+    real c1 = ( h*h )*( 2*h + 3*h1 + 3*h1 )/( 6*h1*h2 );
+    real c0 = h*( 2*h*h + 6*h*h1 + 3*h*h2 + 6*h1*h1 + 6*h1*h2 )/( 6*( h1 + h2)*h1 );
     
 #pragma parallel
     

@@ -173,7 +173,7 @@ ncase = 1;
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
-%           caxis([-.01 .01])
+          caxis([-.03 .03])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           pcolor(XX_tr,ZZ_tr,phi)
@@ -188,6 +188,7 @@ ncase = 1;
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
 %       pcolor(XX_phi,ZZ_phi,phi);
+
             
       colormap jet;
       h=colorbar;
