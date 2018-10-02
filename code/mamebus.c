@@ -1994,8 +1994,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         du_dt[0][k] = 0;
     }
-    
-//    printf("dphi_dt[0][10][Nz-1] = %f, du_dt[10][Nz-1] = %f, tau[j] = %f; \n",dphi_dt[0][10][Nz-1],du_dt[10][Nz-1],tau[10]);
   
     
 

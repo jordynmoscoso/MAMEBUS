@@ -174,12 +174,16 @@ ncase = 1;
           shading interp
           colorbar
           caxis([-.03 .03])
+%           disp([max(max(phi))
+%           min(min(phi))])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Depth tracer
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
           caxis([-.1 .1])
+%           disp([max(max(phi))
+%           min(min(phi))])
         case 2 %%% Buoyancy
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
