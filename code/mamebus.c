@@ -2330,6 +2330,8 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     char nstr[MAX_PARAMETER_FILENAME_LENGTH];
     char istr[MAX_PARAMETER_FILENAME_LENGTH];
     FILE * outfd = NULL;
+    real ** uvel = NULL;
+    real ** vvel = NULL;
     
     // Calculate residual streamfunction
     real ** uvel = NULL;

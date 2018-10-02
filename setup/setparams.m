@@ -30,6 +30,7 @@ function setparams (local_home_dir,run_name)
   
   %%% The number of biogeochemical classes are entered here. 
   modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+
   switch (modeltype)
     case BGC_SSEM
       MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
@@ -89,7 +90,11 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
+<<<<<<< HEAD
   outputFreq = t1day;
+=======
+  outputFreq = 1*t1day;
+>>>>>>> master
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
