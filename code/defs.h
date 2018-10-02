@@ -17,11 +17,15 @@
 #define TIMESTEPPING_RKTVD1 0   // First-order total-variation-diminishing Runge-Kutta
 #define TIMESTEPPING_RKTVD2 1   // Second-order total-variation-diminishing Runge-Kutta
 #define TIMESTEPPING_RKTVD3 2   // Third-order total-variation-diminishing Runge-Kutta
+#define TIMESTEPPING_AB1    3   // First-order Adams Bashforth first order
+#define TIMESTEPPING_AB2    4   // Second-order Adams Bashforth variable timestepping
+#define TIMESTEPPING_AB3    5   // Third-order Adams Bashforth variable timestepping
 
 // Biogeochemical method identifiers
 #define BGC_NONE 0              // No biogeochemistry
 #define BGC_NITRATEONLY 1       // Single nitrate model
-#define BGC_NPZD 2              // Size structured NPZD model
+#define BGC_NPZD 2              // NPZD model
+#define BGC_SSEM 3              // Size structured ecosystem model
 
 // Tracer advection scheme identifiers
 #define ADVECTION_CENTERED 0    // Fluxes based on mean phi at cell boundaries

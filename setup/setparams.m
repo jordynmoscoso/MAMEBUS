@@ -29,9 +29,10 @@ function setparams (local_home_dir,run_name)
 
   
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NITRATEONLY; %%% This automatically defaults so that the model runs a size structured NPZD model
+  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+
   switch (modeltype)
-    case BGC_NPZD
+    case BGC_SSEM
       MN = 2; %%% The number of nutrients in the model (must be 2) one active one dye.
       MP = 5;
       MZ = 5;
@@ -89,7 +90,11 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
+<<<<<<< HEAD
+  outputFreq = t1day;
+=======
   outputFreq = 1*t1day;
+>>>>>>> master
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -107,8 +112,9 @@ function setparams (local_home_dir,run_name)
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 50; %%% Surface mixed layer thickness
-  Hbbl = 50; %%% Bottom boundary layer thickness
+  Hsml = 60; %%% Surface mixed layer thickness
+  Hbbl = 60; %%% Bottom boundary layer thickness
+  r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   %%% Biogeochemical Parameters
 
@@ -125,8 +131,8 @@ function setparams (local_home_dir,run_name)
   %%% Grids  
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  Nx = 40; %%% Number of latitudinal grid points 
-  Nz = 40; %%% Number of vertical grid points
+  Nx = 50; %%% Number of latitudinal grid points 
+  Nz = 50; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
@@ -144,6 +150,7 @@ function setparams (local_home_dir,run_name)
   Ltopog = 25*m1km;
   Htopog = H-shelfdepth;  
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+%   hb = H*ones(size(hb));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
@@ -189,6 +196,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'theta_b',theta_b,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hsml',Hsml,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'r_bbl',r_bbl,PARM_REALF);
   
   %%% Indicate number of phytoplankton, zooplankton and detrital pools
   PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
@@ -206,7 +214,7 @@ function setparams (local_home_dir,run_name)
         [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         
         disp('Nitrate only')
-      case BGC_NPZD
+      case BGC_SSEM
         [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
         disp('NPZD')
         %%% Store phytoplankton size and zooplankton size to determine what size
@@ -260,7 +268,7 @@ function setparams (local_home_dir,run_name)
       case BGC_NITRATEONLY
           phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
           phi_init(4,:,:) = reshape(bgc_init,[1,Nx,Nz]);
-      case BGC_NPZD
+      case BGC_SSEM
           bgc_tracs = MP + MZ + MD + 1;
           for ii = 1:bgc_tracs
               phi_init(ii+2,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
@@ -304,7 +312,12 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   %%% Load in the surface wind stress.
-  [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
+%   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
+  tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+%   Lmax = 300*m1km;
+%   tau = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
+%   tau(xx_psi<50) = 0;
+  tlength = length(tau);
   
   tauFile = 'tau.dat';  
   writeDataFile(fullfile(local_run_dir,tauFile),tau);
@@ -313,7 +326,7 @@ function setparams (local_home_dir,run_name)
 
   
   
-  
+ 
   
   
   
@@ -340,7 +353,7 @@ function setparams (local_home_dir,run_name)
   buoy_surf_min = 15;
   buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
   buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
-  T_relax_buoy((xx_tr>=L_relax),Nz) = 10*t1day; 
+  T_relax_buoy((xx_tr>=L_relax),Nz) = 1*t1day; 
   
   %%% Depth tracer relaxation  
   dtr_relax = dtr_init;
@@ -359,7 +372,7 @@ function setparams (local_home_dir,run_name)
       case BGC_NITRATEONLY
           phi_relax_all(3,:,:) = reshape(bgc_relax,[1 Nx Nz]);
           phi_relax_all(4,:,:) = reshape(bgc_relax,[1 Nx Nz]);
-      case BGC_NPZD
+      case BGC_SSEM
           phi_relax_all(3:end,:,:) = reshape(bgc_relax,[Nbgc Nx Nz]);
   end
   phi_relax_all(Nphys+Nbgc+1,:,:) = reshape(dtr_relax,[1 Nx Nz]);
@@ -374,7 +387,7 @@ function setparams (local_home_dir,run_name)
       case BGC_NITRATEONLY
           T_relax_all(3,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
           T_relax_all(4,:,:) = -ones(1,Nx,Nz); % Total dye conserved
-      case BGC_NPZD
+      case BGC_SSEM
           T_relax_all(3:end,:,:) = -ones(Nbgc,Nx,Nz);
   end
   T_relax_all(Nphys+Nbgc+1,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
@@ -436,12 +449,6 @@ function setparams (local_home_dir,run_name)
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
-  
-  
-  
-  
-  
-  
   
   
   
@@ -545,7 +552,7 @@ function setparams (local_home_dir,run_name)
   % Diapycnal Diffusivities
   figure(fignum)
   subplot(1,2,1)
-  pcolor(XX_psi,ZZ_psi,Kdia)
+  contourf(XX_psi,ZZ_psi,Kdia,10)
   title('Diapycnal diffusivity, \kappa_{\nu}')
   shading interp
   colorbar

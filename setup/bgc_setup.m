@@ -44,7 +44,7 @@ switch (model_type)
     %%%%%%%%%%%%%%%%%%%%% NPZ %%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
-    case 2 %%% Size Structured NPZ model based on Banas
+    case 3 %%% Size Structured NPZ model based on Banas
         nparams = 0; 
         
         % Zooplankton Spectra

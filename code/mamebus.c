@@ -12,11 +12,12 @@
 
 #include "rktvd.h"
 #include "defs.h"
+#include "ab.c"
 
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 39
+#define NPARAMS 40
 
 
 
@@ -50,6 +51,7 @@ bool use_bbl = true;
 real Hsml = 50.0;
 real Hbbl = 50.0;
 int tlength = 0;
+real r_bbl = 0; // drag coefficient
 
 // Biogeochemical parameters
 uint bgcModel = 0;
@@ -62,12 +64,12 @@ int nbgc; // Counts number of biogeochemical parameters
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
 real year = 31449600;             // Seconds in a year (52 7-day weeks)
-
+real grav = 9.8;                     // m/s^2 (gravity)
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
 real * hb_in = NULL;          // Ocean depth
-real ** tau = NULL;           // Surface wind stress
+real * tau = NULL;           // Surface wind stress
 real ** Kgm_psi_ref = NULL;   // Reference GM diffusivity
 real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
@@ -76,7 +78,6 @@ real *** T_relax = NULL;      // Tracer relaxation time scale
 real * bgc_params = NULL;     // Vector containing biogeochemical parameters, all read in as a vector for
 // storage purposes and to make code adapable for a single nitrate model and NPZ model
 
-real * stau = NULL;                  // Seasonal tau
 
 // Numerical parameters
 real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
@@ -119,13 +120,13 @@ real ** ZZ_w = NULL;
 char * progname = NULL;
 
 // Time-stepping scheme
-uint timeSteppingScheme = TIMESTEPPING_RKTVD1;
+uint timeSteppingScheme = TIMESTEPPING_AB3;
 
 // Tracer advection scheme
 uint advectionScheme = ADVECTION_KT00;
 
 // Momentum scheme
-uint momentumScheme = MOMENTUM_NONE;
+uint momentumScheme = MOMENTUM_TTTW;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -169,6 +170,9 @@ real ** Kgm_w = NULL;
 real ** Kiso_u = NULL;        // Isopycnal diffusivity
 real ** Kiso_w = NULL;
 real ** Kdia_w = NULL;        // Diapycnal diffusivity
+real ** BPa = NULL;           // Baroclinic Pressure
+real ** BPx = NULL;           // Baroclinic Pressure gradient
+real ** BBy = NULL;           // Buoyancy
 
 // Boundary layer work arrays
 uint * k_sml = NULL;
@@ -191,44 +195,13 @@ real * db_dz = NULL;
 /**
  * windInterp
  *
- * TODO I don't like the global variable for stau
+ * TODO I don't like the global variable for tau
  * TODO need to come up with a more general approach to time-variable forcing,
  *
  */
 void windInterp (const real t)
 {
-    int j = 0;
-    int spec_week = 0;
-    int spec_year = 0;
-    real hold = 0;
-    real week = day*7;
-    
-    // Determine the year and normalize to determine the date within a year
-    spec_year = floor(t/year);
-    if (spec_year >= 1)
-    {
-        hold = (t - spec_year*year)/week;     // Determine the date in a year
-        // based on week fraction.
-    }
-    else
-    {
-        hold = t/week;
-    }
-    
-    spec_week = floor(hold);
 
-    // Linearly interpolate based on the current time
-    for (j = 0; j < Nx; j++)
-    {
-        if (spec_week == 51)
-        {
-            stau[j] = (tau[0][j] - tau[spec_week][j])*(hold-spec_week) + tau[spec_week][j];
-        }
-        else
-        {
-            stau[j] = (tau[spec_week+1][j] - tau[spec_week][j])*(hold - spec_week) + tau[spec_week][j];
-        }
-    }
   
 
 }
@@ -270,7 +243,6 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
     if (momentumScheme == MOMENTUM_NONE)
     {
       
-      windInterp(t);
       
 #pragma parallel
       
@@ -281,7 +253,7 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
           {
               z = ZZ_psi[j][k];
               
-              psi_m[j][k] = stau[j]/(rho0*f0);
+              psi_m[j][k] = tau[j]/(rho0*f0);
               
               if (use_sml && (z > -Hsml))
               {
@@ -305,6 +277,7 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
         }
       }
     }
+    
   
 }
 
@@ -1004,17 +977,56 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-
-
-
-
-
-
-
-
-
-
 void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
+           int NMAX, real N, real T,
+           real lp, real * lz, real vmax, real kn, real gmax, real kp)
+{
+    int i;                  // counters
+    
+    real tref = 20;         // Reference temperature
+    real qsw = 340;         // surface irradiance
+    real r = 0.05;          // temperature dependence
+    real kpar = 0;          // light attenuation
+    real ir = 0;            // irradiance profile in cell
+    real temp = 0;          // temperature coefficient
+    real atten = 0;         // biomass amount to attenuate light
+    real I0 = 0;            // Available light at every grid level
+    real wsink = 10;        // sinking speed (m/s)
+    real r_remin = 0.04;    // remineralization
+    real delta_x = 0.25;    // width of grazing profile
+    real lambda = 0.33;     // grazing efficiency
+    real mu = 0.02;         // mortality
+    
+    real U = 0;             // updake
+    real R = 0;             // remineralization
+    real G = 0;             // grazing
+    real MZ = 0;            // mortality
+    real MP = 0;
+    real theta = 0;         // lp to lz comparison
+    real bio = 0;           // available biomass
+    real zeta = 0;          // zooplankton mortality holder
+    
+    // placeholders for PZD and time tendencies
+    real ** P = NULL;
+    real ** Z = NULL;
+    real ** D = NULL;
+    real ** dN_dt = NULL;
+    real ** dP_dt = NULL;
+    real ** dZ_dt = NULL;
+    real ** dD_dt = NULL;
+    
+
+}
+
+
+
+
+
+
+
+
+
+void ssem (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
            int NMAX, real N, real T,
            real * lp, real * lz, real * vmax, real * kn, real * gmax, real * preyopt, real * kp)
 {
@@ -1308,11 +1320,19 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         }
             //
             //
-            // NPZ MODEL STARTS HERE
+            // NPZD MODEL STARTS HERE
             //
             //
+        case BGC_NPZD:
+        {
             
-        case BGC_NPZD: // NPZD Model
+        }
+            //
+            //
+            // SSEM MODEL STARTS HERE
+            //
+            //
+        case BGC_SSEM: // Size structured Model
         {
             // Determine whether MP or MZ is larger in order to unpack the uptake parameters and all of that
             if (MP > MZ)
@@ -1353,7 +1373,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 {
                     T = phi[0][j][k];    // temperature in grid box
                     N = phi[2][j][k];    // Nitrate in grid box
-                    npzd(t,j,k,phi,dphi_dt,NMAX,N,T,lp,lz,vmax,kn,gmax,preyopt,kp);
+                    ssem(t,j,k,phi,dphi_dt,NMAX,N,T,lp,lz,vmax,kn,gmax,preyopt,kp);
                 }
             }
             
@@ -1843,6 +1863,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_w = 0.5/w_dz_max;
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
+    
+//    printf("t = %f :: cfl_u = %f, cfl_w = %f, cfl_y = %f, cfl_z = %f \n",t,cfl_u,cfl_w,cfl_y,cfl_z);
   
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -1886,31 +1908,94 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
  */
 void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 {
-  // Looping variables
-  int i, j, k;
+    // Looping variables
+    int i, j, k;
   
-  // Pointers to velocity and buoyancy matrices
-  real ** uvel = NULL;
-  real ** vvel = NULL;
-  real ** buoy = NULL;
-  real ** du_dt = NULL;
-  real ** dv_dt = NULL;
+    // Pointers to velocity and buoyancy matrices
+    real ** uvel = NULL;
+    real ** vvel = NULL;
+    real ** buoy = NULL;
+    real ** du_dt = NULL;
+    real ** dv_dt = NULL;
 
+    // Pointers to velocity and buoyancy matrices
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
+    buoy = phi[idx_buoy];
+    du_dt = dphi_dt[idx_uvel];
+    dv_dt = dphi_dt[idx_vvel];
   
-  
+    // Working variables and matrices
+    real pz = 0; // placeholder for the vertical pressure gradient.
+    real alpha = 1e-4; // thermal expansion coefficient
+    
+    
+    // Calculate the baroclinic pressure from the buoyancy profile
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = Nz+1; k >= 0; k--)
+        {
+            if (k == Nz+1){
+                BPa[j][k] = 0; // set the surface pressure to zero.
+            }
+            else{
+                BBy[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
+                BPa[j][k] = BPa[j][k+1] - BBy[j][k]/_dz_w[j][k];
+                
+//                printf("Pressure at j = %d, k = %d, is %f, dz = %f \n: ",j,k,BPa[j][k],_dz_w[j][k]);
+            }
+        }
+    }
+    
+    
+    
+    // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary.
+    for (j = 1; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
+            BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
+            BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
+            
+            if (j == 1){
+                BPx[0][k] = BPx[1][k]; // should we do this?
+            }
+            
+        }
+    }
+    
+    
+    
+    // Calculate the tendency due to the coriolis force and add to the pressure term
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            du_dt[j][k] = f0*vvel[j][k]; // - BPx[j][k];
+            dv_dt[j][k] = -f0*uvel[j][k]; //- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
+        }
+    }
+    
+    // Should bottom momentum fluxes be in the implicit diffusion term?
+    
+    // Add surface/bottom momentum fluxes
+    for (j = 0; j < Nx; j++)
+    {
+        du_dt[j][0] -= r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
+        dv_dt[j][0] -= r_bbl*vvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]);
 
-  // Pointers to velocity and buoyancy matrices
-  uvel = phi[idx_uvel];
-  vvel = phi[idx_vvel];
-  buoy = phi[idx_buoy];
-  du_dt = dphi_dt[idx_uvel];
-  dv_dt = dphi_dt[idx_vvel];
+
+        dv_dt[j][Nz-1] += tau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
+
+    }
+    
+    for (k = 0; k < Nz; k++) // u tendencies are zero at the western wall
+    {
+        du_dt[0][k] = 0;
+    }
   
-  
-  
-  
-  // TODO add tendencies due to Coriolis force, baroclinic pressure, surface/bottom momentum fluxes
-  
+    
 
 }
 
@@ -2249,6 +2334,8 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     real ** vvel = NULL;
     
     // Calculate residual streamfunction
+    real ** uvel = NULL;
+    real ** vvel = NULL;
     uvel = phi[idx_uvel];
     vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
@@ -2364,6 +2451,7 @@ void printUsage (void)
      "                        If equal to 0 then no SML is imposed\n"
      "  Hbbl                  Depth of the bottom boundary layer. Must be >=0.\n"
      "                        If equal to 0 then no BBL is imposed\n"
+     "  r_bbl                 Drag coefficient in the bottom boundary layer \n"
      "  \n"
      "  h_c                   Depth parameter controlling the range of depths over\n"
      "                        which the vertical coordinate the coordinate is\n"
@@ -2500,6 +2588,14 @@ int main (int argc, char ** argv)
     real *** phi_out = NULL;
     real *** phi_int = NULL;
     
+    // Work arrays and variables for AB methods
+    real * dt_vars = NULL;
+    real * dt_vars_1 = NULL;
+    real * dt_vars_2 = NULL;
+    real h = 0;
+    real h1 = 0;
+    real h2 = 0;
+    
     // Stores data required for parsing input parameters
     paramdata params[NPARAMS];
     int paramcntr = 0;
@@ -2552,6 +2648,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
     setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
     setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
+    setParam(params,paramcntr++,"r_bbl","%lf",&r_bbl,true);
   
     // Sigma-coordinate parameters
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
@@ -2749,15 +2846,19 @@ int main (int argc, char ** argv)
     vec2mat3(phi_out_V,&phi_out,Ntracs,Nx,Nz);
     vec2mat3(phi_int_V,&phi_int,Ntracs,Nx,Nz);
     
+    // Allocate arrays for AB methods
+    VECALLOC(dt_vars,Ntot);
+    VECALLOC(dt_vars_1,Ntot);
+    VECALLOC(dt_vars_2,Ntot);
+    
     // Allocate parameter arrays
     VECALLOC(res,Ntracs);
     VECALLOC(targetRes,Ntracs);
     MATALLOC3(phi_init,Ntracs,Nx,Nz);
     VECALLOC(hb_in,Nx+2);
-    VECALLOC(stau,Nx+1);  // ADDED THIS PARAMETER ARRAY
+    VECALLOC(tau,Nx+1);  // REMOVED STAU
     VECALLOC(bgc_params,nbgc);
     
-    MATALLOC(tau,tlength,Nx+1);
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
@@ -2816,6 +2917,9 @@ int main (int argc, char ** argv)
     MATALLOC(Kiso_u,Nx+1,Nz);
     MATALLOC(Kiso_w,Nx,Nz+1);
     MATALLOC(Kdia_w,Nx,Nz+1);
+    MATALLOC(BPa,Nx,Nz+1);
+    MATALLOC(BPx,Nx,Nz);
+    MATALLOC(BBy,Nx,Nz);
     
     // Boundary layer work arrays
     k_sml = malloc((Nx+1)*sizeof(uint));
@@ -2841,7 +2945,7 @@ int main (int argc, char ** argv)
     // Read input matrices and vectors
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
           ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-          ( (strlen(tauFile) > 0)         &&  !readMatrix(tauFile,tau,tlength,Nx+1,stderr) ) ||
+          ( (strlen(tauFile) > 0)         &&  !readVector(tauFile,tau,Nx+1,stderr) ) ||
           ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
           ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
           ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
@@ -3318,6 +3422,62 @@ int main (int argc, char ** argv)
                 dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
                 break;
             }
+            case TIMESTEPPING_AB1:
+            {
+                dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
+                break;
+            }
+            case TIMESTEPPING_AB2:
+            {
+                // calculate the first few timesteps with lower order schemes
+                if (nIters == 0)
+                {
+                    dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                    printf("dt = %f \n",dt);
+
+                    // copy over data for the next timestep
+                    memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
+                }
+                else
+                {
+                    dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,Ntot,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                }
+                break;
+            }
+            case TIMESTEPPING_AB3:
+            {
+                // calculate the first few timesteps with lower order schemes
+                if (nIters == 0)
+                {
+                    dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                    // copy over data for the next timestep
+                    memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
+
+                    // save this data for the n == 3 time step
+                    memcpy(dt_vars_2,dt_vars,Ntot*sizeof(real));
+                    h2 = dt; // time step
+                }
+                else if (nIters == 1)
+                {
+                    dt = ab2(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,cflFrac,h1,Ntot,&tderiv);
+                    // Save h1 for the next time step.
+                    h1 = dt;
+                }
+                else  // Once we have the other two iterations, we can use the third order step
+                {
+                    dt = ab3(&t,phi_in_V,phi_out_V,dt_vars,dt_vars_1,dt_vars_2,cflFrac,h1,h2,Ntot,&tderiv);
+                    // save for next time step
+                    h2 = h1;
+                    h1 = dt;
+                }
+                break;
+            }
             default:
             {
                 fprintf(stderr,"ERROR: Unknown time-integration method\n");
@@ -3335,7 +3495,6 @@ int main (int argc, char ** argv)
       
         // Step 3 (optional): apply zonal barotropic pressure gradient correction
         do_pressure_correct(phi_out);
-      
       
       
 #pragma parallel

@@ -19,7 +19,8 @@ TIMESTEPPING_RKTVD3 = 2;  %%% Third-order total-variation-diminishing Runge-Kutt
 %%% Biogeochemical model identifiers
 BGC_NONE = 0;             %%% No biogeochemistry
 BGC_NITRATEONLY = 1;      %%% Single nitrate model
-BGC_NPZD = 2;             %%% Size structured NPZD model
+BGC_NPZD = 2;             %%% NPZD model
+BGC_SSEM = 3;             %%% Size structured NPZD model
 
 %%% Advection scheme identifiers
 ADVECTION_CENTERED = 0;   %%% Centered differencing of tracers

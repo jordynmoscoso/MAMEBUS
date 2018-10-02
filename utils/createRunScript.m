@@ -126,7 +126,7 @@ function createRunScript (local_home_dir,run_name,exec_name, ...
   end
   
   %%% Create a file to clean the run folder of output files
-  cleanstr = ['rm ./*n=*.dat'];
+  cleanstr = 'for f in ./*n=*.dat; do rm $f; done';
   cleanfid = fopen(cleanfname,'w');
   if (cleanfid == -1)
     error(['Could not open ',cleanfname]);
