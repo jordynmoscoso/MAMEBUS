@@ -89,13 +89,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
 %     if (isempty(ncase) || ncase < 0 || ncase > 1)
 %         ncase = 0;
 %     end
-    Nstore = [];
-    tsave = [];
-%   end
-
-ncase = 1; 
   
-  %%% Load grids from model output
+%%% Load grids from model output
 %   dx = (Lx/Nx);
 %   dz = (H/Nz);
 %   [xx_phi zz_phi XX_tr ZZ_tr] = createmesh(0.5*dx,Lx-0.5*dx,Nx,-H+0.5*dz,-0.5*dz,Nz);  
@@ -112,6 +107,9 @@ ncase = 1;
 %   end
 %   ZZ_psi = fscanf(fid,'%f',[Nx Nz]);
 %   fclose(fid);  
+
+    Nstore = [];
+    tsave = [];
     
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
@@ -168,7 +166,7 @@ ncase = 1;
       phi = readOutputFile(data_file,Nx,Nz);
       %%% Plot the tracer     
       switch (var_id)
-        case 0 %%% Buoyancy (temperature)
+        case 0 %%% Zonal Velocity 
 %           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
@@ -177,7 +175,7 @@ ncase = 1;
 %           disp([max(max(phi))
 %           min(min(phi))])
 %           set(gca, 'CLim', [0, 20]);
-        case 1 %%% Depth tracer
+        case 1 %%% Meridional Velocity
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
@@ -188,6 +186,7 @@ ncase = 1;
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
+          title(['Time is ', num2str(t/t1day)])
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
@@ -199,6 +198,7 @@ ncase = 1;
 %       caxis([0 20]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);
+% axis([0 Lx -500 0])
 
 
     %%% If plot_trac==false, plot the streamfunction
@@ -237,9 +237,9 @@ ncase = 1;
     %%% Store the image in the movie buffer  
     xlabel('Distance (km)');    
     ylabel('Depth (m)');        
-    axis tight;
-    set(gca,'XTick',0:Lx/5:Lx);
-    set(gca,'YTick',-H:H/5:0);       
+%     axis tight;
+%     set(gca,'XTick',0:Lx/5:Lx);
+%     set(gca,'YTick',-H:H/5:0);       
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 

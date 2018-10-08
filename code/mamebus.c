@@ -173,6 +173,7 @@ real ** Kdia_w = NULL;        // Diapycnal diffusivity
 real ** BPa = NULL;           // Baroclinic Pressure
 real ** BPx = NULL;           // Baroclinic Pressure gradient
 real ** BBy = NULL;           // Buoyancy
+real ** Nsq = NULL;
 
 // Boundary layer work arrays
 uint * k_sml = NULL;
@@ -1733,6 +1734,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real cfl_w = 0;
     real cfl_y = 0;
     real cfl_z = 0;;
+    real cfl_igw = 0;
     real u_max = 0;
     real w_dz = 0;
     real w_dz_max = 0;
@@ -1741,6 +1743,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real zdiff_dzsq = 0;
     real zdiff_dzsq_max = 0;
     real cfl_phys = 0;
+    real nsq_col = 0;
+    real nsq_max = 0;
     
     ////////////////////////////////////////
     ///// BEGIN CALCULATING TENDENCIES /////
@@ -1857,12 +1861,37 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     }
     
     
+    // Calculate the Brunt Vaisalla Frequency
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = Nz-1; k > 0; k--)
+        {
+            Nsq[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_phi[j][k];
+        }
+    }
+    
+    // Integrate the Nsq term
+    for (j = 0; j < Nx; j++)
+    {
+        nsq_col = 0;
+        for (k = Nz-1; k > 0; k--)
+        {
+            nsq_col += 0.5*(Nsq[j][k] + Nsq[j][k-1])*_dz_phi[j][k];
+        }
+        
+        if (nsq_max < nsq_col)
+        {
+            nsq_max = nsq_col/(f0*3.1415926);
+        }
+    }
+    
     
     // Calculate CFL criteria
     cfl_u = 0.5*dx/u_max;
     cfl_w = 0.5/w_dz_max;
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
+    cfl_igw = 0.5*dx/nsq_max;
     
 //    printf("t = %f :: cfl_u = %f, cfl_w = %f, cfl_y = %f, cfl_z = %f \n",t,cfl_u,cfl_w,cfl_y,cfl_z);
   
@@ -2334,8 +2363,6 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     real ** vvel = NULL;
     
     // Calculate residual streamfunction
-    real ** uvel = NULL;
-    real ** vvel = NULL;
     uvel = phi[idx_uvel];
     vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
@@ -2920,6 +2947,7 @@ int main (int argc, char ** argv)
     MATALLOC(BPa,Nx,Nz+1);
     MATALLOC(BPx,Nx,Nz);
     MATALLOC(BBy,Nx,Nz);
+    MATALLOC(Nsq,Nx,Nz);
     
     // Boundary layer work arrays
     k_sml = malloc((Nx+1)*sizeof(uint));

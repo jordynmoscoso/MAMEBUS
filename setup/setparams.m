@@ -90,11 +90,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-<<<<<<< HEAD
-  outputFreq = t1day;
-=======
-  outputFreq = 1*t1day;
->>>>>>> master
+  outputFreq = 0.1*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -103,6 +99,7 @@ function setparams (local_home_dir,run_name)
   
   %%% Scalar parameter definitions 
   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
+  tau0 = 0;
   rho0 = 1e3; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 500; %%% Reference GM diffusivity
