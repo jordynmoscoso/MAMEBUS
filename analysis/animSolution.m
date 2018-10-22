@@ -170,31 +170,36 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
 %           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
-          colorbar
+          colorbar 
           caxis([-.03 .03])
+          colormap redblue;
+          h=colorbar;
 %           disp([max(max(phi))
 %           min(min(phi))])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Meridional Velocity
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
-          colorbar
-          caxis([-.1 .1])
+          colorbar 
+          caxis([-.2 .2])
 %           disp([max(max(phi))
 %           min(min(phi))])
+          colormap redblue;
+          h=colorbar;
         case 2 %%% Buoyancy
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
           title(['Time is ', num2str(t/t1day)])
+          colormap jet;
+          h=colorbar;
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
 %       pcolor(XX_phi,ZZ_phi,phi);
 
             
-      colormap jet;
-      h=colorbar;
+
 %       caxis([0 20]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);

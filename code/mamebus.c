@@ -1876,7 +1876,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
         nsq_col = 0;
         for (k = Nz-1; k > 0; k--)
         {
-            nsq_col += 0.5*(Nsq[j][k] + Nsq[j][k-1])*_dz_phi[j][k];
+            nsq_col += 0.5*(Nsq[j][k] + Nsq[j][k-1])/_dz_phi[j][k];
         }
         
         if (nsq_max < nsq_col)
@@ -1893,7 +1893,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/nsq_max;
     
-//    printf("t = %f :: cfl_u = %f, cfl_w = %f, cfl_y = %f, cfl_z = %f \n",t,cfl_u,cfl_w,cfl_y,cfl_z);
   
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -1935,6 +1934,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
  * Calculates the time tendency of momentum tracers.
  *
  */
+
+// TO DO: IMPLEMENT SASHA's PRESSURE INTEGRATION
 void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 {
     // Looping variables
@@ -1978,7 +1979,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     
     
-    // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary.
+    // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary).
     for (j = 1; j < Nx; j++)
     {
         for (k = 0; k < Nz; k++)
@@ -2001,15 +2002,15 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         for (k = 0; k < Nz; k++)
         {
-            du_dt[j][k] = f0*vvel[j][k]; // - BPx[j][k];
-            dv_dt[j][k] = -f0*uvel[j][k]; //- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
+            du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
+            dv_dt[j][k] = -f0*uvel[j][k]- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
         }
     }
     
     // Should bottom momentum fluxes be in the implicit diffusion term?
     
     // Add surface/bottom momentum fluxes
-    for (j = 0; j < Nx; j++)
+    for (j = 1; j < Nx; j++)
     {
         du_dt[j][0] -= r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
         dv_dt[j][0] -= r_bbl*vvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]);

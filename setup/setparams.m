@@ -90,7 +90,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 0.1*t1day;
+  outputFreq = 1e-2*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -99,7 +99,6 @@ function setparams (local_home_dir,run_name)
   
   %%% Scalar parameter definitions 
   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
-  tau0 = 0;
   rho0 = 1e3; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 500; %%% Reference GM diffusivity
@@ -313,7 +312,7 @@ function setparams (local_home_dir,run_name)
   tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
 %   Lmax = 300*m1km;
 %   tau = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
-%   tau(xx_psi<50) = 0;
+%   tau(xx_psi < 200) = 0;
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -523,7 +522,7 @@ function setparams (local_home_dir,run_name)
   figure(fignum);
   fignum = fignum+1;
   plot(xx_psi,tau(1,:),'k','LineWidth',2)
-%   title('Surface Wind Stress')
+  title('Surface Wind Stress')
   axis tight
   xticks([])
   yticks([-0.09 -0.05 0])
@@ -533,6 +532,7 @@ function setparams (local_home_dir,run_name)
   fignum = fignum + 1;
   wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);  
   plot(xx_psi(1:end-1),wsc)
+  title('Windstress Curl')
   
   %%% Plot Buoyancy relaxation profile
 
