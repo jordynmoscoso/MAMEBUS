@@ -35,6 +35,10 @@
 #define MOMENTUM_NONE 0         // No explicit momentum time stepping, mean velocities have prescribed boundary layer structure only
 #define MOMENTUM_TTTW 1         // Momentum evolves under time-dependend turbulent thermal wind approximation
 
+// Pressure scheme identifiers
+#define PRESSURE_LINEAR 0 // The pressure is calculated using a standard linear pressure gradient interpolation.
+#define PRESSURE_CUBIC 1 // The pressure is calculated using the Shchepetkin & McWilliams (2003) cubic interpolation scheme.
+
 // Handy constants
 #define _PI  3.14159265358979323846
 #define _2PI 6.28318530717958647692

@@ -111,6 +111,9 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     Nstore = [];
     tsave = [];
     
+      dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
+  xx_psi = 0:dx:Lx;
+    
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
                         = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);
@@ -160,6 +163,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     %%% If plot_trac==true, load the tracer specified by trac_num and plot
     %%% it
     if (plot_trac)    
+        
+        titlestr = ['t = ', num2str(t/t1year), ' yr'];
 
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
@@ -174,6 +179,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
           caxis([-.03 .03])
           colormap redblue;
           h=colorbar;
+          title(titlestr)
+          hold on
+          plot(xx_psi,-hb_psi,'k')
+          hold off
 %           disp([max(max(phi))
 %           min(min(phi))])
 %           set(gca, 'CLim', [0, 20]);
@@ -181,18 +190,26 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar 
-          caxis([-.2 .2])
+          caxis([-.5 .5])
 %           disp([max(max(phi))
 %           min(min(phi))])
           colormap redblue;
           h=colorbar;
+                    title(titlestr)
+          hold on
+          plot(xx_psi,-hb_psi,'k')
+          hold off
         case 2 %%% Buoyancy
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
-          title(['Time is ', num2str(t/t1day)])
+          title(titlestr)
           colormap jet;
           h=colorbar;
+                    title(titlestr)
+          hold on
+          plot(xx_psi,-hb_psi,'k')
+          hold off
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 

@@ -60,8 +60,7 @@ function setparams (local_home_dir,run_name)
 %       modeltype = 0;
 %   end
   
-  
-
+  pressureScheme = PRESSURE_LINEAR;
         
   
   %%% For plotting figures of setup
@@ -90,7 +89,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1e-2*t1year;
+  outputFreq = .1*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -196,6 +195,7 @@ function setparams (local_home_dir,run_name)
   
   %%% Indicate number of phytoplankton, zooplankton and detrital pools
   PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
+  PARAMS = addParameter(PARAMS,'pressureScheme',pressureScheme,PARM_INT);
   PARAMS = addParameter(PARAMS,'MP',MP,PARM_INT);
   PARAMS = addParameter(PARAMS,'MZ',MZ,PARM_INT);
   
@@ -248,7 +248,9 @@ function setparams (local_home_dir,run_name)
   Hexp = 500;
   Tmax = 20 - 5*XX_tr/Lx;
   Tmin = 0;
-  buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
+%   buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
+  buoy_init = 20*(1-tanh(-ZZ_tr./Hexp));
+  
   
   %%% Initial depth tracer
   dtr_init = ZZ_tr;
@@ -531,7 +533,7 @@ function setparams (local_home_dir,run_name)
   figure(fignum)
   fignum = fignum + 1;
   wsc = (tau(1,2:end) - tau(1,1:end-1))/(dx);  
-  plot(xx_psi(1:end-1),wsc)
+  plot(xx_psi(1:end-1),wsc,'k','LineWidth',2)
   title('Windstress Curl')
   
   %%% Plot Buoyancy relaxation profile
@@ -549,7 +551,7 @@ function setparams (local_home_dir,run_name)
   % Diapycnal Diffusivities
   figure(fignum)
   subplot(1,2,1)
-  contourf(XX_psi,ZZ_psi,Kdia,10)
+  pcolor(XX_psi,ZZ_psi,Kdia)
   title('Diapycnal diffusivity, \kappa_{\nu}')
   shading interp
   colorbar
@@ -576,6 +578,13 @@ function setparams (local_home_dir,run_name)
   fignum = fignum+1;
   pcolor(XX_tr,ZZ_tr,buoy_init);
   title('Initial Buoyancy with Grid')
+  colorbar
+  
+  % Initial buoyancy
+  figure(fignum);
+  fignum = fignum+1;
+  contourf(XX_tr,ZZ_tr,buoy_init,10);
+  title('Initial Buoyancy')
   colorbar
   
   figure(fignum)

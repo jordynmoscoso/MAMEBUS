@@ -17,7 +17,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 40
+#define NPARAMS 41
 
 
 
@@ -65,6 +65,7 @@ int nbgc; // Counts number of biogeochemical parameters
 real day = 86400;                 // Seconds in a day
 real year = 31449600;             // Seconds in a year (52 7-day weeks)
 real grav = 9.8;                     // m/s^2 (gravity)
+real tref = 20;         // Reference surface temperature
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
@@ -128,6 +129,9 @@ uint advectionScheme = ADVECTION_KT00;
 // Momentum scheme
 uint momentumScheme = MOMENTUM_TTTW;
 
+// Pressure scheme
+uint pressureScheme = PRESSURE_CUBIC;
+
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
 static const char OUTN_ZZ_PSI[] = "ZZ_PSI";
@@ -174,6 +178,21 @@ real ** BPa = NULL;           // Baroclinic Pressure
 real ** BPx = NULL;           // Baroclinic Pressure gradient
 real ** BBy = NULL;           // Buoyancy
 real ** Nsq = NULL;
+
+// Pointers for pressure calculation scheme.
+real ** ZZ_press = NULL;
+real ** drx = NULL;     // Stores elementary differences
+real ** drz = NULL;
+real ** dzx = NULL;
+real ** dzz = NULL;
+real ** hrx = NULL;     // Stores hyperbolic differences
+real ** hrz = NULL;
+real ** hzx = NULL;
+real ** hzz = NULL;
+real ** rhos = NULL;    // Density holder
+real ** P = NULL;       // Pressure
+real ** FC = NULL;      // integrated density
+
 
 // Boundary layer work arrays
 uint * k_sml = NULL;
@@ -984,7 +1003,6 @@ void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
 {
     int i;                  // counters
     
-    real tref = 20;         // Reference temperature
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
     real kpar = 0;          // light attenuation
@@ -1035,7 +1053,6 @@ void ssem (const real t, const int j, const int k, real *** phi, real *** dphi_d
 
     
     // Parameters for temperature dependent uptake.
-    real tref = 20;         // Reference surface temperature
     real R = 0.05;          // Temperature dependence (ward 2012)
     real tfrac = 0;         // Temperature dependent uptake
     real irfrac = 0;        // Fraction of light (for light depenendent uptake)
@@ -1958,41 +1975,157 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     // Working variables and matrices
     real pz = 0; // placeholder for the vertical pressure gradient.
     real alpha = 1e-4; // thermal expansion coefficient
+    real zeta = 0;
     
     
-    // Calculate the baroclinic pressure from the buoyancy profile
-    for (j = 0; j < Nx; j++)
+    switch(pressureScheme)
     {
-        for (k = Nz+1; k >= 0; k--)
+        // Calculate the pressure gradient using a linear pressure interpolation
+        case PRESSURE_LINEAR:
         {
-            if (k == Nz+1){
-                BPa[j][k] = 0; // set the surface pressure to zero.
+            // Calculate the baroclinic pressure from the buoyancy profile
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = Nz+1; k >= 0; k--)
+                {
+                    if (k == Nz+1){
+                        BPa[j][k] = 0; // set the surface pressure to zero.
+                    }
+                    else{
+                        BBy[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
+                        BPa[j][k] = BPa[j][k+1] - BBy[j][k]/_dz_w[j][k];
+                    }
+                }
             }
-            else{
-                BBy[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
-                BPa[j][k] = BPa[j][k+1] - BBy[j][k]/_dz_w[j][k];
+            
+            // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary).
+            for (j = 1; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
+                    BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
+                    BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
+                    
+                    if (j == 1){
+                        BPx[0][k] = BPx[1][k]; // should we do this?
+                    }
+                    
+                }
+            }
+            break;
+        }
+        case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
+        {
+            // Calculate the density field
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    rhos[j+1][k+1] = rho0*(1 - alpha*( buoy[j][k] - tref ));
+                    ZZ_press[j+1][k+1] = ZZ_phi[j][k];
+                }
+            }
+            
+            
+            // Extend the density at the edges
+            for (j = 1; j < Nx+1; j++)
+            {
+                rhos[j][Nx+1] = rhos[j][Nx];
+                rhos[j][0] = rhos[j][1];
                 
-//                printf("Pressure at j = %d, k = %d, is %f, dz = %f \n: ",j,k,BPa[j][k],_dz_w[j][k]);
+                ZZ_press[j][Nx+1] = ZZ_press[j][Nx];
+                ZZ_press[j][0] = ZZ_press[j][1];
             }
+            
+            for (k = 1; k < Nz+1; k++)
+            {
+                rhos[0][k] = rhos[1][k];
+                rhos[Nz+1][k] = rhos[Nz][k];
+                
+                ZZ_press[Nz+1][k] = ZZ_press[Nz][k];
+                ZZ_press[0][k] = ZZ_press[1][k];
+            }
+            
+            
+            // Calculate the elementary differences in the x direction
+            for (j = 0; j < Nx+1; j++) // size (Nx+1,Nz)
+            {
+                for (k = 1; k < Nz+1; k++)
+                {
+                    drx[j][k-1] = rhos[j+1][k] - rhos[j][k];
+                    dzx[j][k-1] = ZZ_press[j+1][k] - ZZ_press[j][k];
+                }
+            }
+            
+            
+            // Calculate the elementary differences in the z direction
+            for (j = 1; j < Nx+1; j++) // size (Nx,Nz+1)
+            {
+                for (k = 0; k < Nx+1; k++)
+                {
+                    drz[j-1][k] = rhos[j][k+1] - rhos[j][k];
+                    dzz[j-1][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
+                }
+            }
+            
+             
+            // Calculate the hyperbolic differences
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nx; k++)
+                {
+                    hrx[j][k] = 2*drx[j+1][k]*drx[j][k]/(drx[j+1][k] + drx[j][k]);
+                    hrz[j][k] = 2*drz[j][k+1]*drz[j][k]/(drz[j][k+1] + drz[j][k]);
+                    
+                    hzx[j][k] = 2*dzx[j+1][k]*dzx[j][k]/(dzx[j+1][k] + dzx[j][k]);
+                    hzz[j][k] = 2*dzz[j][k+1]*dzz[j][k]/(dzz[j][k+1] + dzz[j][k]);
+                }
+            }
+            
+            // Calculate the pressure at the surface
+            for (j = 0; j < Nx; j++)
+            {
+                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
+                P[j][Nz-1] = grav*( rhos[j+1][Nz] + 0.5*( zeta - ZZ_phi[j][Nz-1] )*( rhos[j+1][Nz] - rhos[j+1][Nz-1] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) )*( zeta - ZZ_phi[j][Nz-1] );
+            }
+            
+            // Calculate the pressure
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = Nz-2; k >= 0; k--)
+                {
+                    P[j][k] = P[j][k+1] + grav*( 0.5*(rhos[j+1][k+2] - rhos[j+1][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - 0.1*( (hrz[j][k+1] - hrz[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - ( hzz[j][k+1] - hzz[j][k] )/12 ) - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j+1][k+2] - rhos[j+1][k+1] - ( hrz[j][k+1] - hrz[j][k] )/12 ) ) );
+                }
+            }
+            
+            // Calculate the correction due to the sigma coordinates
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    FC[j][k] = 0.5*(rhos[j+2][k+1] - rhos[j+1][k+1])*(ZZ_phi[j+1][k] - ZZ_phi[j][k]) - 0.1*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - (hzx[j+1][k] - hzx[j][k])/12 ) - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+2][k+1] - rhos[j+1][k+1] - (hrx[j+1][k] - hrx[j][k])/12 ) );
+                }
+            }
+            
+            
+            // Calculate the pressure gradient
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; j < Nz; k++)
+                {
+                    BPx[j][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
+                }
+            }
+             
+            break;
         }
-    }
-    
-    
-    
-    // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary).
-    for (j = 1; j < Nx; j++)
-    {
-        for (k = 0; k < Nz; k++)
+        default:
         {
-            pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
-            BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
-            BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
-            
-            if (j == 1){
-                BPx[0][k] = BPx[1][k]; // should we do this?
-            }
-            
+            printf("Error: PressureScheme is undefined \n");
+            break;
         }
+            
     }
     
     
@@ -2003,7 +2136,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         for (k = 0; k < Nz; k++)
         {
             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
-            dv_dt[j][k] = -f0*uvel[j][k]- tau[j]/(rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
+            dv_dt[j][k] = -f0*uvel[j][k]; // - tau[j]/(f0*rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
         }
     }
     
@@ -2020,9 +2153,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 
     }
     
-    for (k = 0; k < Nz; k++) // u tendencies are zero at the western wall
+    for (k = 0; k < Nz; k++) // u,v tendencies are zero at the western wall
     {
         du_dt[0][k] = 0;
+        dv_dt[0][k] = 0;
     }
   
     
@@ -2497,6 +2631,8 @@ void printUsage (void)
      "                        identifiers. Default is ADVECTION_KT00.\n"
      "  momentumScheme        Selects momentum scheme. See defs.h for\n"
      "                        identifiers. Default is MOMENTUM_NONE.\n"
+     "  pressureScheme        Selects the pressure scheme. See defs.h for \n"
+     "                        identifiers. Default is PRESSURE_CUBIC. \n"
      "  bgcModel              Selects biogeochemical model type. See SWdefs.h for\n"
      "                        numerical identifiers. Default is BGC_NONE.\n"
      "  KT00_sigma            Kurganov-Tadmor (2000) minmod parameter.\n"
@@ -2687,6 +2823,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"timeSteppingScheme","%u",&timeSteppingScheme,true);
     setParam(params,paramcntr++,"advectionScheme","%u",&advectionScheme,true);
     setParam(params,paramcntr++,"momentumScheme","%u",&momentumScheme,true);
+    setParam(params,paramcntr++,"pressureScheme","%u",&pressureScheme,true);
     setParam(params,paramcntr++,"bgcModel","%u",&bgcModel,true);
     setParam(params,paramcntr++,"KT00_sigma","%lf",&KT00_sigma,true);
   
@@ -2949,6 +3086,21 @@ int main (int argc, char ** argv)
     MATALLOC(BPx,Nx,Nz);
     MATALLOC(BBy,Nx,Nz);
     MATALLOC(Nsq,Nx,Nz);
+    
+    // Pressure calculation scheme
+    MATALLOC(ZZ_press,Nx+2,Nz+2);
+    MATALLOC(rhos,Nx+2,Nz+2);
+    MATALLOC(drz,Nx,Nz+1);
+    MATALLOC(drx,Nx+1,Nz);
+    MATALLOC(dzz,Nx,Nz+1);
+    MATALLOC(dzx,Nx+1,Nz);
+    MATALLOC(hrx,Nx,Nz);
+    MATALLOC(hrz,Nx,Nz);
+    MATALLOC(hzx,Nx,Nz);
+    MATALLOC(hzz,Nx,Nz);
+    MATALLOC(P,Nx,Nz);
+    MATALLOC(FC,Nx,Nz);
+
     
     // Boundary layer work arrays
     k_sml = malloc((Nx+1)*sizeof(uint));

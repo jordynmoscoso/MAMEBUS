@@ -30,6 +30,10 @@ ADVECTION_KT00  = 1;      %%% Kurganov-Tadmor scheme for conservation laws (see 
 MOMENTUM_NONE = 0;        %%% No explicit momentum time stepping, mean velocities have prescribed boundary layer structure only
 MOMENTUM_TTTW = 1;        %%% Momentum evolves under time-dependend turbulent thermal wind approximation
 
+%%% Pressure scheme identifiers
+PRESSURE_LINEAR = 0;
+PRESSURE_CUBIC = 1;
+
 %%% Fixed tracer array indices
 IDX_UVEL = 1;             %%% Zonal velocity
 IDX_VVEL = 2;             %%% Meridional velocity
