@@ -89,7 +89,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = .1*t1day;
+  outputFreq = 1e-1*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -179,7 +179,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);  
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
-  PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'cflFrac',0.25,PARM_REALF);
   PARAMS = addParameter(PARAMS,'endTime',endTime,PARM_REALF);
   PARAMS = addParameter(PARAMS,'monitorFrequency',outputFreq,PARM_REALF);
   PARAMS = addParameter(PARAMS,'restart',restart,PARM_INT);

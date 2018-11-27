@@ -116,6 +116,7 @@ real ** ZZ_phi = NULL;    // Depth grids
 real ** ZZ_psi = NULL;
 real ** ZZ_u = NULL;
 real ** ZZ_w = NULL;
+real ** grd_area = NULL;  // Area of each grid cell
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -189,9 +190,10 @@ real ** hrx = NULL;     // Stores hyperbolic differences
 real ** hrz = NULL;
 real ** hzx = NULL;
 real ** hzz = NULL;
-real ** rhos = NULL;    // Density holder
+real ** rhowrk = NULL;  // Density holder
 real ** P = NULL;       // Pressure
 real ** FC = NULL;      // integrated density
+real ** FX = NULL;
 
 
 // Boundary layer work arrays
@@ -225,9 +227,6 @@ void windInterp (const real t)
   
 
 }
-
-
-
 
 
 // TODO ened to add surface bottom BLs
@@ -300,9 +299,6 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
     
   
 }
-
-
-
 
 
 
@@ -457,6 +453,163 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
 
 
 
+/**
+ *
+ * calcSWPG
+ *
+ * Calculates the pressure and density gradients following
+ * Shchepetkin & McWilliams (2003).
+ *
+ */
+void calcCubicPG (const real t, real ** buoy)
+{
+    
+    // Looping variables
+    int i, j, k;
+    
+    // Working variables and matrices
+    real pz = 0; // placeholder for the vertical pressure gradient.
+    real alpha = 1e-4; // thermal expansion coefficient
+    real zeta = 0;
+    
+    ///////////////////////////////////////////
+    ///// Calculate the Pressure Gradient /////
+    ///////////////////////////////////////////
+    
+    // Calculate the density field
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            rhowrk[j+1][k+1] = rho0*(1 - alpha*( buoy[j][k] - tref ));
+            ZZ_press[j+1][k+1] = ZZ_phi[j][k];
+        }
+    }
+    
+    
+    // Extend the density at the edges
+    for (j = 1; j < Nx+1; j++)
+    {
+        rhowrk[j][Nx+1] = rhowrk[j][Nx];
+        rhowrk[j][0] = rhowrk[j][1];
+        
+        ZZ_press[j][Nx+1] = ZZ_press[j][Nx];
+        ZZ_press[j][0] = ZZ_press[j][1];
+    }
+    
+    for (k = 1; k < Nz+1; k++)
+    {
+        rhowrk[0][k] = rhowrk[1][k];
+        rhowrk[Nz+1][k] = rhowrk[Nz][k];
+        
+        ZZ_press[Nz+1][k] = ZZ_press[Nz][k];
+        ZZ_press[0][k] = ZZ_press[1][k];
+    }
+    
+    
+    // Calculate the elementary differences in the x direction
+    for (j = 0; j < Nx+1; j++) // size (Nx+1,Nz)
+    {
+        for (k = 1; k < Nz+1; k++)
+        {
+            drx[j][k-1] = rhowrk[j+1][k] - rhowrk[j][k];
+            dzx[j][k-1] = ZZ_press[j+1][k] - ZZ_press[j][k];
+        }
+    }
+    
+    
+    // Calculate the elementary differences in the z direction
+    for (j = 1; j < Nx+1; j++) // size (Nx,Nz+1)
+    {
+        for (k = 0; k < Nx+1; k++)
+        {
+            drz[j-1][k] = rhowrk[j][k+1] - rhowrk[j][k];
+            dzz[j-1][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
+        }
+    }
+    
+    
+    // Calculate the hyperbolic differences
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nx; k++)
+        {
+            hrx[j][k] = 2*drx[j+1][k]*drx[j][k]/(drx[j+1][k] + drx[j][k]);
+            hrz[j][k] = 2*drz[j][k+1]*drz[j][k]/(drz[j][k+1] + drz[j][k]);
+            
+            hzx[j][k] = 2*dzx[j+1][k]*dzx[j][k]/(dzx[j+1][k] + dzx[j][k]);
+            hzz[j][k] = 2*dzz[j][k+1]*dzz[j][k]/(dzz[j][k+1] + dzz[j][k]);
+        }
+    }
+    
+    // Calculate the pressure at the surface
+    for (j = 0; j < Nx; j++)
+    {
+        zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
+        FX[j][Nz-1] = ( rhowrk[j+1][Nz] + 0.5*( zeta - ZZ_phi[j][Nz-1] )*( rhowrk[j+1][Nz] - rhowrk[j+1][Nz-1] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) )*( zeta - ZZ_phi[j][Nz-1] );
+        P[j][Nz-1] = grav*FX[j][Nz-1];
+    }
+    
+    // Calculate the pressure
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = Nz-2; k >= 0; k--)
+        {
+            FX[j][k] = 0.5*(rhowrk[j+1][k+2] - rhowrk[j+1][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - 0.1*( (hrz[j][k+1] - hrz[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - ( hzz[j][k+1] - hzz[j][k] )/12 ) - ( hzz[j][k+1] - hzz[j][k] )*( rhowrk[j+1][k+2] - rhowrk[j+1][k+1] - ( hrz[j][k+1] - hrz[j][k] )/12 ) );
+            P[j][k] = P[j][k+1] + grav*( FX[j][k] );
+        }
+    }
+    
+    // Calculate the correction due to the sigma coordinates
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            FC[j][k] = 0.5*(rhowrk[j+2][k+1] - rhowrk[j+1][k+1])*(ZZ_phi[j+1][k] - ZZ_phi[j][k]) - 0.1*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - (hzx[j+1][k] - hzx[j][k])/12 ) - ( hzx[j+1][k] - hzx[j][k] )*( rhowrk[j+2][k+1] - rhowrk[j+1][k+1] - (hrx[j+1][k] - hrx[j][k])/12 ) );
+        }
+    }
+    
+    // Calculate the pressure gradient
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; j < Nz; k++)
+        {
+            BPx[j][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
+        }
+    }
+    
+    
+    //////////////////////////////////////////
+    ///// Calculate the Isopycnal Slopes /////
+    //////////////////////////////////////////
+    
+    // Compute the area integrated density gradient
+    // and divide by the area
+    for (j = 0; j < Nx-1; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            db_dx[0][k] = 0;  // Should never be used
+            db_dx[Nx][k] = 0;
+            
+            if (k == Nz-1){
+                db_dx[j+1][k] = - ( FX[j][k] - FX[j+1][k] - FC[j][k] )/grd_area[j][k];
+            }
+            else
+            {
+                db_dx[j+1][k] = - ( FX[j][k] + FC[j][k+1] - FX[j+1][k] - FC[j][k] )/grd_area[j][k];
+            }
+        }
+    }
+    
+    // Compute the vertical density gradient
+    for (j = 1; j < Nx-1; j++)
+    {
+        for (k = )
+    }
+    
+    
+}
 
 
 
@@ -587,21 +740,19 @@ void calcSlopes (     const real        t,
     
 #pragma parallel
     
+    // Calculate the buoyancy gradients in (x,z) space
+    // The horizontal buoyancy gradient is calculated using a modified version
+    // of the cubic interpolation from Shchepetkin & McWilliams (2003).
+    
+    // TTW calls calcSWPG, so the buoyancy gradient should already be stored.
+    if (momentumScheme != MOMENTUM_TTTW)
+    {
+        calcCubicPG(t,buoy);
+    }
+    
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
     {
-        // Calculate horizontal and vertical buoyancy gradients in (x,z) space
-        for (k = 1; k < Nz; k ++)
-        {
-            db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-            db_dx[k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-            db_dx[k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
-        }
-        db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
-        db_dx[0] = 0; // Here we just set then so that they are defined
-        db_dz[Nz] = 0;
-        db_dx[Nz] = 0;
-        
         // Calculate vertical gradients at SML base and BBL top
         if (use_sml)
         {
@@ -1951,8 +2102,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
  * Calculates the time tendency of momentum tracers.
  *
  */
-
-// TO DO: IMPLEMENT SASHA's PRESSURE INTEGRATION
 void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 {
     // Looping variables
@@ -2017,107 +2166,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         }
         case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
         {
-            // Calculate the density field
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    rhos[j+1][k+1] = rho0*(1 - alpha*( buoy[j][k] - tref ));
-                    ZZ_press[j+1][k+1] = ZZ_phi[j][k];
-                }
-            }
             
+            // Calculate the pressure gradient from the buoyancy field
+            calcCubicPG(t,buoy);
             
-            // Extend the density at the edges
-            for (j = 1; j < Nx+1; j++)
-            {
-                rhos[j][Nx+1] = rhos[j][Nx];
-                rhos[j][0] = rhos[j][1];
-                
-                ZZ_press[j][Nx+1] = ZZ_press[j][Nx];
-                ZZ_press[j][0] = ZZ_press[j][1];
-            }
-            
-            for (k = 1; k < Nz+1; k++)
-            {
-                rhos[0][k] = rhos[1][k];
-                rhos[Nz+1][k] = rhos[Nz][k];
-                
-                ZZ_press[Nz+1][k] = ZZ_press[Nz][k];
-                ZZ_press[0][k] = ZZ_press[1][k];
-            }
-            
-            
-            // Calculate the elementary differences in the x direction
-            for (j = 0; j < Nx+1; j++) // size (Nx+1,Nz)
-            {
-                for (k = 1; k < Nz+1; k++)
-                {
-                    drx[j][k-1] = rhos[j+1][k] - rhos[j][k];
-                    dzx[j][k-1] = ZZ_press[j+1][k] - ZZ_press[j][k];
-                }
-            }
-            
-            
-            // Calculate the elementary differences in the z direction
-            for (j = 1; j < Nx+1; j++) // size (Nx,Nz+1)
-            {
-                for (k = 0; k < Nx+1; k++)
-                {
-                    drz[j-1][k] = rhos[j][k+1] - rhos[j][k];
-                    dzz[j-1][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
-                }
-            }
-            
-             
-            // Calculate the hyperbolic differences
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nx; k++)
-                {
-                    hrx[j][k] = 2*drx[j+1][k]*drx[j][k]/(drx[j+1][k] + drx[j][k]);
-                    hrz[j][k] = 2*drz[j][k+1]*drz[j][k]/(drz[j][k+1] + drz[j][k]);
-                    
-                    hzx[j][k] = 2*dzx[j+1][k]*dzx[j][k]/(dzx[j+1][k] + dzx[j][k]);
-                    hzz[j][k] = 2*dzz[j][k+1]*dzz[j][k]/(dzz[j][k+1] + dzz[j][k]);
-                }
-            }
-            
-            // Calculate the pressure at the surface
-            for (j = 0; j < Nx; j++)
-            {
-                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
-                P[j][Nz-1] = grav*( rhos[j+1][Nz] + 0.5*( zeta - ZZ_phi[j][Nz-1] )*( rhos[j+1][Nz] - rhos[j+1][Nz-1] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) )*( zeta - ZZ_phi[j][Nz-1] );
-            }
-            
-            // Calculate the pressure
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = Nz-2; k >= 0; k--)
-                {
-                    P[j][k] = P[j][k+1] + grav*( 0.5*(rhos[j+1][k+2] - rhos[j+1][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - 0.1*( (hrz[j][k+1] - hrz[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - ( hzz[j][k+1] - hzz[j][k] )/12 ) - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j+1][k+2] - rhos[j+1][k+1] - ( hrz[j][k+1] - hrz[j][k] )/12 ) ) );
-                }
-            }
-            
-            // Calculate the correction due to the sigma coordinates
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    FC[j][k] = 0.5*(rhos[j+2][k+1] - rhos[j+1][k+1])*(ZZ_phi[j+1][k] - ZZ_phi[j][k]) - 0.1*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - (hzx[j+1][k] - hzx[j][k])/12 ) - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+2][k+1] - rhos[j+1][k+1] - (hrx[j+1][k] - hrx[j][k])/12 ) );
-                }
-            }
-            
-            
-            // Calculate the pressure gradient
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; j < Nz; k++)
-                {
-                    BPx[j][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
-                }
-            }
-             
             break;
         }
         default:
@@ -3048,6 +3100,7 @@ int main (int argc, char ** argv)
     MATALLOC(ZZ_phi,Nx,Nz);
     MATALLOC(ZZ_u,Nx+1,Nz);
     MATALLOC(ZZ_w,Nx,Nz+1);
+    MATALLOC(grd_area,Nx,Nz);
     
     // Work arrays for 'tderiv' function
     VECALLOC(phi_wrk_V,Ntot);
@@ -3089,7 +3142,7 @@ int main (int argc, char ** argv)
     
     // Pressure calculation scheme
     MATALLOC(ZZ_press,Nx+2,Nz+2);
-    MATALLOC(rhos,Nx+2,Nz+2);
+    MATALLOC(rhowrk,Nx+2,Nz+2);
     MATALLOC(drz,Nx,Nz+1);
     MATALLOC(drx,Nx+1,Nz);
     MATALLOC(dzz,Nx,Nz+1);
@@ -3100,6 +3153,8 @@ int main (int argc, char ** argv)
     MATALLOC(hzz,Nx,Nz);
     MATALLOC(P,Nx,Nz);
     MATALLOC(FC,Nx,Nz);
+    MATALLOC(FX,Nx,Nz);
+    MATALLOC(dr_dx,Nx,Nz);
 
     
     // Boundary layer work arrays
@@ -3109,8 +3164,8 @@ int main (int argc, char ** argv)
     k_bbl = malloc((Nx+1)*sizeof(uint));
     VECALLOC(wn_bbl,Nx+1);
     VECALLOC(wp_bbl,Nx+1);
-    VECALLOC(db_dx,Nz+1);
-    VECALLOC(db_dz,Nz+1);
+    MATALLOC(db_dx,Nx,Nz+1);
+    MATALLOC(db_dz,Nx,Nz+1);
     
     /////////////////////////////////
     ///// END MEMORY ALLOCATION /////
@@ -3423,6 +3478,14 @@ int main (int argc, char ** argv)
             {
                 _dzsq_psi[j][k] = SQUARE( 1/(ZZ_u[j][k]-ZZ_u[j][k-1]) );
             }
+        }
+    }
+
+    // Calculate area of each grid-cell using the shoelace method
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nx; k ++){
+            grd_area[j][k] = 0.5*dx*( ZZ_psi[j+1][k+1] + ZZ_psi[j][k+1] - ZZ_psi[j][k] - ZZ_psi[j+1][k] );
         }
     }
   

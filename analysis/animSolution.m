@@ -199,6 +199,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
           hold on
           plot(xx_psi,-hb_psi,'k')
           hold off
+          disp(n)
         case 2 %%% Buoyancy
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
