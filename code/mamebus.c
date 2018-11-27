@@ -609,13 +609,15 @@ void calcCubicPG (const real t, real ** buoy)
     // Compute the vertical density gradient
     for (j = 1; j < Nx; j++)
     {
-        db_dz[j][0] = 0;
-        
+        db_dz[j][0] = 0;  // Should never be used
+        db_dz[j][Nz] = 0;
         for (k = 1; k < Nz; k++)
         {
+            db_dz[0][k] = 0;
+            db_dz[Nz][k] = 0;
             
-            
-            
+            db_dz[j][k] = ( dzz[j-1][k-1]*( rhowrk[j][k+1] - rhowrk[j][k] )/dzz[j-1][k]
+                           + dzz[j-1][k]*( rhowrk[j][k] - rhowrk[j][k-1] )/dzz[j-1][k-1] )/( dzz[j-1][k] + dzz[j-1][k-1]);
         }
     }
     
