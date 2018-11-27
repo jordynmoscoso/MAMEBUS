@@ -587,7 +587,7 @@ void calcCubicPG (const real t, real ** buoy)
     // and divide by the area
     for (j = 0; j < Nx-1; j++)
     {
-        for (k = 0; k < Nz; k++)
+        for (k = 1; k < Nz; k++)
         {
             db_dx[0][k] = 0;  // Should never be used
             db_dx[Nx][k] = 0;
