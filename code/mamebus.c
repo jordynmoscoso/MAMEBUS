@@ -585,27 +585,38 @@ void calcCubicPG (const real t, real ** buoy)
     
     // Compute the area integrated density gradient
     // and divide by the area
-    for (j = 0; j < Nx-1; j++)
+    for (j = 1; j < Nx; j++)
     {
+        db_dx[j][0] = 0; // Should never be used
+        db_dx[j][Nz] = 0;
+        
         for (k = 1; k < Nz; k++)
         {
             db_dx[0][k] = 0;  // Should never be used
             db_dx[Nx][k] = 0;
             
+            
             if (k == Nz-1){
-                db_dx[j+1][k] = - ( FX[j][k] - FX[j+1][k] - FC[j][k] )/grd_area[j][k];
+                db_dx[j][k] = - ( FX[j-1][k-1] - FX[j][k-1] - FC[j-1][k-1] )/grd_area[j][k];
             }
             else
             {
-                db_dx[j+1][k] = - ( FX[j][k] + FC[j][k+1] - FX[j+1][k] - FC[j][k] )/grd_area[j][k];
+                db_dx[j][k] = - ( FX[j-1][k-1] + FC[j-1][k] - FX[j][k-1] - FC[j-1][k-1] )/grd_area[j-1][k-1];
             }
         }
     }
     
     // Compute the vertical density gradient
-    for (j = 1; j < Nx-1; j++)
+    for (j = 1; j < Nx; j++)
     {
-        for (k = )
+        db_dz[j][0] = 0;
+        
+        for (k = 1; k < Nz; k++)
+        {
+            
+            
+            
+        }
     }
     
     
