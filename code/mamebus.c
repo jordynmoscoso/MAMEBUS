@@ -116,7 +116,6 @@ real ** ZZ_phi = NULL;    // Depth grids
 real ** ZZ_psi = NULL;
 real ** ZZ_u = NULL;
 real ** ZZ_w = NULL;
-real ** grd_area = NULL;  // Area of each grid cell
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -190,10 +189,9 @@ real ** hrx = NULL;     // Stores hyperbolic differences
 real ** hrz = NULL;
 real ** hzx = NULL;
 real ** hzz = NULL;
-real ** rhowrk = NULL;  // Density holder
+real ** rhos = NULL;    // Density holder
 real ** P = NULL;       // Pressure
 real ** FC = NULL;      // integrated density
-real ** FX = NULL;
 
 
 // Boundary layer work arrays
@@ -223,10 +221,13 @@ real * db_dz = NULL;
  */
 void windInterp (const real t)
 {
-
-  
-
+    
+    
+    
 }
+
+
+
 
 
 // TODO ened to add surface bottom BLs
@@ -243,62 +244,65 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
 {
     int j,k;
     real z;
-  
+    
     // Zero streamfunction at top/bottom boundaries
     for (j = 0; j < Nx+1; j ++)
     {
-      psi_m[j][0] = 0;
-      psi_m[j][Nz] = 0;
+        psi_m[j][0] = 0;
+        psi_m[j][Nz] = 0;
     }
     // Zero streamfunction at east/west boundaries
     for (k = 0; k < Nz+1; k ++)
     {
-      psi_m[0][k] = 0;
-      psi_m[Nx][k] = 0;
+        psi_m[0][k] = 0;
+        psi_m[Nx][k] = 0;
     }
-  
+    
     // If we are not evolving momentum explicitly then we prescribe simple
     // uniform Ekman velocities in the SML and BBL
     if (momentumScheme == MOMENTUM_NONE)
     {
-      
-      
+        
+        
 #pragma parallel
-      
-      // Current implementation: uniform horizontal velocity in SML and BBL
-      for (j = 1; j < Nx; j ++)
-      {
-          for (k = 1; k < Nz; k ++)
-          {
-              z = ZZ_psi[j][k];
-              
-              psi_m[j][k] = tau[j]/(rho0*f0);
-              
-              if (use_sml && (z > -Hsml))
-              {
-                  psi_m[j][k] *= (-z/Hsml);
-              }
-              if (use_bbl && (z < -hb_psi[j] + Hbbl))
-              {
-                  psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
-              }
-          }
-      }
+        
+        // Current implementation: uniform horizontal velocity in SML and BBL
+        for (j = 1; j < Nx; j ++)
+        {
+            for (k = 1; k < Nz; k ++)
+            {
+                z = ZZ_psi[j][k];
+                
+                psi_m[j][k] = tau[j]/(rho0*f0);
+                
+                if (use_sml && (z > -Hsml))
+                {
+                    psi_m[j][k] *= (-z/Hsml);
+                }
+                if (use_bbl && (z < -hb_psi[j] + Hbbl))
+                {
+                    psi_m[j][k] *= ((z+hb_psi[j])/Hbbl);
+                }
+            }
+        }
     }
     // Otherwise just integrate u-velocity to get the mean streamfunction
     else
     {
-      for (j = 1; j < Nx; j ++)
-      {
-        for (k = 1; k < Nz; k ++)
+        for (j = 1; j < Nx; j ++)
         {
-          psi_m[j][k] = psi_m[j][k-1] - dz_u[j][k-1]*uvel[j][k-1];
+            for (k = 1; k < Nz; k ++)
+            {
+                psi_m[j][k] = psi_m[j][k-1] - dz_u[j][k-1]*uvel[j][k-1];
+            }
         }
-      }
     }
     
-  
+    
 }
+
+
+
 
 
 
@@ -453,176 +457,6 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
 
 
 
-/**
- *
- * calcSWPG
- *
- * Calculates the pressure and density gradients following
- * Shchepetkin & McWilliams (2003).
- *
- */
-void calcCubicPG (const real t, real ** buoy)
-{
-    
-    // Looping variables
-    int i, j, k;
-    
-    // Working variables and matrices
-    real pz = 0; // placeholder for the vertical pressure gradient.
-    real alpha = 1e-4; // thermal expansion coefficient
-    real zeta = 0;
-    
-    ///////////////////////////////////////////
-    ///// Calculate the Pressure Gradient /////
-    ///////////////////////////////////////////
-    
-    // Calculate the density field
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; k < Nz; k++)
-        {
-            rhowrk[j+1][k+1] = rho0*(1 - alpha*( buoy[j][k] - tref ));
-            ZZ_press[j+1][k+1] = ZZ_phi[j][k];
-        }
-    }
-    
-    
-    // Extend the density at the edges
-    for (j = 1; j < Nx+1; j++)
-    {
-        rhowrk[j][Nx+1] = rhowrk[j][Nx];
-        rhowrk[j][0] = rhowrk[j][1];
-        
-        ZZ_press[j][Nx+1] = ZZ_press[j][Nx];
-        ZZ_press[j][0] = ZZ_press[j][1];
-    }
-    
-    for (k = 1; k < Nz+1; k++)
-    {
-        rhowrk[0][k] = rhowrk[1][k];
-        rhowrk[Nz+1][k] = rhowrk[Nz][k];
-        
-        ZZ_press[Nz+1][k] = ZZ_press[Nz][k];
-        ZZ_press[0][k] = ZZ_press[1][k];
-    }
-    
-    
-    // Calculate the elementary differences in the x direction
-    for (j = 0; j < Nx+1; j++) // size (Nx+1,Nz)
-    {
-        for (k = 1; k < Nz+1; k++)
-        {
-            drx[j][k-1] = rhowrk[j+1][k] - rhowrk[j][k];
-            dzx[j][k-1] = ZZ_press[j+1][k] - ZZ_press[j][k];
-        }
-    }
-    
-    
-    // Calculate the elementary differences in the z direction
-    for (j = 1; j < Nx+1; j++) // size (Nx,Nz+1)
-    {
-        for (k = 0; k < Nx+1; k++)
-        {
-            drz[j-1][k] = rhowrk[j][k+1] - rhowrk[j][k];
-            dzz[j-1][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
-        }
-    }
-    
-    
-    // Calculate the hyperbolic differences
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; k < Nx; k++)
-        {
-            hrx[j][k] = 2*drx[j+1][k]*drx[j][k]/(drx[j+1][k] + drx[j][k]);
-            hrz[j][k] = 2*drz[j][k+1]*drz[j][k]/(drz[j][k+1] + drz[j][k]);
-            
-            hzx[j][k] = 2*dzx[j+1][k]*dzx[j][k]/(dzx[j+1][k] + dzx[j][k]);
-            hzz[j][k] = 2*dzz[j][k+1]*dzz[j][k]/(dzz[j][k+1] + dzz[j][k]);
-        }
-    }
-    
-    // Calculate the pressure at the surface
-    for (j = 0; j < Nx; j++)
-    {
-        zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
-        FX[j][Nz-1] = ( rhowrk[j+1][Nz] + 0.5*( zeta - ZZ_phi[j][Nz-1] )*( rhowrk[j+1][Nz] - rhowrk[j+1][Nz-1] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) )*( zeta - ZZ_phi[j][Nz-1] );
-        P[j][Nz-1] = grav*FX[j][Nz-1];
-    }
-    
-    // Calculate the pressure
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = Nz-2; k >= 0; k--)
-        {
-            FX[j][k] = 0.5*(rhowrk[j+1][k+2] - rhowrk[j+1][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - 0.1*( (hrz[j][k+1] - hrz[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - ( hzz[j][k+1] - hzz[j][k] )/12 ) - ( hzz[j][k+1] - hzz[j][k] )*( rhowrk[j+1][k+2] - rhowrk[j+1][k+1] - ( hrz[j][k+1] - hrz[j][k] )/12 ) );
-            P[j][k] = P[j][k+1] + grav*( FX[j][k] );
-        }
-    }
-    
-    // Calculate the correction due to the sigma coordinates
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; k < Nz; k++)
-        {
-            FC[j][k] = 0.5*(rhowrk[j+2][k+1] - rhowrk[j+1][k+1])*(ZZ_phi[j+1][k] - ZZ_phi[j][k]) - 0.1*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - (hzx[j+1][k] - hzx[j][k])/12 ) - ( hzx[j+1][k] - hzx[j][k] )*( rhowrk[j+2][k+1] - rhowrk[j+1][k+1] - (hrx[j+1][k] - hrx[j][k])/12 ) );
-        }
-    }
-    
-    // Calculate the pressure gradient
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; j < Nz; k++)
-        {
-            BPx[j][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
-        }
-    }
-    
-    
-    //////////////////////////////////////////
-    ///// Calculate the Isopycnal Slopes /////
-    //////////////////////////////////////////
-    
-    // Compute the area integrated density gradient
-    // and divide by the area
-    for (j = 1; j < Nx; j++)
-    {
-        db_dx[j][0] = 0; // Should never be used
-        db_dx[j][Nz] = 0;
-        
-        for (k = 1; k < Nz; k++)
-        {
-            db_dx[0][k] = 0;  // Should never be used
-            db_dx[Nx][k] = 0;
-            
-            
-            if (k == Nz-1){
-                db_dx[j][k] = - ( FX[j-1][k-1] - FX[j][k-1] - FC[j-1][k-1] )/grd_area[j][k];
-            }
-            else
-            {
-                db_dx[j][k] = - ( FX[j-1][k-1] + FC[j-1][k] - FX[j][k-1] - FC[j-1][k-1] )/grd_area[j-1][k-1];
-            }
-        }
-    }
-    
-    // Compute the vertical density gradient
-    for (j = 1; j < Nx; j++)
-    {
-        db_dz[j][0] = 0;  // Should never be used
-        db_dz[j][Nz] = 0;
-        for (k = 1; k < Nz; k++)
-        {
-            db_dz[0][k] = 0;
-            db_dz[Nz][k] = 0;
-            
-            db_dz[j][k] = ( dzz[j-1][k-1]*( rhowrk[j][k+1] - rhowrk[j][k] )/dzz[j-1][k]
-                           + dzz[j-1][k]*( rhowrk[j][k] - rhowrk[j][k-1] )/dzz[j-1][k-1] )/( dzz[j-1][k] + dzz[j-1][k-1]);
-        }
-    }
-    
-    
-}
 
 
 
@@ -753,19 +587,21 @@ void calcSlopes (     const real        t,
     
 #pragma parallel
     
-    // Calculate the buoyancy gradients in (x,z) space
-    // The horizontal buoyancy gradient is calculated using a modified version
-    // of the cubic interpolation from Shchepetkin & McWilliams (2003).
-    
-    // TTW calls calcSWPG, so the buoyancy gradient should already be stored.
-    if (momentumScheme != MOMENTUM_TTTW)
-    {
-        calcCubicPG(t,buoy);
-    }
-    
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
     {
+        // Calculate horizontal and vertical buoyancy gradients in (x,z) space
+        for (k = 1; k < Nz; k ++)
+        {
+            db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
+            db_dx[k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+            db_dx[k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+        }
+        db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
+        db_dx[0] = 0; // Here we just set then so that they are defined
+        db_dz[Nz] = 0;
+        db_dx[Nz] = 0;
+        
         // Calculate vertical gradients at SML base and BBL top
         if (use_sml)
         {
@@ -1138,12 +974,12 @@ real single_nitrate (const real t, const int j, const int k,
     remin = - flux / scale_height;
     r_flux = flux;             // Move to the next vertical grid cell
     
-//    // Uncomment to Return any extra flux of nutrients to bottom grid cell
-//    if (k == 0)
-//    {
-//        remin -= flux / dz;
-//        r_flux = 0;           // Reset flux of nutrients at the surface to zero
-//    }
+    //    // Uncomment to Return any extra flux of nutrients to bottom grid cell
+    //    if (k == 0)
+    //    {
+    //        remin -= flux / dz;
+    //        r_flux = 0;           // Reset flux of nutrients at the surface to zero
+    //    }
     
     //
     // Update the value of nitrate
@@ -1198,7 +1034,7 @@ void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real ** dZ_dt = NULL;
     real ** dD_dt = NULL;
     
-
+    
 }
 
 
@@ -1214,7 +1050,7 @@ void ssem (const real t, const int j, const int k, real *** phi, real *** dphi_d
            real * lp, real * lz, real * vmax, real * kn, real * gmax, real * preyopt, real * kp)
 {
     int l,m;                    // Counters
-
+    
     
     // Parameters for temperature dependent uptake.
     real R = 0.05;          // Temperature dependence (ward 2012)
@@ -1450,7 +1286,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     // Single nitrate model holders
     real r_flux = 0;                         // holder for remin value in the single nitrate model
     real r_flux_next = 0;                    // placeholder for function output
-
+    
     // NPZD model parameter vectors
     real gmax[MZ];
     real kp[MZ];
@@ -1472,7 +1308,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         {
             return;
         }
-        
+            
         case BGC_NITRATEONLY:
         {
             
@@ -1604,7 +1440,7 @@ void do_adv_diff (  const real    t,
     // True isopycnal slope, relative to sigma coordinates
     real Siso_true = 0;
     real z;
-
+    
     /////////////////////////////////////////////////////
     ///// Arrays used by the Kurganov-Tadmor scheme /////
     /////////////////////////////////////////////////////
@@ -1674,7 +1510,7 @@ void do_adv_diff (  const real    t,
         }
     }
     
-
+    
     
     /////////////////////////////////
     ///// Calculation of fluxes /////
@@ -1908,7 +1744,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     // True isopycnal slope, relative to sigma coordinates
     real Sgm_true = 0;
     real Siso_true = 0;
-  
+    
     // For CFL calculations
     real cfl_dt = 0;
     real cfl_u = 0;
@@ -1960,7 +1796,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
         {
             continue;
         }
-      
+        
         // Advection/diffusion depends on whether the tracer is the buoyancy variable
         if (i == idx_buoy)
         {
@@ -1978,7 +1814,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     ///// END CALCULATING TENDENCIES /////
     //////////////////////////////////////
     
-
+    
     
     //////////////////////////////////
     ///// BEGIN CALCULATING CFLS /////
@@ -2074,7 +1910,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/nsq_max;
     
-  
+    
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
     //    printf(" CFL condition is %f\n", cfl_phys);
@@ -2115,25 +1951,27 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
  * Calculates the time tendency of momentum tracers.
  *
  */
+
+// TO DO: IMPLEMENT SASHA's PRESSURE INTEGRATION
 void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 {
     // Looping variables
     int i, j, k;
-  
+    
     // Pointers to velocity and buoyancy matrices
     real ** uvel = NULL;
     real ** vvel = NULL;
     real ** buoy = NULL;
     real ** du_dt = NULL;
     real ** dv_dt = NULL;
-
+    
     // Pointers to velocity and buoyancy matrices
     uvel = phi[idx_uvel];
     vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
     du_dt = dphi_dt[idx_uvel];
     dv_dt = dphi_dt[idx_vvel];
-  
+    
     // Working variables and matrices
     real pz = 0; // placeholder for the vertical pressure gradient.
     real alpha = 1e-4; // thermal expansion coefficient
@@ -2142,7 +1980,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     switch(pressureScheme)
     {
-        // Calculate the pressure gradient using a linear pressure interpolation
+            // Calculate the pressure gradient using a linear pressure interpolation
         case PRESSURE_LINEAR:
         {
             // Calculate the baroclinic pressure from the buoyancy profile
@@ -2179,9 +2017,106 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         }
         case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
         {
+            // Calculate the density field
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    rhos[j+1][k+1] = rho0*(1 - alpha*( buoy[j][k] - tref ));
+                    ZZ_press[j+1][k+1] = ZZ_phi[j][k];
+                }
+            }
             
-            // Calculate the pressure gradient from the buoyancy field
-            calcCubicPG(t,buoy);
+            
+            // Extend the density at the edges
+            for (j = 1; j < Nx+1; j++)
+            {
+                rhos[j][Nx+1] = rhos[j][Nx];
+                rhos[j][0] = rhos[j][1];
+                
+                ZZ_press[j][Nx+1] = ZZ_press[j][Nx];
+                ZZ_press[j][0] = ZZ_press[j][1];
+            }
+            
+            for (k = 1; k < Nz+1; k++)
+            {
+                rhos[0][k] = rhos[1][k];
+                rhos[Nz+1][k] = rhos[Nz][k];
+                
+                ZZ_press[Nz+1][k] = ZZ_press[Nz][k];
+                ZZ_press[0][k] = ZZ_press[1][k];
+            }
+            
+            
+            // Calculate the elementary differences in the x direction
+            for (j = 0; j < Nx+1; j++) // size (Nx+1,Nz)
+            {
+                for (k = 1; k < Nz+1; k++)
+                {
+                    drx[j][k-1] = rhos[j+1][k] - rhos[j][k];
+                    dzx[j][k-1] = ZZ_press[j+1][k] - ZZ_press[j][k];
+                }
+            }
+            
+            
+            // Calculate the elementary differences in the z direction
+            for (j = 1; j < Nx+1; j++) // size (Nx,Nz+1)
+            {
+                for (k = 0; k < Nx+1; k++)
+                {
+                    drz[j-1][k] = rhos[j][k+1] - rhos[j][k];
+                    dzz[j-1][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
+                }
+            }
+            
+            
+            // Calculate the hyperbolic differences
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nx; k++)
+                {
+                    hrx[j][k] = 2*drx[j+1][k]*drx[j][k]/(drx[j+1][k] + drx[j][k]);
+                    hrz[j][k] = 2*drz[j][k+1]*drz[j][k]/(drz[j][k+1] + drz[j][k]);
+                    
+                    hzx[j][k] = 2*dzx[j+1][k]*dzx[j][k]/(dzx[j+1][k] + dzx[j][k]);
+                    hzz[j][k] = 2*dzz[j][k+1]*dzz[j][k]/(dzz[j][k+1] + dzz[j][k]);
+                }
+            }
+            
+            // Calculate the pressure at the surface
+            for (j = 0; j < Nx; j++)
+            {
+                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
+                P[j][Nz-1] = grav*( rhos[j+1][Nz] + 0.5*( zeta - ZZ_phi[j][Nz-1] )*( rhos[j+1][Nz] - rhos[j+1][Nz-1] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) )*( zeta - ZZ_phi[j][Nz-1] );
+            }
+            
+            // Calculate the pressure
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = Nz-2; k >= 0; k--)
+                {
+                    P[j][k] = P[j][k+1] + grav*( 0.5*(rhos[j+1][k+2] - rhos[j+1][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - 0.1*( (hrz[j][k+1] - hrz[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - ( hzz[j][k+1] - hzz[j][k] )/12 ) - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j+1][k+2] - rhos[j+1][k+1] - ( hrz[j][k+1] - hrz[j][k] )/12 ) ) );
+                }
+            }
+            
+            // Calculate the correction due to the sigma coordinates
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    FC[j][k] = 0.5*(rhos[j+2][k+1] - rhos[j+1][k+1])*(ZZ_phi[j+1][k] - ZZ_phi[j][k]) - 0.1*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - (hzx[j+1][k] - hzx[j][k])/12 ) - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+2][k+1] - rhos[j+1][k+1] - (hrx[j+1][k] - hrx[j][k])/12 ) );
+                }
+            }
+            
+            
+            // Calculate the pressure gradient
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    BPx[j][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
+                }
+            }
             
             break;
         }
@@ -2212,10 +2147,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     {
         du_dt[j][0] -= r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
         dv_dt[j][0] -= r_bbl*vvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]);
-
-
+        
+        
         dv_dt[j][Nz-1] += tau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
-
+        
     }
     
     for (k = 0; k < Nz; k++) // u,v tendencies are zero at the western wall
@@ -2223,9 +2158,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         du_dt[0][k] = 0;
         dv_dt[0][k] = 0;
     }
-  
     
-
+    
+    
 }
 
 
@@ -2258,32 +2193,32 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
  */
 real tderiv (const real t, const real * data, real * dt_data, const uint numvars)
 {
-  // CFL timesteps
-  real cfl_dt = 0;
-  
-  // Construct output matrix from the dt_data vector
-  memset(dt_data,0,numvars*sizeof(real));
-  vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
-  
-  // Copy tracer data from the 'data' array to the work array
-  memcpy(phi_wrk_V,data,Ntot*sizeof(real));
-  
-  // Calculate momentum tendencies
-  if (momentumScheme != MOMENTUM_NONE)
-  {
-    tderiv_mom (t, phi_wrk, dphi_dt_wrk);
-  }
-  
-  // Calculate tracer tendencies due to advection/diffusion
-  cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
-  
-  // Calculate tracer tendencies due to biogeochemistry
-  tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
-  
-  // Calculate tracer tendencies due to relaxation
-  tderiv_relax (t, phi_wrk, dphi_dt_wrk);
-  
-  return cfl_dt;
+    // CFL timesteps
+    real cfl_dt = 0;
+    
+    // Construct output matrix from the dt_data vector
+    memset(dt_data,0,numvars*sizeof(real));
+    vec2mat3(dt_data,&dphi_dt_wrk,Ntracs,Nx,Nz);
+    
+    // Copy tracer data from the 'data' array to the work array
+    memcpy(phi_wrk_V,data,Ntot*sizeof(real));
+    
+    // Calculate momentum tendencies
+    if (momentumScheme != MOMENTUM_NONE)
+    {
+        tderiv_mom (t, phi_wrk, dphi_dt_wrk);
+    }
+    
+    // Calculate tracer tendencies due to advection/diffusion
+    cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
+    
+    // Calculate tracer tendencies due to biogeochemistry
+    tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
+    
+    // Calculate tracer tendencies due to relaxation
+    tderiv_relax (t, phi_wrk, dphi_dt_wrk);
+    
+    return cfl_dt;
 }
 
 
@@ -2355,48 +2290,48 @@ void do_impl_diff (real t, real dt, real *** phi)
  */
 void do_pressure_correct (real *** phi)
 {
-  int j,k;
-  real ** uvel = NULL;
-  real * udz = NULL;
-  real u_avg = 0;
-  
-  // Extract zonal velocity matrix
-  uvel = phi[idx_uvel];
-  
-  // We'll abuse the zonal velocity at the western edge of the domain,
-  // which is just zero everywhere, to serve as a work vector for
-  // calculating depth-integrated velocities
-  udz = uvel[0];
-  
+    int j,k;
+    real ** uvel = NULL;
+    real * udz = NULL;
+    real u_avg = 0;
+    
+    // Extract zonal velocity matrix
+    uvel = phi[idx_uvel];
+    
+    // We'll abuse the zonal velocity at the western edge of the domain,
+    // which is just zero everywhere, to serve as a work vector for
+    // calculating depth-integrated velocities
+    udz = uvel[0];
+    
 #pragma parallel
-  
-  // Loop through columns
-  for (j = 1; j < Nx; j ++)
-  {
-
-    // Implicit vertical diffusion coefficients
-    for (k = 0; k < Nz; k ++)
+    
+    // Loop through columns
+    for (j = 1; j < Nx; j ++)
     {
-      udz[k] = uvel[j][k] * dz_u[j][k];
+        
+        // Implicit vertical diffusion coefficients
+        for (k = 0; k < Nz; k ++)
+        {
+            udz[k] = uvel[j][k] * dz_u[j][k];
+        }
+        
+        // Calculate depth-averaged velocity via Kahan summation to ensure numerical accuracy
+        u_avg = kahanSum(udz,Nz) / hb_psi[j];
+        
+        // Subtract average velocity from each u-point
+        for (k = 0; k < Nz; k ++)
+        {
+            uvel[j][k] -= u_avg;
+        }
+        
     }
     
-    // Calculate depth-averaged velocity via Kahan summation to ensure numerical accuracy
-    u_avg = kahanSum(udz,Nz) / hb_psi[j];
-    
-    // Subtract average velocity from each u-point
+    // Zero zonal velocity at the western wall
     for (k = 0; k < Nz; k ++)
     {
-      uvel[j][k] -= u_avg;
+        uvel[0][k] = 0;
     }
     
-  }
-  
-  // Zero zonal velocity at the western wall
-  for (k = 0; k < Nz; k ++)
-  {
-    uvel[0][k] = 0;
-  }
-  
 }
 
 
@@ -2424,33 +2359,33 @@ void do_pressure_correct (real *** phi)
  */
 void constructOutputName (char * outdir, const char * varname, int i, int n, char * outfile)
 {
-  char nstr[MAX_PARAMETER_FILENAME_LENGTH];
-  char istr[MAX_PARAMETER_FILENAME_LENGTH];
-  
-  // Create a string for the current iteration number
-  sprintf(nstr,"%d",n);
-  
-  // Create a string for the current isopycnal layer
-  if (i >= 0)
-  {
-    sprintf(istr,"%d",i);
-  }
-  else
-  {
-    sprintf(istr,"");
-  }
-  
-  // Construct output file path
-  strcpy(outfile,outdir);
-  strcat(outfile,"/");
-  strcat(outfile,varname);
-  strcat(outfile,istr);
-  if (n >= 0)
-  {
-    strcat(outfile,"_n=");
-    strcat(outfile,nstr);
-  }
-  strcat(outfile,".dat");
+    char nstr[MAX_PARAMETER_FILENAME_LENGTH];
+    char istr[MAX_PARAMETER_FILENAME_LENGTH];
+    
+    // Create a string for the current iteration number
+    sprintf(nstr,"%d",n);
+    
+    // Create a string for the current isopycnal layer
+    if (i >= 0)
+    {
+        sprintf(istr,"%d",i);
+    }
+    else
+    {
+        sprintf(istr,"");
+    }
+    
+    // Construct output file path
+    strcpy(outfile,outdir);
+    strcat(outfile,"/");
+    strcat(outfile,varname);
+    strcat(outfile,istr);
+    if (n >= 0)
+    {
+        strcat(outfile,"_n=");
+        strcat(outfile,nstr);
+    }
+    strcat(outfile,".dat");
 }
 
 
@@ -2474,17 +2409,17 @@ void constructOutputName (char * outdir, const char * varname, int i, int n, cha
  */
 bool writeOutputFile (char * outfile, real ** mat, uint m, uint n)
 {
-  FILE * outfd = NULL;
-  
-  outfd = fopen(outfile,"w");
-  if (outfd == NULL)
-  {
-    fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
-    return false;
-  }
-  printMatrix(outfd,mat,m,n);
-  fclose(outfd);
-  return true;
+    FILE * outfd = NULL;
+    
+    outfd = fopen(outfile,"w");
+    if (outfd == NULL)
+    {
+        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+        return false;
+    }
+    printMatrix(outfd,mat,m,n);
+    fclose(outfd);
+    return true;
 }
 
 
@@ -2517,19 +2452,19 @@ bool writeModelGrid (real ** ZZ_phi, real ** ZZ_psi, real ** ZZ_u, real ** ZZ_w,
     // Write depths on phi-points
     constructOutputName(outdir,OUTN_ZZ_PHI,-1,-1,outfile);
     if (!writeOutputFile(outfile,ZZ_phi,Nx,Nz)) return false;
-  
+    
     // Write depths on psi-points
     constructOutputName(outdir,OUTN_ZZ_PSI,-1,-1,outfile);
     if (!writeOutputFile(outfile,ZZ_psi,Nx,Nz)) return false;
-  
+    
     // Write depths on u-points
     constructOutputName(outdir,OUTN_ZZ_U,-1,-1,outfile);
     if (!writeOutputFile(outfile,ZZ_u,Nx,Nz)) return false;
-  
+    
     // Write depths on w-points
     constructOutputName(outdir,OUTN_ZZ_W,-1,-1,outfile);
     if (!writeOutputFile(outfile,ZZ_w,Nx,Nz)) return false;
-  
+    
     return true;
 }
 
@@ -2587,11 +2522,11 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     // Write iteration data for the mean streamfunction
     constructOutputName(outdir,OUTN_PSIM,-1,n,outfile);
     if (!writeOutputFile(outfile,psi_m,Nx+1,Nz+1)) return false;
-  
+    
     // Write iteration data for the eddy streamfunction
     constructOutputName(outdir,OUTN_PSIE,-1,n,outfile);
     if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
-  
+    
     return true;
 }
 
@@ -2666,7 +2601,7 @@ void printUsage (void)
      "                        state after each time step. Convergence criteria for each\n"
      "                        are set via the targetResFile parameter. Default is 0\n"
      "                        (no convergence checking).\n"
-
+     
      "  \n"
      "  f0                    Coriolis parameter.\n"
      "                        Optional, default is 10^{-4} rad/s, must be =/= 0.\n"
@@ -2758,20 +2693,20 @@ void printUsage (void)
  * main
  *
  * Program entry point. Initialises all of the required memory,
- * reads in input parameters, performs time integration loop, 
+ * reads in input parameters, performs time integration loop,
  * and finally cleans up.
  *
  */
 int main (int argc, char ** argv)
 {
-  
-  
-  
-  
+    
+    
+    
+    
     ///////////////////////////////////////////
     ///// BEGIN MAIN VARIABLE DEFINITIONS /////
     ///////////////////////////////////////////
-  
+    
     // Time parameters
     real tmin = -1;        // Start time
     real tmax = 0;          // End time
@@ -2782,12 +2717,12 @@ int main (int argc, char ** argv)
     real cflFrac = 1;       // CFL number
     real wc = 0;            // Time-interpolation weights
     real wn = 0;
-  
+    
     // Iteration parameters
     bool restart = false;   // Restart flag
     real n_s = 0;           // Save counter
     uint n0 = 0;            // Initial save index
-  
+    
     // Convergence parameters
     real * targetRes = 0;
     bool checkConvergence = false;
@@ -2828,7 +2763,7 @@ int main (int argc, char ** argv)
     // Stores data required for parsing input parameters
     paramdata params[NPARAMS];
     int paramcntr = 0;
-  
+    
     // Filename holders for input parameter arrays
     char targetResFile[MAX_PARAMETER_FILENAME_LENGTH];
     char initFile[MAX_PARAMETER_FILENAME_LENGTH];
@@ -2840,28 +2775,28 @@ int main (int argc, char ** argv)
     char KdiaFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTimeFile[MAX_PARAMETER_FILENAME_LENGTH];
-  
+    
     // To store current time
     time_t now;
     FILE * tfile = NULL;
-  
+    
     /////////////////////////////////////////
     ///// END MAIN VARIABLE DEFINITIONS /////
     /////////////////////////////////////////
-  
-  
-  
+    
+    
+    
     ///////////////////////////////////////////
     ///// BEGIN DEFINING INPUT PARAMETERS /////
     ///////////////////////////////////////////
-  
+    
     // Domain dimensions and grid sizes
     setParam(params,paramcntr++,"Ntracs","%u",&Ntracs,false);
     setParam(params,paramcntr++,"Nx","%u",&Nx,false);
     setParam(params,paramcntr++,"Nz","%u",&Nz,false);
     setParam(params,paramcntr++,"Lx","%lf",&Lx,false);
     setParam(params,paramcntr++,"Lz","%lf",&Lz,false);
-  
+    
     // Time stepping/output parameters
     setParam(params,paramcntr++,"cflFrac","%lf",&cflFrac,false);
     setParam(params,paramcntr++,"startTime","%lf",&tmin,true);
@@ -2870,7 +2805,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"restart","%d",&restart,true);
     setParam(params,paramcntr++,"startIdx","%u",&n0,true);
     setParam(params,paramcntr++,"checkConvergence","%d",&checkConvergence,true);
-  
+    
     // Physical constants
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
@@ -2878,12 +2813,12 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
     setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
     setParam(params,paramcntr++,"r_bbl","%lf",&r_bbl,true);
-  
+    
     // Sigma-coordinate parameters
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
     setParam(params,paramcntr++,"theta_s","%lf",&theta_s,true);
     setParam(params,paramcntr++,"theta_b","%lf",&theta_b,true);
-  
+    
     // Scheme selectors
     setParam(params,paramcntr++,"timeSteppingScheme","%u",&timeSteppingScheme,true);
     setParam(params,paramcntr++,"advectionScheme","%u",&advectionScheme,true);
@@ -2891,12 +2826,12 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"pressureScheme","%u",&pressureScheme,true);
     setParam(params,paramcntr++,"bgcModel","%u",&bgcModel,true);
     setParam(params,paramcntr++,"KT00_sigma","%lf",&KT00_sigma,true);
-  
+    
     // Biogeochemical parameter inputs
     setParam(params,paramcntr++,"MP","%u",&MP,false);
     setParam(params,paramcntr++,"MZ","%u",&MZ,false);
     setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
-  
+    
     // Input file names
     setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,true);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
@@ -2921,17 +2856,17 @@ int main (int argc, char ** argv)
     KdiaFile[0] = '\0';
     relaxTracerFile[0] = '\0';
     relaxTimeFile[0] = '\0';
-  
+    
     /////////////////////////////////////////
     ///// END DEFINING INPUT PARAMETERS /////
     /////////////////////////////////////////
-  
-  
-  
+    
+    
+    
     //////////////////////////////////////////
     ///// BEGIN READING INPUT PARAMETERS /////
     //////////////////////////////////////////
-  
+    
     // First program argument always carries the program name
     progname = argv[0];
     
@@ -2965,26 +2900,26 @@ int main (int argc, char ** argv)
     
     // Check that required parameters take legal values
     if (  (Ntracs < 3) ||
-          (Nx <= 0) ||
-          (Nz <= 0) ||
-          (Lx <= 0) ||
-          (Lz <= 0) ||
-          (dt_s < 0.0) ||
-          (tmax <= 0.0) ||
-          (cflFrac <= 0.0) ||
-          (rho0 <= 0.0) ||
-          (f0 == 0.0) ||
-          (h_c <= 0.0) ||
-          (strlen(targetResFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(initFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(topogFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(tauFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(KgmFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-          (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
+        (Nx <= 0) ||
+        (Nz <= 0) ||
+        (Lx <= 0) ||
+        (Lz <= 0) ||
+        (dt_s < 0.0) ||
+        (tmax <= 0.0) ||
+        (cflFrac <= 0.0) ||
+        (rho0 <= 0.0) ||
+        (f0 == 0.0) ||
+        (h_c <= 0.0) ||
+        (strlen(targetResFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(initFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(topogFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(tauFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(KgmFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
     {
         fprintf(stderr,"ERROR: Invalid input parameter values\n");
         printUsage();
@@ -3000,41 +2935,41 @@ int main (int argc, char ** argv)
     _dx = 1/dx;
     _2dx = 1/(2*dx);
     dxsq = dx*dx;
-  
+    
     // SML/BBL flags
     use_sml = Hsml > 0;
     use_bbl = Hbbl > 0;
-  
+    
     // Set the integration start time
     // Note: If dt_s is not specified then this will just be zero
     if (tmin < 0)
     {
-      if (restart)
-      {
-        tmin = n0*dt_s;
-        if (tmin >= tmax)
+        if (restart)
         {
-          fprintf(stderr,"Integration start time (=startIdx*monitorFrequency) exceeds integration end time (endTime)");
-          printUsage();
-          return 0;
+            tmin = n0*dt_s;
+            if (tmin >= tmax)
+            {
+                fprintf(stderr,"Integration start time (=startIdx*monitorFrequency) exceeds integration end time (endTime)");
+                printUsage();
+                return 0;
+            }
         }
-      }
-      else
-      {
-        tmin = 0;
-      }
+        else
+        {
+            tmin = 0;
+        }
     }
     else
     {
-      if (tmin >= tmax)
-      {
-        fprintf(stderr,"Integration start time (startTime) exceeds integration end time (endTime)");
-        printUsage();
-        return 0;
-      }
+        if (tmin >= tmax)
+        {
+            fprintf(stderr,"Integration start time (startTime) exceeds integration end time (endTime)");
+            printUsage();
+            return 0;
+        }
     }
     t = tmin;
-  
+    
     // Current time and next save point
     if (dt_s == 0.0)
     {
@@ -3044,17 +2979,17 @@ int main (int argc, char ** argv)
     {
         t_next = tmin + dt_s;
     }
-  
+    
     // If restarting then initialize output count accordingly
     if (restart)
     {
-      n_s = n0;
+        n_s = n0;
     }
     else
     {
-      n_s = 0;
+        n_s = 0;
     }
-  
+    
     ////////////////////////////////////////
     ///// END READING INPUT PARAMETERS /////
     ////////////////////////////////////////
@@ -3113,7 +3048,6 @@ int main (int argc, char ** argv)
     MATALLOC(ZZ_phi,Nx,Nz);
     MATALLOC(ZZ_u,Nx+1,Nz);
     MATALLOC(ZZ_w,Nx,Nz+1);
-    MATALLOC(grd_area,Nx,Nz);
     
     // Work arrays for 'tderiv' function
     VECALLOC(phi_wrk_V,Ntot);
@@ -3155,7 +3089,7 @@ int main (int argc, char ** argv)
     
     // Pressure calculation scheme
     MATALLOC(ZZ_press,Nx+2,Nz+2);
-    MATALLOC(rhowrk,Nx+2,Nz+2);
+    MATALLOC(rhos,Nx+2,Nz+2);
     MATALLOC(drz,Nx,Nz+1);
     MATALLOC(drx,Nx+1,Nz);
     MATALLOC(dzz,Nx,Nz+1);
@@ -3166,9 +3100,7 @@ int main (int argc, char ** argv)
     MATALLOC(hzz,Nx,Nz);
     MATALLOC(P,Nx,Nz);
     MATALLOC(FC,Nx,Nz);
-    MATALLOC(FX,Nx,Nz);
-    MATALLOC(dr_dx,Nx,Nz);
-
+    
     
     // Boundary layer work arrays
     k_sml = malloc((Nx+1)*sizeof(uint));
@@ -3177,8 +3109,8 @@ int main (int argc, char ** argv)
     k_bbl = malloc((Nx+1)*sizeof(uint));
     VECALLOC(wn_bbl,Nx+1);
     VECALLOC(wp_bbl,Nx+1);
-    MATALLOC(db_dx,Nx,Nz+1);
-    MATALLOC(db_dz,Nx,Nz+1);
+    VECALLOC(db_dx,Nz+1);
+    VECALLOC(db_dz,Nz+1);
     
     /////////////////////////////////
     ///// END MEMORY ALLOCATION /////
@@ -3193,46 +3125,46 @@ int main (int argc, char ** argv)
     
     // Read input matrices and vectors
     if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
-          ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-          ( (strlen(tauFile) > 0)         &&  !readVector(tauFile,tau,Nx+1,stderr) ) ||
-          ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
-          ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
-          ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
-          ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
-          ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
-          ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
+        ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
+        ( (strlen(tauFile) > 0)         &&  !readVector(tauFile,tau,Nx+1,stderr) ) ||
+        ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
+        ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
+        ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
+        ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
+        ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
     {
         printUsage();
         return 0;
     }
-  
+    
     // If a restart is specified then read from the output of a previous run
     if (restart)
     {
-      // Check initial state
-      for (i = 0; i < Ntracs; i ++)
-      {
-        // Overwrite initFile parameter as we won't be using it
-        constructOutputName(outdir,OUTN_TRAC,i,n0,initFile);
-        if (!readMatrix(initFile,phi_init[i],Nx,Nz,stderr))
+        // Check initial state
+        for (i = 0; i < Ntracs; i ++)
         {
-          fprintf(stderr,"Unable to read pickup files.\n");
-          printUsage();
-          return 0;
+            // Overwrite initFile parameter as we won't be using it
+            constructOutputName(outdir,OUTN_TRAC,i,n0,initFile);
+            if (!readMatrix(initFile,phi_init[i],Nx,Nz,stderr))
+            {
+                fprintf(stderr,"Unable to read pickup files.\n");
+                printUsage();
+                return 0;
+            }
         }
-      }
     }
     // Read from initialization files
     else
     {
-      if ( (strlen(initFile) > 0)  &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) )
-      {
-        fprintf(stderr,"Unable to read initialization files.\n");
-        printUsage();
-        return 0;
-      }
+        if ( (strlen(initFile) > 0)  &&  !readMatrix3(initFile,phi_init,Ntracs,Nx,Nz,stderr) )
+        {
+            fprintf(stderr,"Unable to read initialization files.\n");
+            printUsage();
+            return 0;
+        }
     }
-
+    
     // Default initial condition is zero tracer everywhere
     if (!restart && strlen(initFile)==0)
     {
@@ -3306,7 +3238,7 @@ int main (int argc, char ** argv)
             }
         }
     }
-  
+    
 #pragma parallel
     
     // Diffusivities must be positive
@@ -3349,9 +3281,9 @@ int main (int argc, char ** argv)
     //////////////////////////////////////
     ///// END READING PARAMETER DATA /////
     //////////////////////////////////////
-  
-  
-  
+    
+    
+    
     
     
     ////////////////////////////
@@ -3493,15 +3425,7 @@ int main (int argc, char ** argv)
             }
         }
     }
-
-    // Calculate area of each grid-cell using the shoelace method
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; k < Nx; k ++){
-            grd_area[j][k] = 0.5*dx*( ZZ_psi[j+1][k+1] + ZZ_psi[j][k+1] - ZZ_psi[j][k] - ZZ_psi[j+1][k] );
-        }
-    }
-  
+    
     // Write model grid to output files for post-simulation analysis
     if (!writeModelGrid(ZZ_phi,ZZ_psi,ZZ_u,ZZ_w,outdir))
     {
@@ -3591,9 +3515,9 @@ int main (int argc, char ** argv)
     //////////////////////////
     ///// END GRID SETUP /////
     //////////////////////////
-  
-  
-  
+    
+    
+    
     
     
     ////////////////////////////////////
@@ -3626,37 +3550,37 @@ int main (int argc, char ** argv)
             res[i] = 10*targetRes[i];
         }
     }
- 
+    
     // Write out the initial data if a save interval is specified
     if (dt_s > 0.0)
     {
-      if (!writeModelState(t,0,phi_in,outdir))
-      {
-        fprintf(stderr,"Unable to write model initial state");
-        printUsage();
-        return 0;
-      }
+        if (!writeModelState(t,0,phi_in,outdir))
+        {
+            fprintf(stderr,"Unable to write model initial state");
+            printUsage();
+            return 0;
+        }
     }
     
     // Write initial time to time file
     if (tfile != NULL)
     {
-      fprintf(tfile,"%e ",t);
-      fflush(tfile);
+        fprintf(tfile,"%e ",t);
+        fflush(tfile);
     }
-  
+    
     //////////////////////////////////
     ///// END INITIAL CONDITIONS /////
     //////////////////////////////////
     
-  
-  
-  
+    
+    
+    
     ///////////////////////////////////////
     ///// BEGIN TIME INTEGRATION LOOP /////
     ///////////////////////////////////////
     
-  
+    
     // Numerical time-integration loop - keep going while the residual exceeds
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
@@ -3693,7 +3617,7 @@ int main (int argc, char ** argv)
                     // Save h1 for the next time step.
                     h1 = dt;
                     printf("dt = %f \n",dt);
-
+                    
                     // copy over data for the next timestep
                     memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
                 }
@@ -3715,7 +3639,7 @@ int main (int argc, char ** argv)
                     h1 = dt;
                     // copy over data for the next timestep
                     memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
-
+                    
                     // save this data for the n == 3 time step
                     memcpy(dt_vars_2,dt_vars,Ntot*sizeof(real));
                     h2 = dt; // time step
@@ -3741,19 +3665,19 @@ int main (int argc, char ** argv)
                 break;
             }
         }
-      
-      
-      
+        
+        
+        
         // Step 2: Add implicit vertical diffusion
         do_impl_diff(t,dt,phi_out);
-      
-      
-      
-      
+        
+        
+        
+        
         // Step 3 (optional): apply zonal barotropic pressure gradient correction
         do_pressure_correct(phi_out);
-      
-      
+        
+        
 #pragma parallel
         
         // Step 4: Enforce zero tendency where relaxation time is zero
@@ -3770,45 +3694,45 @@ int main (int argc, char ** argv)
                 }
             }
         }
-      
-      
-      
+        
+        
+        
 #pragma parallel
         
         // Step 5 (optional): Calculate the residuals as an L2-norm between adjacent iterations
         if (checkConvergence)
         {
-          targetReached = true;
-          for (i = 0; i < Ntracs; i ++)
-          {
-              res[i] = 0;
-              for (j = 0; j < Nx; j ++)
-              {
-                  for (k = 0; k < Nz; k ++)
-                  {
-                      res[i] += SQUARE((phi_in[i][j][k]-phi_out[i][j][k])/dt);
-                  }
-              }
-              res[i] = sqrt(res[i]/(Nx*Nz));
-              
-              // Check whether we've reached ALL target residuals for the various tracers
-              if (res[i] > targetRes[i])
-              {
-                  targetReached = false;
-              }
-              
-              // NaN residual clearly indicates a problem
-              if (isnan(res[i]))
-              {
-                  fprintf(stderr,"ERROR: Computation blew up: residual==NaN\n");
-                  printUsage();
-                  return 0;
-              }
-          }
+            targetReached = true;
+            for (i = 0; i < Ntracs; i ++)
+            {
+                res[i] = 0;
+                for (j = 0; j < Nx; j ++)
+                {
+                    for (k = 0; k < Nz; k ++)
+                    {
+                        res[i] += SQUARE((phi_in[i][j][k]-phi_out[i][j][k])/dt);
+                    }
+                }
+                res[i] = sqrt(res[i]/(Nx*Nz));
+                
+                // Check whether we've reached ALL target residuals for the various tracers
+                if (res[i] > targetRes[i])
+                {
+                    targetReached = false;
+                }
+                
+                // NaN residual clearly indicates a problem
+                if (isnan(res[i]))
+                {
+                    fprintf(stderr,"ERROR: Computation blew up: residual==NaN\n");
+                    printUsage();
+                    return 0;
+                }
+            }
         }
-      
-      
-      
+        
+        
+        
         // Step 6: If the time step has taken us past a save point (or multiple
         // save points), interpolate and write out the data
         while ((dt_s > 0) && (t >= t_next))
@@ -3854,9 +3778,9 @@ int main (int argc, char ** argv)
             printf("%e, time = %f \n",res[idx_buoy],t/day);
             fflush(stdout);
         }
-      
-      
-      
+        
+        
+        
         // Copy the next iteration from phi_out back to phi_in,
         // ready for the next time step
         memcpy(phi_in_V,phi_out_V,Ntot*sizeof(real));
@@ -3864,19 +3788,19 @@ int main (int argc, char ** argv)
         // Increment iteration count
         nIters += 1;
     }
-  
+    
     ////////////////////////////////
     ///// END TIME INTEGRATION /////
     ////////////////////////////////
-  
-  
-  
-  
-  
+    
+    
+    
+    
+    
     /////////////////////////
     ///// BEGIN CLEANUP /////
     /////////////////////////
-  
+    
     // Write out the final model state
     if (dt_s == 0)
     {
@@ -3900,14 +3824,14 @@ int main (int argc, char ** argv)
         }
         fclose(tfile);
     }
-  
+    
     ///////////////////////
     ///// END CLEANUP /////
     ///////////////////////
-  
-  
-  
-  
+    
+    
+    
+    
     
     return 0;
 }
