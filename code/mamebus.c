@@ -2099,7 +2099,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 }
             }
             
-            // Calculate the correction due to the sigma coordinates
+            // Calculate the correction due to the sigma coordinate transformation
             for (j = 0; j < Nx; j++)
             {
                 for (k = 0; k < Nz; k++)
