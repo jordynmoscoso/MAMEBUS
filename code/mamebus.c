@@ -87,6 +87,7 @@ real Smax = 0.1;        // Max isopycnal slope
 const int idx_uvel = 0;   // Index of buoyancy variable in list of tracers
 const int idx_vvel = 1;   // Index of buoyancy variable in list of tracers
 const int idx_buoy = 2;   // Index of buoyancy variable in list of tracers
+const int idx_nitrate = 3;
 
 // Sigma-coordinate grid parameters
 real h_c = 1e16;
@@ -889,7 +890,6 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
     
     for (i = 0; i < Ntracs; i ++)
     {
-        
 #pragma parallel
         
         // Calculate time derivative of phi
@@ -934,13 +934,15 @@ real single_nitrate (const real t, const int j, const int k,
 {
     // Placeholders and values for the irradiance
     real IR = 0;
-    real I0 = 340;
-    real efold = 30;
+    real I0 = 0;
+    real qsw = 340;
     real kw = 0.04;
     real kc = 0.03;
-    real K = 0;
+    real kpar = 0;
+    real T0 = 20;
+    real r = 0.05;
     
-    real f = 0.09;                           // fraction of exported material
+    real f = 0;                           // fraction of exported material
     
     // Variables
     real flux = 0;
@@ -954,37 +956,36 @@ real single_nitrate (const real t, const int j, const int k,
     
     real remin = 0;
     
-    // Temperature and Irradiance (Sarmiento & Gruber)
-    K = kw + kc*N;
-    IR = I0*exp(K*ZZ_phi[j][k]/efold);
+    kpar = kw; // This is just constant for now.
+    I0 = 0.45*qsw; // from BEC
+    IR = I0*exp(kpar*ZZ_phi[j][k]);
     
-    t_uptake = a_temp * pow(b_temp, c_temp * T);    // temperature dependent uptake rate
-    lk = t_uptake / alpha;
-    l_uptake = IR / sqrt(POW2(IR) + POW2(lk));
+    // Temperature and Irradiance (Sarmiento & Gruber)
+    t_uptake = exp(r*(T-T0));
+    l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
     
     // Uptake and Remineralizaiton
     uptake = (l_uptake * t_uptake) * N;
-    remin_in_box = (1-f) * uptake;
     
     // Scale Height for Remin
-    scale_height = -(150/Lz) * ZZ_phi[j][k] + 50;
-    dz = 1/_dz_phi[j][k];
+    scale_height = 200;
+    dz = ZZ_w[j][k+1] - ZZ_w[j][k];
     
     flux = (r_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
-    remin = - flux / scale_height;
-    r_flux = flux;             // Move to the next vertical grid cell
-    
+    remin = - flux / scale_height + (1-f)*uptake;
+    r_flux = fabs(flux);             // Move to the next vertical grid cell
+        
     //    // Uncomment to Return any extra flux of nutrients to bottom grid cell
-    //    if (k == 0)
-    //    {
-    //        remin -= flux / dz;
-    //        r_flux = 0;           // Reset flux of nutrients at the surface to zero
-    //    }
+//        if (k == 0)
+//        {
+//            remin -= flux / dz;
+//            r_flux = 0;           // Reset flux of nutrients at the surface to zero
+//        }
     
     //
     // Update the value of nitrate
     //
-    dphi_dt[2][j][k] += remin + remin_in_box - uptake;
+    dphi_dt[idx_nitrate][j][k] += remin + remin_in_box - uptake;
     return r_flux;
     
     if (isnan(uptake))
@@ -997,35 +998,60 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
-           int NMAX, real N, real T,
-           real lp, real * lz, real vmax, real kn, real gmax, real kp)
+void npzd (const real t, real *** phi, real *** dphi_dt)
 {
-    int i;                  // counters
+    int j,k;                  // counters
     
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
+    real kw = 0.04;
     real kpar = 0;          // light attenuation
-    real ir = 0;            // irradiance profile in cell
+    real IR = 0;            // irradiance profile in cell
     real temp = 0;          // temperature coefficient
     real atten = 0;         // biomass amount to attenuate light
     real I0 = 0;            // Available light at every grid level
-    real wsink = 10;        // sinking speed (m/s)
+    real wsink = 10/day;    // sinking speed (m/d)
     real r_remin = 0.04;    // remineralization
     real delta_x = 0.25;    // width of grazing profile
     real lambda = 0.33;     // grazing efficiency
     real mu = 0.02;         // mortality
+    real T0 = 20;           // reference temperature
     
+    // These will be calculated outside of MAMEBUS in the future.
+    real lp = 5;
+    real lz = 10;
+    real kn = 0.1;
+    real gmax = 20.7;
+    real umax = 2.6;
+    real kp = 3;
+    
+    real MM = 0;            // Mechalis mentin component
+    real l_uptake = 0;      // light dependent uptake
+    real t_uptake = 0;      // temperature dependent uptake
+    real theta = 0;         // predator to prey ratio
+    real Fk = 0;            // available biomass
     real U = 0;             // updake
     real R = 0;             // remineralization
-    real G = 0;             // grazing
+    real G = 0;
+    real GP = 0;            // grazing of phytoplankton
+    real GZ = 0;            // grazing of zooplankton
+    real GD = 0;            // messy grazing term
+    real Dtot = 0;          // Total detritus term (for implicit sinking)
     real MZ = 0;            // mortality
     real MP = 0;
-    real theta = 0;         // lp to lz comparison
     real bio = 0;           // available biomass
     real zeta = 0;          // zooplankton mortality holder
     
+    // Parameters for implicit sinking
+    real r_flux = 0;
+    real dz = 0;
+    real flux = 0;
+    real z_star = wsink/r_remin;
+    real f = 0;          // only one percent of material leaves grid cell.
+    
     // placeholders for PZD and time tendencies
+    real ** T = NULL;
+    real ** N = NULL;
     real ** P = NULL;
     real ** Z = NULL;
     real ** D = NULL;
@@ -1033,6 +1059,97 @@ void npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real ** dP_dt = NULL;
     real ** dZ_dt = NULL;
     real ** dD_dt = NULL;
+    
+    T = phi[idx_buoy];
+    N = phi[idx_nitrate];
+    P = phi[idx_nitrate + 1];
+    Z = phi[idx_nitrate + 2];
+    D = phi[idx_nitrate + 3];
+    
+    dN_dt = dphi_dt[idx_nitrate]; // inert dye is idx_nitrate + 4;
+    dP_dt = dphi_dt[idx_nitrate + 1];
+    dZ_dt = dphi_dt[idx_nitrate + 2];
+    dD_dt = dphi_dt[idx_nitrate + 3];
+    
+    
+    kpar = kw;
+    I0 = 0.45*qsw/(kpar*Hsml); // from BEC
+    
+    for (j = 0; j < Nx; j++)
+    {
+        r_flux = 0; // set surface flux to zero at the start of every k loop.
+        for (k = Nz-1; k >= 0; k--)
+        {
+            //
+            //   Light and Temperature
+            //
+            
+            IR =I0*exp(kpar*ZZ_phi[j][k]);
+            
+            // Temperature and Irradiance dependent uptake (Sarmiento & Gruber)
+            t_uptake = exp(r*(T[j][k]-T0));
+            l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
+            
+            //
+            //   Phytoplankton
+            //
+            MM = N[j][k]/(kn + N[j][k]);
+            
+            U = l_uptake*t_uptake*MM*P[j][k];
+            
+            // Calculate the grazing component
+            theta = log10(lp/lz)/delta_x;
+            Fk = exp(-theta*theta);
+            
+            // Build grazing
+            G = gmax*Fk/(Fk*P[j][k] + kp);
+            G *= (1-exp(-P[j][k]));         // Limit the grazing if there is not enough in the box.
+            GP = Z[j][k]*P[j][k]*G;
+            
+            // Mortality component
+            MP = mu*P[j][k];
+            
+            
+            //
+            //  Zooplankton
+            //
+            GZ = lambda*G;
+            
+            // Mortality
+            zeta = lambda*gmax*gmax/(4*umax*kp);
+            MZ = zeta*Z[j][k]*Z[j][k];
+            
+            
+            
+            
+            
+            //
+            // Detritus
+            //
+            GD = (1-lambda)*G;
+            
+            // Remineralization
+            R = r_remin*D[j][k];
+            
+//            Dtot = MP + MZ + GD;
+//            flux = (r_flux - (dz*f)*Dtot)/ (1 + dz/(z_star));
+//            R = - flux/z_star + (1-f)*Dtot;
+//            r_flux = fabs(r_flux);
+            
+            
+            //
+            // Update Time Tendencies
+            //
+            dN_dt[j][k] = -U + R;
+            dP_dt[j][k] = U - GP - MP;
+            dZ_dt[j][k] = GZ - MZ;
+            dD_dt[j][k] = -R + MP + MZ + GD;
+            
+        }
+        
+    }
+    
+    
     
     
 }
@@ -1298,10 +1415,6 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real ** npzparams = NULL;                                       // 8 X (MP or MZ (whichever is larger))
     int NMAX = 0;
     
-    real T = 0;                              // Placeholder for Temperature
-    real N = 0;                              // Placeholder for Nitrate
-    
-    
     switch (bgcModel)
     {
         case BGC_NONE:
@@ -1311,6 +1424,8 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             
         case BGC_NITRATEONLY:
         {
+            real T = 0;                              // Placeholder for Temperature
+            real N = 0;                              // Placeholder for Nitrate
             
             // Parameters
             real a_temp = bgc_params[0];
@@ -1319,7 +1434,6 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             real alpha = bgc_params[3];
             real monod = bgc_params[4];
             
-            // Build temperature dependent uptake
             for (j = 0; j < Nx; j++)
             {
                 r_flux = 0;
@@ -1327,11 +1441,12 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 {
                     
                     // Temperature and Irradiance
-                    T = phi[2][j][k];    // temperature in grid box
-                    N = phi[3][j][k];
+                    T = phi[idx_buoy][j][k];
+                    N = phi[idx_nitrate][j][k];
                     
                     // Calculate the tendency for the single nitrate model
                     r_flux = single_nitrate(t,j,k,phi,dphi_dt,N,T,a_temp,b_temp,c_temp,alpha,monod,r_flux);
+                    
                 }
             }
             break;
@@ -1343,7 +1458,10 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             //
         case BGC_NPZD:
         {
+           
+            npzd(t, phi,dphi_dt);
             
+            break;
         }
             //
             //
@@ -1352,48 +1470,6 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             //
         case BGC_SSEM: // Size structured Model
         {
-            // Determine whether MP or MZ is larger in order to unpack the uptake parameters and all of that
-            if (MP > MZ)
-            {
-                NMAX = MP;
-            }
-            else
-            {
-                NMAX = MZ;
-            }
-            
-            // Unpack all of the parameters first
-            //  this much match the length in vec2mat below
-            // [lp ; lz; vmax; kn; gmax; preyopt; kp];
-            vec2mat(bgc_params,&npzparams,nbgc,NMAX);
-            
-            // Phytoplankton parameters
-            for (l = 0; l < MP; l++)
-            {
-                lp[l] = npzparams[0][l];
-                vmax[l] = npzparams[2][l];
-                kn[l] = npzparams[3][l];
-            }
-            // Zooplankton Parameters
-            for (m = 0; m < MZ; m++)
-            {
-                lz[m] = npzparams[1][m];
-                gmax[m] = npzparams[4][m];
-                preyopt[m] = npzparams[5][m];
-                kp[m] = npzparams[6][m];
-            }
-            
-            
-            // Caluclate the time tendency of the npzd model
-            for (j = 0; j < Nx-1; j++)
-            {
-                for (k = Nz-1; k >= 0; k--)
-                {
-                    T = phi[0][j][k];    // temperature in grid box
-                    N = phi[2][j][k];    // Nitrate in grid box
-                    ssem(t,j,k,phi,dphi_dt,NMAX,N,T,lp,lz,vmax,kn,gmax,preyopt,kp);
-                }
-            }
             
             break;
         }
@@ -2022,101 +2098,145 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    rhos[j+1][k+1] = rho0*(1 - alpha*( buoy[j][k] - tref ));
-                    ZZ_press[j+1][k+1] = ZZ_phi[j][k];
+                    rhos[j][k] = rho0*(1 - alpha*( buoy[j][k] - tref ));
+                    ZZ_press[j][k] = ZZ_phi[j][k];
                 }
             }
             
             
-            // Extend the density at the edges
-            for (j = 1; j < Nx+1; j++)
-            {
-                rhos[j][Nx+1] = rhos[j][Nx];
-                rhos[j][0] = rhos[j][1];
-                
-                ZZ_press[j][Nx+1] = ZZ_press[j][Nx];
-                ZZ_press[j][0] = ZZ_press[j][1];
-            }
-            
-            for (k = 1; k < Nz+1; k++)
-            {
-                rhos[0][k] = rhos[1][k];
-                rhos[Nz+1][k] = rhos[Nz][k];
-                
-                ZZ_press[Nz+1][k] = ZZ_press[Nz][k];
-                ZZ_press[0][k] = ZZ_press[1][k];
-            }
-            
-            
-            // Calculate the elementary differences in the x direction
-            for (j = 0; j < Nx+1; j++) // size (Nx+1,Nz)
-            {
-                for (k = 1; k < Nz+1; k++)
-                {
-                    drx[j][k-1] = rhos[j+1][k] - rhos[j][k];
-                    dzx[j][k-1] = ZZ_press[j+1][k] - ZZ_press[j][k];
-                }
-            }
-            
-            
-            // Calculate the elementary differences in the z direction
-            for (j = 1; j < Nx+1; j++) // size (Nx,Nz+1)
-            {
-                for (k = 0; k < Nx+1; k++)
-                {
-                    drz[j-1][k] = rhos[j][k+1] - rhos[j][k];
-                    dzz[j-1][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
-                }
-            }
-            
-            
-            // Calculate the hyperbolic differences
+            // Vertical Calculations
+            // Elementary differences
             for (j = 0; j < Nx; j++)
             {
-                for (k = 0; k < Nx; k++)
+                for (k = 0; k < Nz-1; k++)
                 {
-                    hrx[j][k] = 2*drx[j+1][k]*drx[j][k]/(drx[j+1][k] + drx[j][k]);
-                    hrz[j][k] = 2*drz[j][k+1]*drz[j][k]/(drz[j][k+1] + drz[j][k]);
-                    
-                    hzx[j][k] = 2*dzx[j+1][k]*dzx[j][k]/(dzx[j+1][k] + dzx[j][k]);
-                    hzz[j][k] = 2*dzz[j][k+1]*dzz[j][k]/(dzz[j][k+1] + dzz[j][k]);
+                    drz[j][k] = rhos[j][k+1] - rhos[j][k];
+                    dzz[j][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
                 }
             }
             
-            // Calculate the pressure at the surface
+            
+            
+            // Interior hyperbolic differences
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 1; k < Nz-1; k++)
+                {
+                    if ( (drz[j][k] + drz[j][k-1]) == 0 || (dzz[j][k] + dzz[j][k-1]) == 0 )
+                    {
+                        hrz[j][k] = 0.5*(drz[j][k] + drz[j][k-1]);
+                        hzz[j][k] = 0.5*(dzz[j][k] + dzz[j][k-1]);
+                    }
+                    else
+                    {
+                        hrz[j][k] = 2*drz[j][k]*drz[j][k-1]/(drz[j][k] + drz[j][k-1]);
+                        hzz[j][k] = 2*dzz[j][k]*dzz[j][k-1]/(dzz[j][k] + dzz[j][k-1]);
+                    }
+                }
+            }
+            
+            // Border hyperbolic differences
+            for (j = 0; j < Nx; j++)
+            {
+                hrz[j][0] = 1.5*(rhos[j][1] - rhos[j][0]) - 0.5*hrz[j][1];
+                hrz[j][Nz-1] = 1.5*(rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hrz[j][Nz-2];
+                
+                hzz[j][0] = 1.5*(ZZ_press[j][1] - ZZ_press[j][0]) - 0.5*hzz[j][1];
+                hzz[j][Nz-1] = 1.5*(ZZ_press[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hzz[j][Nz-2];
+            }
+            
+            
+            // Calculate the pressure field at the surface
             for (j = 0; j < Nx; j++)
             {
                 zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
-                P[j][Nz-1] = grav*( rhos[j+1][Nz] + 0.5*( zeta - ZZ_phi[j][Nz-1] )*( rhos[j+1][Nz] - rhos[j+1][Nz-1] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) )*( zeta - ZZ_phi[j][Nz-1] );
+                P[j][Nz-1] = grav*( rhos[j][Nz-1] + 0.5*( zeta - ZZ_press[j][Nz-1] )*( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_press[j][Nz-1] - ZZ_press[j][Nz-2] ) )*(zeta - ZZ_press[j][Nz-1]);
             }
             
-            // Calculate the pressure
+            // Calculate the pressure field in the interior.
             for (j = 0; j < Nx; j++)
             {
                 for (k = Nz-2; k >= 0; k--)
                 {
-                    P[j][k] = P[j][k+1] + grav*( 0.5*(rhos[j+1][k+2] - rhos[j+1][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - 0.1*( (hrz[j][k+1] - hrz[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - ( hzz[j][k+1] - hzz[j][k] )/12 ) - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j+1][k+2] - rhos[j+1][k+1] - ( hrz[j][k+1] - hrz[j][k] )/12 ) ) );
+                    P[j][k] = P[j][k+1] + 0.5*grav*(rhos[j][k+1] - rhos[j][k])*(ZZ_press[j][k+1] - ZZ_press[j][k])
+                    - 0.1*grav*( (hrz[j][k+1] - hrz[j][k])*( ZZ_press[j][k+1] - ZZ_press[j][k] - (hzz[j][k+1] + hzz[j][k])/12 )
+                                - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - (hrz[j][k+1] - hrz[j][k])/12 ) );
                 }
             }
             
-            // Calculate the correction due to the sigma coordinate transformation
-            for (j = 0; j < Nx; j++)
+            // Horizontal Calculations
+            // Elementary Differences
+            for (j = 0; j < Nx-1; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    FC[j][k] = 0.5*(rhos[j+2][k+1] - rhos[j+1][k+1])*(ZZ_phi[j+1][k] - ZZ_phi[j][k]) - 0.1*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - (hzx[j+1][k] - hzx[j][k])/12 ) - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+2][k+1] - rhos[j+1][k+1] - (hrx[j+1][k] - hrx[j][k])/12 ) );
+                    drx[j][k] = rhos[j+1][k] - rhos[j][k];
+                    dzx[j][k] = ZZ_press[j+1][k] - ZZ_press[j][k];
                 }
             }
             
+            
+            // Interior hyperbolic differences
+            for (j = 1; j < Nx-1; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    if ( (drx[j][k] + drx[j-1][k]) == 0 || (dzx[j][k] + drx[j-1][k]) == 0)
+                    {
+                        hrx[j][k] = 0.5*(drx[j][k] + drx[j-1][k]);
+                        hzx[j][k] = 0.5*(dzx[j][k] + drx[j-1][k]);
+                    }
+                    else
+                    {
+                        hrx[j][k] = 2*drx[j][k]*drx[j-1][k]/(drx[j][k] + drx[j-1][k]);
+                        hzx[j][k] = 2*dzx[j][k]*dzx[j-1][k]/(dzx[j][k] + drx[j-1][k]);
+                    }
+                }
+            }
+            
+            
+            // Calculate the boundary hyperbolic differences
+            for (k = 0; k < Nz; k++)
+            {
+                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
+                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
+                
+                hzx[0][k] = 1.5*(ZZ_press[1][k] - ZZ_press[0][k]) - 0.5*hzx[1][k];
+                hzx[Nx-1][k] = 1.5*(ZZ_press[Nx-1][k] - ZZ_press[Nx-2][k]) - 0.5*hzx[Nx-2][k];
+            }
+            
+            
+            // Calculate FC's
+            for (j = 0; j < Nx-1; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    FC[j][k] = 0.5*(rhos[j+1][k] - rhos[j][k])*(ZZ_press[j+1][k] - ZZ_press[j][k])
+                    - 0.1*( ( hrx[j+1][k] + hrx[j][k] )*( ZZ_press[j+1][k] - ZZ_press[j][k] - (hzx[j+1][k] - hzx[j][k])/12 )
+                           - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - (hrx[j+1][k] - hrx[j][k])/12 ) );
+                }
+            }
+            
+
             
             // Calculate the pressure gradient
-            for (j = 0; j < Nx; j++)
+            for (j = 0; j < Nx-1; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    BPx[j][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
+                    BPx[j+1][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
+//                    fprintf(stderr,"Pressure Gradient: j = %d, k = %d, Px = %f \n",j,k,BPx[j][k]);
                 }
             }
+            
+            
+            // Set the pressure gradient on the western boundary to zero
+            for (k = 0; k < Nz; k++)
+            {
+                BPx[0][k] = 0;
+            }
+            
+            
             
             break;
         }
@@ -2129,18 +2249,15 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     }
     
     
-    
     // Calculate the tendency due to the coriolis force and add to the pressure term
     for (j = 0; j < Nx; j++)
     {
         for (k = 0; k < Nz; k++)
         {
             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
-            dv_dt[j][k] = -f0*uvel[j][k]; // - tau[j]/(f0*rho0*hb_psi[j]); // second term is a proxy for the along-shore pressure gradient.
+            dv_dt[j][k] = -f0*uvel[j][k];
         }
     }
-    
-    // Should bottom momentum fluxes be in the implicit diffusion term?
     
     // Add surface/bottom momentum fluxes
     for (j = 1; j < Nx; j++)
@@ -2217,6 +2334,7 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     
     // Calculate tracer tendencies due to relaxation
     tderiv_relax (t, phi_wrk, dphi_dt_wrk);
+    
     
     return cfl_dt;
 }
@@ -3088,18 +3206,18 @@ int main (int argc, char ** argv)
     MATALLOC(Nsq,Nx,Nz);
     
     // Pressure calculation scheme
-    MATALLOC(ZZ_press,Nx+2,Nz+2);
-    MATALLOC(rhos,Nx+2,Nz+2);
-    MATALLOC(drz,Nx,Nz+1);
-    MATALLOC(drx,Nx+1,Nz);
-    MATALLOC(dzz,Nx,Nz+1);
-    MATALLOC(dzx,Nx+1,Nz);
+    MATALLOC(ZZ_press,Nx,Nz);
+    MATALLOC(rhos,Nx,Nz);
+    MATALLOC(drz,Nx,Nz-1);
+    MATALLOC(drx,Nx-1,Nz);
+    MATALLOC(dzz,Nx,Nz-1);
+    MATALLOC(dzx,Nx-1,Nz);
     MATALLOC(hrx,Nx,Nz);
     MATALLOC(hrz,Nx,Nz);
     MATALLOC(hzx,Nx,Nz);
     MATALLOC(hzz,Nx,Nz);
     MATALLOC(P,Nx,Nz);
-    MATALLOC(FC,Nx,Nz);
+    MATALLOC(FC,Nx-1,Nz);
     
     
     // Boundary layer work arrays

@@ -29,7 +29,7 @@ function setparams (local_home_dir,run_name)
 
   
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+  modeltype = BGC_NITRATEONLY; %%% This automatically defaults so that the model runs without biogeochemistry
 
   switch (modeltype)
     case BGC_SSEM
@@ -37,6 +37,13 @@ function setparams (local_home_dir,run_name)
       MP = 5;
       MZ = 5;
       MD = 2; %%% Currently this variable is not set to change, and more than two size classes are not resolved.
+      bio = MP+MZ+MD;
+      disp(['Number of: (Phytoplankton, Zooplankton) = (',num2str(MP),', ', num2str(MZ),')']);
+    case BGC_NPZD
+      MN = 2; %%% one active dye
+      MP = 1;
+      MZ = 1;
+      MD = 1;
       bio = MP+MZ+MD;
       disp(['Number of: (Phytoplankton, Zooplankton) = (',num2str(MP),', ', num2str(MZ),')']);
     case BGC_NITRATEONLY
@@ -60,7 +67,8 @@ function setparams (local_home_dir,run_name)
 %       modeltype = 0;
 %   end
   
-  pressureScheme = PRESSURE_LINEAR;
+
+  pressureScheme = PRESSURE_CUBIC;
         
   
   %%% For plotting figures of setup
@@ -89,7 +97,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1e-1*t1year;
+  outputFreq = 1e-2*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -134,7 +142,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 150;
+  shelfdepth = 1000;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -207,11 +215,15 @@ function setparams (local_home_dir,run_name)
         nbgc = 0;
         bgc_init = [];
       case BGC_NITRATEONLY
-        [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
+        [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr,Nx,Nz);
         
         disp('Nitrate only')
+      case BGC_NPZD 
+         [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr,Nx,Nz);
+          
+         disp('NPZD Model')
       case BGC_SSEM
-        [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr);
+        [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr,Nx,Nz);
         disp('NPZD')
         %%% Store phytoplankton size and zooplankton size to determine what size
         %%% pool of detritus they go into (large or small) when passed into
@@ -264,12 +276,19 @@ function setparams (local_home_dir,run_name)
   %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
       case BGC_NITRATEONLY
-          phi_init(3,:,:) = reshape(bgc_init,[1 Nx Nz]);
-          phi_init(4,:,:) = reshape(bgc_init,[1,Nx,Nz]);
+          phi_init(IDX_NITRATE,:,:) = reshape(bgc_init,[1 Nx Nz]);
+          phi_init(Nphys+Nbgc,:,:) = reshape(bgc_init,[1,Nx,Nz]);
+      case BGC_NPZD
+          bgc_tracs = MP + MZ + MD + 1;
+          for ii = 1:bgc_tracs
+            phi_init(IDX_BUOY + ii,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]);
+          end
+          % dye
+          phi_init(Nphys+Nbgc,:,:) = reshape(bgc_init(:,:,1),[1,Nx,Nz]);
       case BGC_SSEM
           bgc_tracs = MP + MZ + MD + 1;
           for ii = 1:bgc_tracs
-              phi_init(ii+2,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
+              phi_init(IDX_BUOY+ii,:,:) = reshape(bgc_init(:,:,ii),[1 Nx Nz]); 
           end
   end
 
@@ -368,8 +387,11 @@ function setparams (local_home_dir,run_name)
   %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
       case BGC_NITRATEONLY
-          phi_relax_all(3,:,:) = reshape(bgc_relax,[1 Nx Nz]);
-          phi_relax_all(4,:,:) = reshape(bgc_relax,[1 Nx Nz]);
+          phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax,[1 Nx Nz]);
+          phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax,[1 Nx Nz]);
+      case BGC_NPZD
+          phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax(:,:,1),[1 Nx Nz]);
+          phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax(:,:,1),[1 Nx Nz]);
       case BGC_SSEM
           phi_relax_all(3:end,:,:) = reshape(bgc_relax,[Nbgc Nx Nz]);
   end
@@ -383,10 +405,14 @@ function setparams (local_home_dir,run_name)
   %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
       case BGC_NITRATEONLY
-          T_relax_all(3,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
-          T_relax_all(4,:,:) = -ones(1,Nx,Nz); % Total dye conserved
+          T_relax_all(IDX_NITRATE,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
+      case BGC_NPZD
+          T_relax_all(IDX_NITRATE,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(IDX_NITRATE+1:IDX_NITRATE+3,:,:) = -ones(3,Nx,Nz); % Conserve all other parts of npzd model
+          T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_SSEM
-          T_relax_all(3:end,:,:) = -ones(Nbgc,Nx,Nz);
+          T_relax_all(IDX_NITRATE:end,:,:) = -ones(Nbgc,Nx,Nz);
   end
   T_relax_all(Nphys+Nbgc+1,:,:) = reshape(T_relax_dtr,[1 Nx Nz]);
 

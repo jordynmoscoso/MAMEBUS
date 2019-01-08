@@ -12,7 +12,7 @@
 %%%
 
 
-function [params, bgc_init,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr)
+function [params, bgc_init,nparams] = bgc_setup(model_type,NP,NZ,ND,XX_tr,ZZ_tr,Nx,Nz)
 
 %%% Note, all biogeochemical parameters are calculated in seconds
 t1day = 24*60*60; %%% Seconds in 1 day
@@ -44,6 +44,29 @@ switch (model_type)
     %%%%%%%%%%%%%%%%%%%%% NPZ %%%%%%%%%%%%%%%%%%%%%%%%%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
+    case 2 %%% NPZD Model
+        % All the params are atrociosly hard-coded right now. will change
+        % after AGU.
+        params = [];
+        nparams = 0;
+        
+        spec_tot = NP + NZ + ND + 1; % total species available,
+        bgc_init = zeros(Nx,Nz,spec_tot); %%% Add one for nitrate
+        
+        Pmax = 0.1; % mmol/m3
+        Zmax = 0.1;
+        Dmax = 0.1;
+        
+        %%% Initial nitrate profile (Hyperbolic)
+        Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
+        Ncline = 250; % Approximate guess of the depth of the nutracline
+        bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
+        
+        bgc_init(:,:,2) = Pmax*ones(Nx,Nz);
+        bgc_init(:,:,3) = Zmax*ones(Nx,Nz);
+        bgc_init(:,:,4) = Dmax*ones(Nx,Nz);
+        
+        
     case 3 %%% Size Structured NPZ model based on Banas
         nparams = 0; 
         

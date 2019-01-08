@@ -38,3 +38,5 @@ PRESSURE_CUBIC = 1;
 IDX_UVEL = 1;             %%% Zonal velocity
 IDX_VVEL = 2;             %%% Meridional velocity
 IDX_BUOY = 3;             %%% Buoyancy
+IDX_NITRATE = 4;          %%% Nitrate
+

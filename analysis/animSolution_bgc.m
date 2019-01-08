@@ -14,7 +14,7 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
+function M = animSolution_bgc (local_home_dir,run_name,plot_trac,var_id,plot_NPP)
  
   %%% Load convenience functions
   addpath ../utils;
@@ -23,11 +23,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   mov_on = 0;
   mov_name = strcat(run_name,'_name');
   
-  if var_id > 3
-      var_id = 2;
-      disp('Defaulting to show buoyancy')
+  if var_id < 3
+      var_id = 3;
+      disp('Defaulting to show Nitrate')
   end
-      
 
   
   %%%%%%%%%%%%%%%%%%%%%
@@ -88,15 +87,6 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
   t1day = 86400;
-  
-  %%% If user is plotting nitrate, indicate what to plot
-%   if (var_id == 2 && plot_trac)
-%     prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
-%     ncase = input(prompt);
-%     %%% Check for valid input, if not choose default
-%     if (isempty(ncase) || ncase < 0 || ncase > 1)
-%         ncase = 0;
-%     end
   
 %%% Load grids from model output
 %   dx = (Lx/Nx);
@@ -162,7 +152,75 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       open(vidObj)
   end
   
+  
+  
+  
+  % Since we are focusing on plotting biogeochemical tracers, calculate the
+  % temperature and irradiance profiles
+  qsw = 340;
+  hsml = 50;
+  kpar = 0.04;
+  r = 0.05;
+  T0 = 20;
+  kn = 0.1;
+  
+  % Light dependent uptake
+  I0 = 0.45*qsw;
+  IR = I0*exp(kpar*ZZ_tr);
+  
+  II = IR./sqrt(IR.^2 + I0.^2);
+  
+  figure(100)
+  surf(XX_tr,ZZ_tr,II)
+  shading interp
+  view(2)
+  colorbar
+  
+  f = 0.01;
+    a_temp = 0.6;
+    b_temp = 1.066;
+    c_temp = 1;
+  alpha = 0.025; % s^-1 (W/m^2)^-1
   %%% At each time iteration...
+  
+  
+      data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(1795),'.dat']);
+      phi = readOutputFile(data_file,Nx,Nz);
+      
+      buoy_file = fullfile(dirpath,['TRAC',num2str(2),'_n=',num2str(1795),'.dat']);
+      buoy = readOutputFile(buoy_file,Nx,Nz);
+  
+      figure(200)
+          pcolor(XX_tr,ZZ_tr,phi)
+          shading interp
+          colorbar
+          colormap jet;
+          h=colorbar;
+          hold on
+          plot(xx_psi,-hb_psi,'k')
+          hold off
+          
+          figure(201)
+          contourf(XX_tr,ZZ_tr,phi,[0:5:10 10:1:24 24:2:30])
+          shading interp
+          colorbar
+          colormap jet;
+          h=colorbar;
+          hold on
+          plot(xx_psi,-hb_psi,'k')
+          hold off
+          
+          figure(202)
+          contourf(XX_tr,ZZ_tr,buoy,10)
+          shading interp
+          colorbar
+          colormap default;
+          h=colorbar;
+          hold on
+          plot(xx_psi,-hb_psi,'k')
+          hold off
+          pause
+          
   while (stillReading)
       
     %%% Get the time value 
@@ -173,58 +231,48 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
     if (plot_trac)    
         
         titlestr = ['t = ', num2str(t/t1year), ' yr'];
+        
+      buoy_file = fullfile(dirpath,['TRAC',num2str(2),'_n=',num2str(n),'.dat']);
+      buoy = readOutputFile(buoy_file,Nx,Nz);
+      Tlim = exp(r*(buoy-T0));
 
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
       phi = readOutputFile(data_file,Nx,Nz);
-      %%% Plot the tracer     
-      switch (var_id)
-        case 0 %%% Zonal Velocity 
-%           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
-          pcolor(XX_tr,ZZ_tr,phi)
+      
+      R = zeros(Nx,Nz);
+
+      
+      if (plot_NPP)
+          NPP = Tlim.*II.*phi;
+            
+          %%% Plot NPP     
+          figure(107)
+          pcolor(XX_tr,ZZ_tr,NPP)
           shading interp
-          colorbar 
-          caxis([-.03 .03])
-          colormap redblue;
+          colorbar
+          title(titlestr)
+          colormap jet;
           h=colorbar;
           title(titlestr)
           hold on
           plot(xx_psi,-hb_psi,'k')
           hold off
-%           disp([max(max(phi))
-%           min(min(phi))])
-%           set(gca, 'CLim', [0, 20]);
-        case 1 %%% Meridional Velocity
-          pcolor(XX_tr,ZZ_tr,phi)
-          shading interp
-          colorbar 
-          caxis([-.5 .5])
-%           disp([max(max(phi))
-%           min(min(phi))])
-          colormap redblue;
-          h=colorbar;
-                    title(titlestr)
-          hold on
-          plot(xx_psi,-hb_psi,'k')
-          hold off
-          disp(n)
-        case 2 %%% Buoyancy
+      else
+          %%% Plot the tracer     
           pcolor(XX_tr,ZZ_tr,phi)
           shading interp
           colorbar
           title(titlestr)
-          colormap default;
+          colormap jet;
           h=colorbar;
-                    title(titlestr)
+          title(titlestr)
           hold on
           plot(xx_psi,-hb_psi,'k')
           hold off
       end
-%       clabel(C,h,'Color','w');  
-%       set(h,'ShowText','on'); 
-%       pcolor(XX_phi,ZZ_phi,phi);
 
-           
+          
 %       caxis([0 20]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);
@@ -285,6 +333,13 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
     n = n + 1;
         
   end    
+  
+        figure(101)
+      surf(XX_tr,ZZ_tr,Tlim)
+      shading interp
+      view(2)
+      colorbar
+  
   
   if (var_id ~= 0 && var_id ~= 1 && plot_trac)
       titlestr = ['Final time = ', num2str(t/t1year), ' yr'];
