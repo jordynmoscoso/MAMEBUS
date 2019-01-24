@@ -29,7 +29,7 @@ function setparams (local_home_dir,run_name)
 
   
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NITRATEONLY; %%% This automatically defaults so that the model runs without biogeochemistry
+  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
 
   switch (modeltype)
     case BGC_SSEM
@@ -97,7 +97,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1e-2*t1day;
+  outputFreq = 1e-3*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -106,7 +106,7 @@ function setparams (local_home_dir,run_name)
   
   %%% Scalar parameter definitions 
   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
-  rho0 = 1e3; %%% Reference density
+  rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 500; %%% Reference GM diffusivity
   Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s
@@ -142,7 +142,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 1000;
+  shelfdepth = 500;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')

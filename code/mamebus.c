@@ -44,7 +44,7 @@ int Ntot = 0;
 real Lx = 0;
 real Lz = 0;
 real Kconv0 = 10;
-real rho0 = 1e3;
+real rho0 = 1025;
 real f0 = 1e-4;
 bool use_sml = true;
 bool use_bbl = true;
@@ -181,7 +181,6 @@ real ** BBy = NULL;           // Buoyancy
 real ** Nsq = NULL;
 
 // Pointers for pressure calculation scheme.
-real ** ZZ_press = NULL;
 real ** drx = NULL;     // Stores elementary differences
 real ** drz = NULL;
 real ** dzx = NULL;
@@ -2082,7 +2081,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                     pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
                     BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
                     BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
-                    
+//                    fprintf(stderr,"j = %d, k = %d, BPx = %f \n",j,k,BPx[j][k]);
                     if (j == 1){
                         BPx[0][k] = BPx[1][k]; // should we do this?
                     }
@@ -2093,13 +2092,20 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         }
         case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
         {
+
+            real OneFifth = 0.2;
+            real OneTwelfth = 1/12;
+            real minVal = 1e-10;
+            
+            real cff = 0;
+            real bb = 0;    // placeholder for buoyancy
+            
             // Calculate the density field
             for (j = 0; j < Nx; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    rhos[j][k] = rho0*(1 - alpha*( buoy[j][k] - tref ));
-                    ZZ_press[j][k] = ZZ_phi[j][k];
+                    rhos[j][k] = (1-alpha*(buoy[j][k] - tref));
                 }
             }
             
@@ -2110,57 +2116,59 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz-1; k++)
                 {
-                    drz[j][k] = rhos[j][k+1] - rhos[j][k];
-                    dzz[j][k] = ZZ_press[j][k+1] - ZZ_press[j][k];
+                    drz[j][k+1] = rhos[j][k+1] - rhos[j][k];
+                    dzz[j][k+1] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
+                    
                 }
             }
             
+            // Extend the differences along the boundaries
+            for (j = 0; j < Nx; j ++)
+            {
+                drz[j][0] = drz[j][1];
+                dzz[j][0] = dzz[j][1];
+                
+                drz[j][Nz] = drz[j][Nz-1];
+                dzz[j][Nz] = dzz[j][Nz-1];
+            }
             
             
             // Interior hyperbolic differences
             for (j = 0; j < Nx; j++)
             {
-                for (k = 1; k < Nz-1; k++)
+                for (k = 0; k < Nz; k++)
                 {
-                    if ( (drz[j][k] + drz[j][k-1]) == 0 || (dzz[j][k] + dzz[j][k-1]) == 0 )
+                    cff = 2*drz[j][k]*drz[j][k+1];
+                    if (cff > minVal)
                     {
-                        hrz[j][k] = 0.5*(drz[j][k] + drz[j][k-1]);
-                        hzz[j][k] = 0.5*(dzz[j][k] + dzz[j][k-1]);
+                        hrz[j][k] = cff/(drz[j][k] + drz[j][k+1]);
                     }
                     else
                     {
-                        hrz[j][k] = 2*drz[j][k]*drz[j][k-1]/(drz[j][k] + drz[j][k-1]);
-                        hzz[j][k] = 2*dzz[j][k]*dzz[j][k-1]/(dzz[j][k] + dzz[j][k-1]);
+                        hrz[j][k] = 0;
                     }
+                    hzz[j][k] = 2*dzz[j][k]*dzz[j][k+1]/(dzz[j][k] + dzz[j][k+1]);
                 }
             }
             
-            // Border hyperbolic differences
-            for (j = 0; j < Nx; j++)
-            {
-                hrz[j][0] = 1.5*(rhos[j][1] - rhos[j][0]) - 0.5*hrz[j][1];
-                hrz[j][Nz-1] = 1.5*(rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hrz[j][Nz-2];
-                
-                hzz[j][0] = 1.5*(ZZ_press[j][1] - ZZ_press[j][0]) - 0.5*hzz[j][1];
-                hzz[j][Nz-1] = 1.5*(ZZ_press[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hzz[j][Nz-2];
-            }
-            
-            
+            real cff1 = 0;
+            real cff2 = 0;
             // Calculate the pressure field at the surface
             for (j = 0; j < Nx; j++)
             {
                 zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
-                P[j][Nz-1] = grav*( rhos[j][Nz-1] + 0.5*( zeta - ZZ_press[j][Nz-1] )*( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_press[j][Nz-1] - ZZ_press[j][Nz-2] ) )*(zeta - ZZ_press[j][Nz-1]);
+                P[j][Nz-1] = grav*( rhos[j][Nz-1] + 0.5*(zeta - ZZ_phi[j][Nz-1])*(rhos[j][Nz-1] - rhos[j][Nz-2])/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) )*(zeta - ZZ_phi[j][Nz-1]);
             }
+            
             
             // Calculate the pressure field in the interior.
             for (j = 0; j < Nx; j++)
             {
                 for (k = Nz-2; k >= 0; k--)
                 {
-                    P[j][k] = P[j][k+1] + 0.5*grav*(rhos[j][k+1] - rhos[j][k])*(ZZ_press[j][k+1] - ZZ_press[j][k])
-                    - 0.1*grav*( (hrz[j][k+1] - hrz[j][k])*( ZZ_press[j][k+1] - ZZ_press[j][k] - (hzz[j][k+1] + hzz[j][k])/12 )
-                                - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - (hrz[j][k+1] - hrz[j][k])/12 ) );
+                    P[j][k] = P[j][k+1] + 0.5*grav*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
+                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] - hzz[j][k]) )
+                                                    - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] - hrz[j][k]) ) ) );
                 }
             }
             
@@ -2170,40 +2178,40 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    drx[j][k] = rhos[j+1][k] - rhos[j][k];
-                    dzx[j][k] = ZZ_press[j+1][k] - ZZ_press[j][k];
+                    drx[j+1][k] = rhos[j+1][k] - rhos[j][k];
+                    dzx[j+1][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
                 }
             }
             
             
-            // Interior hyperbolic differences
-            for (j = 1; j < Nx-1; j++)
+            // Extend differences along the bounary
+            for (k = 0; k < Nz; k++)
+            {
+                drx[0][k] = drx[1][k];
+                dzx[0][k] = dzx[1][k];
+                
+                drx[Nx][k] = drx[Nx-1][k];
+                dzx[Nx][k] = dzx[Nx-1][k];
+            }
+            
+            // Calculate the hyperbolic differences
+            for (j = 0; j < Nx; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    if ( (drx[j][k] + drx[j-1][k]) == 0 || (dzx[j][k] + drx[j-1][k]) == 0)
+                    cff = 2*drx[j][k]*drx[j][k+1];
+                    if (cff > minVal)
                     {
-                        hrx[j][k] = 0.5*(drx[j][k] + drx[j-1][k]);
-                        hzx[j][k] = 0.5*(dzx[j][k] + drx[j-1][k]);
+                        hrx[j][k] = cff/(drx[j][k] + drx[j][k+1]);
                     }
                     else
                     {
-                        hrx[j][k] = 2*drx[j][k]*drx[j-1][k]/(drx[j][k] + drx[j-1][k]);
-                        hzx[j][k] = 2*dzx[j][k]*dzx[j-1][k]/(dzx[j][k] + drx[j-1][k]);
+                        hrx[j][k] = 0;
                     }
+                    hzx[j][k] = 2*dzx[j][k]*dzx[j][k+1]/(dzx[j][k] + dzx[j][k+1]);
                 }
             }
             
-            
-            // Calculate the boundary hyperbolic differences
-            for (k = 0; k < Nz; k++)
-            {
-                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
-                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
-                
-                hzx[0][k] = 1.5*(ZZ_press[1][k] - ZZ_press[0][k]) - 0.5*hzx[1][k];
-                hzx[Nx-1][k] = 1.5*(ZZ_press[Nx-1][k] - ZZ_press[Nx-2][k]) - 0.5*hzx[Nx-2][k];
-            }
             
             
             // Calculate FC's
@@ -2211,9 +2219,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    FC[j][k] = 0.5*(rhos[j+1][k] - rhos[j][k])*(ZZ_press[j+1][k] - ZZ_press[j][k])
-                    - 0.1*( ( hrx[j+1][k] + hrx[j][k] )*( ZZ_press[j+1][k] - ZZ_press[j][k] - (hzx[j+1][k] - hzx[j][k])/12 )
-                           - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - (hrx[j+1][k] - hrx[j][k])/12 ) );
+                    FC[j][k] = 0.5*grav*( (rhos[j+1][k] - rhos[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
+                                         - OneFifth*( ( hrx[j+1][k] + hrx[j][k] )*( ZZ_phi[j][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] - hzx[j][k]) )
+                                        - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - OneTwelfth*(hrx[j+1][k] - hrx[j][k]) ) ) );
                 }
             }
             
@@ -2224,8 +2232,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    BPx[j+1][k] = -( P[j][k] - P[j+1][k] - grav*FC[j][k] )/dx;
-//                    fprintf(stderr,"Pressure Gradient: j = %d, k = %d, Px = %f \n",j,k,BPx[j][k]);
+                    
+                    BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + FC[j][k] )*_dx*_dz_u[j][k]/rho0;
+//                    fprintf(stderr,"j = %d, k = %d, PG = %f \n",j,k,BPx[j+1][k]);
                 }
             }
             
@@ -2235,7 +2244,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 BPx[0][k] = 0;
             }
-            
             
             
             break;
@@ -2256,6 +2264,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         {
             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
             dv_dt[j][k] = -f0*uvel[j][k];
+//                                fprintf(stderr,"j = %d, k = %d, PG = %f \n",j,k,BPx[j][k]);
         }
     }
     
@@ -3206,12 +3215,11 @@ int main (int argc, char ** argv)
     MATALLOC(Nsq,Nx,Nz);
     
     // Pressure calculation scheme
-    MATALLOC(ZZ_press,Nx,Nz);
     MATALLOC(rhos,Nx,Nz);
-    MATALLOC(drz,Nx,Nz-1);
-    MATALLOC(drx,Nx-1,Nz);
-    MATALLOC(dzz,Nx,Nz-1);
-    MATALLOC(dzx,Nx-1,Nz);
+    MATALLOC(drz,Nx,Nz+1);
+    MATALLOC(drx,Nx+1,Nz);
+    MATALLOC(dzz,Nx,Nz+1);
+    MATALLOC(dzx,Nx+1,Nz);
     MATALLOC(hrx,Nx,Nz);
     MATALLOC(hrz,Nx,Nz);
     MATALLOC(hzx,Nx,Nz);
