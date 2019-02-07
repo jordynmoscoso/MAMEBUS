@@ -2167,8 +2167,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 for (k = Nz-2; k >= 0; k--)
                 {
                     P[j][k] = P[j][k+1] + 0.5*grav*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
-                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] - hzz[j][k]) )
-                                                    - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] - hrz[j][k]) ) ) );
+                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
+                                                    - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) );
                 }
             }
             
@@ -2219,9 +2219,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    FC[j][k] = 0.5*grav*( (rhos[j+1][k] - rhos[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
-                                         - OneFifth*( ( hrx[j+1][k] + hrx[j][k] )*( ZZ_phi[j][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] - hzx[j][k]) )
-                                        - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - OneTwelfth*(hrx[j+1][k] - hrx[j][k]) ) ) );
+                    FC[j][k] = 0.5*grav*( (rhos[j+1][k] + rhos[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
+                                         - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
+                                        - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
                 }
             }
             
@@ -2233,7 +2233,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 for (k = 0; k < Nz; k++)
                 {
                     
-                    BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + FC[j][k] )*_dx*_dz_u[j][k]/rho0;
+                    BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + FC[j][k] )*_dx*_dz_u[j][k];
 //                    fprintf(stderr,"j = %d, k = %d, PG = %f \n",j,k,BPx[j+1][k]);
                 }
             }

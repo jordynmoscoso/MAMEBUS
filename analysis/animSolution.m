@@ -133,28 +133,6 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   sl_ind = find(ZZ_tr > - surf_layer);
   denom = size(sl_ind);
   
-  n = 1232;
-  data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
-  %%% Get the psi values on the gridpoints
-      psi = readOutputFile (data_file,Nx+1,Nz+1);       
-
-      %%% Plot the streamfunction
-      psi_r_lim = psi;
-      limval = 2;
-      psi_r_lim = min(psi_r_lim,limval);
-      psi_r_lim = max(psi_r_lim,-limval);
-%       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
-      figure(1)
-      pcolor(XX_psi,ZZ_psi,psi_r_lim);
-      shading interp;     
-      colormap redblue;
-      h=colorbar;        
-      caxis([-limval limval]);
-      set(h,'FontSize',18);
-
-      pause
-  
-  
   if (var_id ~= 0 && var_id ~= 1)
      n_var = var_id; 
   end

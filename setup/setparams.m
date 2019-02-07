@@ -97,7 +97,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = t1day;
+  outputFreq = 1e-2*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
