@@ -192,6 +192,7 @@ real ** hzz = NULL;
 real ** rhos = NULL;    // Density holder
 real ** P = NULL;       // Pressure
 real ** FC = NULL;      // integrated density
+real ** FX = NULL;
 
 
 // Boundary layer work arrays
@@ -594,8 +595,22 @@ void calcSlopes (     const real        t,
         for (k = 1; k < Nz; k ++)
         {
             db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-            db_dx[k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-            db_dx[k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+            // Switch between linear and cubic pressure, just in case.
+            switch(pressureScheme)
+            {
+                    // Calculate the pressure gradient using a linear pressure interpolation
+                case PRESSURE_LINEAR:
+                {
+                    db_dx[k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                    db_dx[k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+                    break;
+                }
+                case PRESSURE_CUBIC:
+                {
+                    db_dx[k] = -(FX[j-1][k] + FC[j][k] - FX[j][k] - FC[j][k-1])*_dx*_dz_u[j][k];
+                    break;
+                }
+            }
         }
         db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
         db_dx[0] = 0; // Here we just set then so that they are defined
@@ -2085,6 +2100,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                     if (j == 1){
                         BPx[0][k] = BPx[1][k]; // should we do this?
                     }
+
                     
                 }
             }
@@ -2097,6 +2113,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             real OneTwelfth = 1/12;
             real minVal = 1e-10;
             
+            real Grho = grav/rho0;
+            real Grho0 = 1000*Grho;
+            real HalfGRho = 0.5*Grho;
+            
             real cff = 0;
             real bb = 0;    // placeholder for buoyancy
             
@@ -2105,7 +2125,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    rhos[j][k] = (1-alpha*(buoy[j][k] - tref));
+                    rhos[j][k] = rho0*(1-alpha*(buoy[j][k] - tref));
                 }
             }
             
@@ -2132,7 +2152,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 dzz[j][Nz] = dzz[j][Nz-1];
             }
             
-            
+            real cff1 = 0;
             // Interior hyperbolic differences
             for (j = 0; j < Nx; j++)
             {
@@ -2147,17 +2167,29 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                     {
                         hrz[j][k] = 0;
                     }
-                    hzz[j][k] = 2*dzz[j][k]*dzz[j][k+1]/(dzz[j][k] + dzz[j][k+1]);
+                    cff1 = 2*dzz[j][k]*dzz[j][k+1];
+                    if (cff1 > minVal)
+                    {
+                        hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k+1]);
+                    }
+                    else
+                    {
+                        hzz[j][k] = 0;
+                    }
+                    
                 }
             }
             
-            real cff1 = 0;
+            
             real cff2 = 0;
             // Calculate the pressure field at the surface
             for (j = 0; j < Nx; j++)
             {
-                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]);
-                P[j][Nz-1] = grav*( rhos[j][Nz-1] + 0.5*(zeta - ZZ_phi[j][Nz-1])*(rhos[j][Nz-1] - rhos[j][Nz-2])/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) )*(zeta - ZZ_phi[j][Nz-1]);
+                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the b points.
+                cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
+                cff2 = 0.5*(rhos[j][Nz-1] - rhos[j][Nz-2])*(zeta - ZZ_phi[j][Nz-1])*cff1;
+                P[j][Nz-1] = (rhos[j][Nz-1] + cff2)*(zeta - ZZ_phi[j][Nz-1])/rho0;
+                FX[j][Nz-1] = grav*P[j][Nz-1];
             }
             
             
@@ -2166,9 +2198,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = Nz-2; k >= 0; k--)
                 {
-                    P[j][k] = P[j][k+1] + 0.5*grav*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
-                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
-                                                    - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) );
+                    FX[j][k] = 0.5*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
+                                         - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
+                                                     - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) )/rho0;
+                    P[j][k] = P[j][k+1] + grav*FX[j][k];
                 }
             }
             
@@ -2187,8 +2220,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             // Extend differences along the bounary
             for (k = 0; k < Nz; k++)
             {
-                drx[0][k] = drx[1][k];
-                dzx[0][k] = dzx[1][k];
+                drx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*drx[1][k];
+                dzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*dzx[1][k];
                 
                 drx[Nx][k] = drx[Nx-1][k];
                 dzx[Nx][k] = dzx[Nx-1][k];
@@ -2199,16 +2232,24 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    cff = 2*drx[j][k]*drx[j][k+1];
+                    cff = 2*drx[j][k]*drx[j+1][k];
                     if (cff > minVal)
                     {
-                        hrx[j][k] = cff/(drx[j][k] + drx[j][k+1]);
+                        hrx[j][k] = cff/(drx[j][k] + drx[j+1][k]);
                     }
                     else
                     {
                         hrx[j][k] = 0;
                     }
-                    hzx[j][k] = 2*dzx[j][k]*dzx[j][k+1]/(dzx[j][k] + dzx[j][k+1]);
+                    cff1 = 2*dzx[j][k]*dzx[j+1][k];
+                    if (cff1 > minVal)
+                    {
+                        hzx[j][k] = cff1/(dzx[j][k] + dzx[j+1][k]);
+                    }
+                    else
+                    {
+                        hzx[j][k] = 0;
+                    }
                 }
             }
             
@@ -2219,9 +2260,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    FC[j][k] = 0.5*grav*( (rhos[j+1][k] + rhos[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
+                    FC[j+1][k] = 0.5*( (rhos[j+1][k] + rhos[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
                                          - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
-                                        - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
+                                        - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) )/rho0;
                 }
             }
             
@@ -2232,9 +2273,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    
-                    BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + FC[j][k] )*_dx*_dz_u[j][k];
-//                    fprintf(stderr,"j = %d, k = %d, PG = %f \n",j,k,BPx[j+1][k]);
+                    BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + grav*FC[j+1][k] )*_dx;
                 }
             }
             
@@ -2264,7 +2303,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         {
             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
             dv_dt[j][k] = -f0*uvel[j][k];
-//                                fprintf(stderr,"j = %d, k = %d, PG = %f \n",j,k,BPx[j][k]);
         }
     }
     
@@ -3225,7 +3263,8 @@ int main (int argc, char ** argv)
     MATALLOC(hzx,Nx,Nz);
     MATALLOC(hzz,Nx,Nz);
     MATALLOC(P,Nx,Nz);
-    MATALLOC(FC,Nx-1,Nz);
+    MATALLOC(FX,Nx,Nz);
+    MATALLOC(FC,Nx,Nz);
     
     
     // Boundary layer work arrays
