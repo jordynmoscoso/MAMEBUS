@@ -97,7 +97,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 0.1*t1day;
+  outputFreq = 1e-2*t1year;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -134,8 +134,8 @@ function setparams (local_home_dir,run_name)
   %%% Grids  
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  Nx = 50; %%% Number of latitudinal grid points 
-  Nz = 50; %%% Number of vertical grid points
+  Nx = 100; %%% Number of latitudinal grid points 
+  Nz = 100; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  

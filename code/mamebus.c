@@ -109,6 +109,7 @@ real ** _dz_w = NULL;
 real ** _dzsq_w = NULL;
 real ** dz_u = NULL;
 real ** _dz_u = NULL;
+real ** dA_psi = NULL;
 real * hb_phi = NULL;     // Ocean depths and bottom slope
 real * hb_psi = NULL;
 real * sb_phi = NULL;
@@ -202,7 +203,7 @@ real * wp_sml = NULL;
 uint * k_bbl = NULL;
 real * wn_bbl = NULL;
 real * wp_bbl = NULL;
-real * db_dx = NULL;
+real ** db_dx = NULL;
 real * db_dz = NULL;
 
 ////////////////////////////////
@@ -588,6 +589,9 @@ void calcSlopes (     const real        t,
     
 #pragma parallel
     
+    
+    
+    
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
     {
@@ -595,27 +599,17 @@ void calcSlopes (     const real        t,
         for (k = 1; k < Nz; k ++)
         {
             db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-            // Switch between linear and cubic pressure, just in case.
-            switch(pressureScheme)
-            {
-                    // Calculate the pressure gradient using a linear pressure interpolation
-                case PRESSURE_LINEAR:
-                {
-                    db_dx[k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-                    db_dx[k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
-                    break;
-                }
-                case PRESSURE_CUBIC:
-                {
-                    db_dx[k] = -(FX[j-1][k] + FC[j][k] - FX[j][k] - FC[j][k-1])*_dx*_dz_u[j][k];
-                    break;
-                }
-            }
+//            // Switch between linear and cubic pressure, just in case.
+//            if(pressureScheme == PRESSURE_LINEAR)
+//            {
+                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+//            }
         }
         db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
-        db_dx[0] = 0; // Here we just set then so that they are defined
+        db_dx[j][0] = 0; // Here we just set then so that they are defined
         db_dz[Nz] = 0;
-        db_dx[Nz] = 0;
+        db_dx[j][Nz] = 0;
         
         // Calculate vertical gradients at SML base and BBL top
         if (use_sml)
@@ -645,17 +639,17 @@ void calcSlopes (     const real        t,
             {
                 // TODO calculate lambda
                 G_sml = surfStructFun(z,Hsml,_lambda_sml);
-                Sgm_psi[j][k] = - G_sml * db_dx[k] / db_dz_sml;
+                Sgm_psi[j][k] = - G_sml * db_dx[j][k] / db_dz_sml;
             }
             else if (use_bbl && (z < -hb_psi[j] + Hbbl))
             {
                 G_bbl = botStructFun(z,Hbbl,hb_psi[j],lambda_bbl);
-                Sgm_psi[j][k] = - G_bbl * db_dx[k] / db_dz_sml;
+                Sgm_psi[j][k] = - G_bbl * db_dx[j][k] / db_dz_sml;
             }
             else
             {
                 // Calculate slope on psi-gridpoints
-                Sgm_psi[j][k] = - db_dx[k] / db_dz[k];
+                Sgm_psi[j][k] = - db_dx[j][k] / db_dz[k];
                 
                 // TODO replace with exponential taper - see Griffies (2004)
                 // Cox slope-limiting.
@@ -2275,6 +2269,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 {
                     BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + grav*FC[j+1][k] )*_dx;
                 }
+                BPx[j+1][Nz] = 0;
             }
             
             
@@ -2375,7 +2370,7 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     
     // Calculate tracer tendencies due to advection/diffusion
     cfl_dt = tderiv_adv_diff (t, phi_wrk, dphi_dt_wrk);
-    
+
     // Calculate tracer tendencies due to biogeochemistry
     tderiv_bgc (t, phi_wrk, dphi_dt_wrk);
     
@@ -3205,6 +3200,7 @@ int main (int argc, char ** argv)
     MATALLOC(_dzsq_w,Nx,Nz+1);
     MATALLOC(dz_u,Nx+1,Nz);
     MATALLOC(_dz_u,Nx+1,Nz);
+    MATALLOC(dA_psi,Nx,Nz);
     VECALLOC(hb_phi,Nx);
     VECALLOC(hb_psi,Nx+1);
     VECALLOC(sb_phi,Nx);
@@ -3274,7 +3270,7 @@ int main (int argc, char ** argv)
     k_bbl = malloc((Nx+1)*sizeof(uint));
     VECALLOC(wn_bbl,Nx+1);
     VECALLOC(wp_bbl,Nx+1);
-    VECALLOC(db_dx,Nz+1);
+    MATALLOC(db_dx,Nx,Nz+1);
     VECALLOC(db_dz,Nz+1);
     
     /////////////////////////////////
@@ -3590,6 +3586,28 @@ int main (int argc, char ** argv)
             }
         }
     }
+    
+    // Grid areas on the psi-points (with verticies on the phi points)
+    // The area is calculated using the shoelace method.
+    for (j = 0; j < Nx-1; j++)
+    {
+        for (k = 0; k < Nz-1; k++)
+        {
+            dA_psi[j][k] = fabs(0.5*dx*(ZZ_phi[j][k+1] + ZZ_phi[j+1][k] + ZZ_phi[j+1][k+1] + ZZ_phi[j][k]));
+            
+        }
+    }
+    
+    for (j = 0; j < Nx-1; j++)
+    {
+        dA_psi[j][Nz-1] = dA_psi[j][Nz-2];
+    }
+    
+    for (k = 0; k < Nz; k++)
+    {
+        dA_psi[Nx-1][k] =  dA_psi[Nx-2][k];
+    }
+    
     
     // Write model grid to output files for post-simulation analysis
     if (!writeModelGrid(ZZ_phi,ZZ_psi,ZZ_u,ZZ_w,outdir))

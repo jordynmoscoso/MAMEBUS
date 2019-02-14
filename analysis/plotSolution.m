@@ -14,7 +14,7 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id)
+function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
 
     %%% Load convenience functions
     addpath ../utils;
@@ -27,6 +27,8 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id)
       var_id = 2;
       disp('Defaulting to show buoyancy')
     end
+    
+    
 
 
     %%%%%%%%%%%%%%%%%%%%%
@@ -112,16 +114,44 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id)
     clf;
     axes('FontSize',18);
 
+    
+    %%% Upload the names of the files in order to pick out the max N value
+    A = dir(dirpath);
+    M = size(A);
+    M = floor(max(M)/6); % there are six output variables saved
+                         % so this cuts down on the for loop.
+    lastVal = 0;
+    
+    for ii = 1:M
+        temp = A(ii).name;
+        temp = strsplit(temp,'=');
+        if max(size(temp) > 1)
+            temp2 = char(temp(2));
+            compVal = strsplit(temp2,'.');
+            compVal = str2num(compVal{1});
+
+            if compVal > lastVal
+                lastVal = compVal;
+            end
+        end
+    end
+    
+    
     %%% Pick out the last N value in the saved files. 
     outputFrac = dt_s/t1year;
-    
-    lastVal = (endTime/dt_s);
     yearLength = 1/outputFrac; % Count the number of N values in one year.
     
     
-    avgTime = 5; % Choose the amount of time to average over (in years)
+%     avgTime = 10; % Choose the amount of time to average over (in years)
     LL = yearLength*avgTime;
     avgStart = lastVal - LL; % Calculate where we start the average.
+    
+    if avgStart < 1
+        avgStart = 0;
+    end
+    
+    disp(['Start time is ' num2str(avgStart*dt_s/t1year) ' yrs']);
+    disp(['End time is ' num2str(lastVal*dt_s/t1year) ' yrs']);
     
     %%% Create a placeholder for avgVals
     if (plot_trac)
@@ -130,8 +160,8 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id)
         avgVals = zeros(Nx+1,Nz+1);
     end
     
-    lastVal = 1061;
-    avgStart = lastVal - LL;
+%     lastVal = 1061;
+%     avgStart = lastVal - LL;
     
     %%% Averaging loop
     for n = avgStart:lastVal
@@ -158,19 +188,23 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id)
     
     %%% Plot the average values %%%
     titlestr = ['Average values over ', num2str(avgTime), ' year(s)'];
-    figure(1)
+    figure
     if (plot_trac)
         if (var_id == 0 || var_id == 1)
             pcolor(XX_tr,ZZ_tr,avgVals)
             shading interp
             h = colorbar; 
             colormap redblue;
+            maxspeed = 0;
+            minval = max(max(max(avgVals)),maxspeed);
+            minval = abs(min(min(min(avgVals)),-minval));
+            caxis([-minval minval]);
         else
             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:1:20]);
             colorbar; 
             colormap default;
-            clabel(C,h,'Color','w');  
-            set(h,'ShowText','on'); 
+%             clabel(C,h,'Color','w');  
+%             set(h,'ShowText','on'); 
         end
         
         % Use a divergent colorscheme if we are looking at positive or
@@ -183,8 +217,9 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id)
         limval = 2;
         psi_r_lim = min(psi_r_lim,limval);
         psi_r_lim = max(psi_r_lim,-limval);
-      	contourf(XX_psi,ZZ_psi,psi_r_lim,[-2:0.2:2]); 
-%         shading interp
+%       	contourf(XX_psi,ZZ_psi,psi_r_lim,[-2:0.2:2]); 
+        pcolor(XX_psi,ZZ_psi,psi_r_lim)
+        shading interp
         h = colorbar; 
         colormap redblue;
         caxis([-limval limval]);
