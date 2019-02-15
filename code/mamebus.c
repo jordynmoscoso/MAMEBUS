@@ -590,8 +590,6 @@ void calcSlopes (     const real        t,
 #pragma parallel
     
     
-    
-    
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
     {
@@ -599,12 +597,20 @@ void calcSlopes (     const real        t,
         for (k = 1; k < Nz; k ++)
         {
             db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-//            // Switch between linear and cubic pressure, just in case.
-//            if(pressureScheme == PRESSURE_LINEAR)
-//            {
-                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
-//            }
+            // Switch between linear and cubic pressure, just in case.
+            if(pressureScheme == PRESSURE_LINEAR)
+            {
+                db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+            }
+            else
+            {
+                real OneFifth = 0.2;
+                real OneTwelfth = 1/12;
+                real minVal = 1e-10;
+                
+                
+            }
         }
         db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
         db_dx[j][0] = 0; // Here we just set then so that they are defined
@@ -2111,7 +2117,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             real Grho0 = 1000*Grho;
             real HalfGRho = 0.5*Grho;
             
-            real cff = 0;
+            real cff = 0;   // dummy variable to hold numerators and coefficients
             real bb = 0;    // placeholder for buoyancy
             
             // Calculate the density field
@@ -2146,7 +2152,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 dzz[j][Nz] = dzz[j][Nz-1];
             }
             
-            real cff1 = 0;
+            real cff1 = 0;          // another dummy variable to hold calculations
             // Interior hyperbolic differences
             for (j = 0; j < Nx; j++)
             {
@@ -2175,7 +2181,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             }
             
             
-            real cff2 = 0;
+            real cff2 = 0;          // dummy variable to hold calculations
             // Calculate the pressure field at the surface
             for (j = 0; j < Nx; j++)
             {
