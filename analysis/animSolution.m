@@ -20,8 +20,12 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   addpath ../utils;
   addpath ./redblue
   
-  mov_on = 0;
-  mov_name = strcat(run_name,'_name');
+  mov_on = false;
+  if plot_trac
+    mov_name = strcat(run_name,'_',num2str(var_id));
+  else
+      mov_name = strcat(run_name,'_strfcn',num2str(var_id));
+  end
   
   if var_id > 3
       var_id = 2;

@@ -143,7 +143,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 300;
+  shelfdepth = 3000;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -331,10 +331,13 @@ function setparams (local_home_dir,run_name)
  
   %%% Load in the surface wind stress.
 %   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
-  tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+%   tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
 %   Lmax = 300*m1km;
 %   tau = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
 %   tau(xx_psi < 200) = 0;
+  tau = tau0*ones(size(xx_psi));
+  tau(xx_psi < 200) = 0;
+  tau(xx_psi > Lx - 200) = 0;
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -342,7 +345,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
 
-  
+%  
   
  
   

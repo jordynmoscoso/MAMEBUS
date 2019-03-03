@@ -66,6 +66,8 @@ real day = 86400;                 // Seconds in a day
 real year = 31449600;             // Seconds in a year (52 7-day weeks)
 real grav = 9.8;                     // m/s^2 (gravity)
 real tref = 20;         // Reference surface temperature
+real area = 0;
+real lin2buoy = 62899200;
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
@@ -590,180 +592,170 @@ void calcSlopes (     const real        t,
 #pragma parallel
     
     
-//    if (pressureScheme == PRESSURE_CUBIC) // Default calculated the cubic interpolated pressure gradient.
-//    {
-//        real OneFifth = 0.2;
-//        real OneTwelfth = 1/12;
-//        real minVal = 1e-10;
-//
-//        // define dummy variables for calculations
-//        real cff = 0;
-//        real cff1 = 0;
-//
-//        // Calculate the elementary differences in the grid an buoyancy
-//        // We can reuse the pointers from the pressure gradient calculation
-//        // Vertical calculations
-//        for (j = 0; j < Nx; j++)            // Calculate the elementary differences
-//        {
-//            for ( k = 0; k < Nz-1; k++ )
-//            {
-//                drz[j][k+1] = buoy[j][k+1] - buoy[j][k];
-//                dzz[j][k+1] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
-//            }
-//        }
-//
-//        // Extend the differences along the boundaries
-//        for (j = 0; j < Nx; j++)
-//        {
-//            drz[j][0] = drz[j][1];
-//            dzz[j][0] = dzz[j][1];
-//
-//            drz[j][Nz] = drz[j][Nz-1];
-//            dzz[j][Nz] = dzz[j][Nz-1];
-//        }
-//
-//
-//        // Calculate the interior hyperbolic differences
-//        for (j = 0; j < Nx; j++)
-//        {
-//            for (k = 0; k < Nz; k++)
-//            {
-//                cff = 2*drz[j][k]*drz[j][k+1];
-//                if (cff > minVal)
-//                {
-//                    hrz[j][k] = cff/(drz[j][k] + drz[j][k+1]);
-//                }
-//                else
-//                {
-//                    hrz[j][k] = 0;
-//                }
-//                cff1 = 2*dzz[j][k]*dzz[j][k+1];
-//                if (cff1 > minVal)
-//                {
-//                    hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k+1]);
-//                }
-//                else
-//                {
-//                    hzz[j][k] = 0;
-//                }
-//            }
-//        }
-//
-//
-//        real zeta = 0;
-//        // Calculate the top value of the FX's
-//        for (j = 0; j < Nx; j++)
-//        {
-//            zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the b points.
-//            cff = (zeta - ZZ_phi[j][Nz-1]);
-//            cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
-//            FX[j][Nz-1] = (buoy[j][Nz-1] + 0.5*cff*(buoy[j][Nz-1] - buoy[j][Nz-2])*cff1)*cff;
-//        }
-//
-//        // Calculate the interior FX values
-//        for (j = 0; j < Nx; j++)
-//        {
-//            for (k = Nz-2; k >=0; k--)
-//            {
-//                FX[j][k] = 0.5*(   (buoy[j][k+1] + buoy[j][k])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) ) - ( hzz[j][k+1] + hzz[j][k] )*( buoy[j][k+1] - buoy[j][k] - OneTwelfth*( hrz[j][k] + hrz[j][k+1] ) ) )   );
-//            }
-//        }
-//
-//        // Horizontal Calculation
-//        for (j = 0; j < Nx-1; j++)
-//        {
-//            for (k = 0; k < Nz; k++)
-//            {
-//                drx[j+1][k] = buoy[j+1][k] - buoy[j][k];
-//                dzx[j+1][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
-//            }
-//        }
-//
-//
-//        // Extend differences along the bounary
-//        for (k = 0; k < Nz; k++)
-//        {
-//            drx[0][k] = 1.5*(buoy[1][k] - buoy[0][k]) - 0.5*drx[1][k];
-//            dzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*dzx[1][k];
-//
-//            drx[Nx][k] = drx[Nx-1][k];
-//            dzx[Nx][k] = dzx[Nx-1][k];
-//        }
-//
-//        // Calculate the hyperbolic differences
-//        for (j = 0; j < Nx; j++)
-//        {
-//            for (k = 0; k < Nz; k++)
-//            {
-//                cff = 2*drx[j][k]*drx[j+1][k];
-//                if (cff > minVal)
-//                {
-//                    hrx[j][k] = cff/(drx[j][k] + drx[j+1][k]);
-//                }
-//                else
-//                {
-//                    hrx[j][k] = 0;
-//                }
-//                cff1 = 2*dzx[j][k]*dzx[j+1][k];
-//                if (cff1 > minVal)
-//                {
-//                    hzx[j][k] = cff1/(dzx[j][k] + dzx[j+1][k]);
-//                }
-//                else
-//                {
-//                    hzx[j][k] = 0;
-//                }
-//            }
-//        }
-//
-//
-//        // Calculate FC's
-//        for (j = 0; j < Nx-1; j++)
-//        {
-//            for (k = 0; k < Nz; k++)
-//            {
-//                FC[j+1][k] = 0.5*( (buoy[j+1][k] + buoy[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
-//                                  - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
-//                                              - ( hzx[j+1][k] - hzx[j][k] )*( buoy[j+1][k] - buoy[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
-//            }
-//        }
-//
-//
-//        // Calculate the area integrated buoyancy gradient and divide by the area
-//        for (j = 0; j < Nx-1; j ++)
-//        {
-//            for (k = 0; k < Nz; k++)
-//            {
-//                if (j == 0 || k == 0)
-//                {
-//                    db_dx[j][k] = 0;
-//                }
-//                else if (k == Nz-1) // at the surface, the FC_{k+1} = 0
-//                {
-//                    db_dx[j+1][k] = (FX[j+1][k] + FC[j][k] - FX[j][k])/dA_psi[j][k-1];
-//                }
-//                else
-//                {
-//                    db_dx[j+1][k] =  (FX[j+1][k] + FC[j][k] - FC[j][k+1] - FX[j][k])/dA_psi[j][k];
-////                    fprintf(stderr," j = %d, k = %d, db = %e \n",j+1,k,db_dx[j+1][k]);
-//                }
-//            }
-//        }
-//
-//        // extend the buoyancy gradient on the western wall
-//        for (k = 0; k < Nz; k++)
-//        {
-//            db_dx[1][k] = db_dx[2][k];
-//        }
-//
-//        // Make sure the edges are defined, they shouldn't be used.
-//        for (j = 0; j < Nx; j++)
-//        {
-//            db_dx[j][0] = 0;
-//            db_dx[j][Nz] = 0;
-//        }
-//
-//    }
+    if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
+    {
+        real OneFifth = 0.2;
+        real OneTwelfth = 1/12;
+        real minVal = 1e-10;
+
+        // define dummy variables for calculations
+        real cff = 0;
+        real cff1 = 0;
+
+        // Calculate the elementary differences in the grid an buoyancy
+        // We can reuse the pointers from the pressure gradient calculation
+        // Vertical calculations
+        for (j = 0; j < Nx; j++)            // Calculate the elementary differences
+        {
+            for ( k = 0; k < Nz-1; k++ )
+            {
+                drz[j][k+1] = buoy[j][k+1] - buoy[j][k];
+                dzz[j][k+1] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
+            }
+        }
+
+        // Extend the differences along the boundaries
+        for (j = 0; j < Nx; j++)
+        {
+            drz[j][0] = drz[j][1];
+            dzz[j][0] = dzz[j][1];
+
+            drz[j][Nz] = drz[j][Nz-1];
+            dzz[j][Nz] = dzz[j][Nz-1];
+        }
+
+
+        // Calculate the interior hyperbolic differences
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                cff = 2*drz[j][k]*drz[j][k+1];
+                if (cff > minVal)
+                {
+                    hrz[j][k] = cff/(drz[j][k] + drz[j][k+1]);
+                }
+                else
+                {
+                    hrz[j][k] = 0;
+                }
+                cff1 = 2*dzz[j][k]*dzz[j][k+1];
+                if (cff1 > minVal)
+                {
+                    hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k+1]);
+                }
+                else
+                {
+                    hzz[j][k] = 0;
+                }
+            }
+        }
+
+
+        real zeta = 0;
+        // Calculate the top value of the FX's
+        for (j = 0; j < Nx; j++)
+        {
+            zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the b points.
+            cff = (zeta - ZZ_phi[j][Nz-1]);
+            cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
+            FX[j][Nz] = (buoy[j][Nz-1] + 0.5*cff*(buoy[j][Nz-1] - buoy[j][Nz-2])*cff1)*cff;
+        }
+
+        // Calculate the interior FX values
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 0; k < Nz-1; k++)
+            {
+                FX[j][k+1] = 0.5*(   (buoy[j][k+1] + buoy[j][k])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) ) - ( hzz[j][k+1] + hzz[j][k] )*( buoy[j][k+1] - buoy[j][k] - OneTwelfth*( hrz[j][k] + hrz[j][k+1] ) ) )   );
+            }
+        }
+
+        // Horizontal Calculation
+        for (j = 0; j < Nx-1; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                drx[j+1][k] = buoy[j+1][k] - buoy[j][k];
+                dzx[j+1][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
+            }
+        }
+
+
+        // Extend differences along the bounary
+        for (k = 0; k < Nz; k++)
+        {
+            drx[0][k] = 1.5*(buoy[1][k] - buoy[0][k]) - 0.5*drx[1][k];
+            dzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*dzx[1][k];
+
+            drx[Nx][k] = 1.5*(buoy[Nx][k] - buoy[Nx-1][k]) - 0.5*drx[Nx-1][k];
+            dzx[Nx][k] = 1.5*(ZZ_phi[Nx][k] - ZZ_phi[Nx-1][k]) - 0.5*dzx[Nx-1][k];
+        }
+
+        // Calculate the hyperbolic differences
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                cff = 2*drx[j][k]*drx[j+1][k];
+                if (cff > minVal)
+                {
+                    hrx[j][k] = cff/(drx[j][k] + drx[j+1][k]);
+                }
+                else
+                {
+                    hrx[j][k] = 0;
+                }
+                cff1 = 2*dzx[j][k]*dzx[j+1][k];
+                if (cff1 > minVal)
+                {
+                    hzx[j][k] = cff1/(dzx[j][k] + dzx[j+1][k]);
+                }
+                else
+                {
+                    hzx[j][k] = 0;
+                }
+            }
+        }
+
+
+        // Calculate FC's
+        for (j = 0; j < Nx-1; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                FC[j+1][k] = 0.5*( (buoy[j+1][k] + buoy[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
+                                  - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
+                                              - ( hzx[j+1][k] - hzx[j][k] )*( buoy[j+1][k] - buoy[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
+                
+            }
+        }
+
+
+        // Calculate the area integrated buoyancy gradient and divide by the area
+        for (j = 1; j < Nx; j ++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                    db_dx[j][k] =  (FX[j][k] + FC[j][k-1] - FC[j][k] - FX[j-1][k])/dA_psi[j][k];
+            }
+        }
+
+        // extend the buoyancy gradient on the western wall
+        for (k = 1; k < Nz-1; k++)
+        {
+            db_dx[0][k] = db_dx[1][k];
+            db_dx[Nx][k] = db_dx[Nx-1][k];
+        }
+
+        // Make sure the edges are defined, they shouldn't be used.
+        for (j = 0; j < Nx+1; j++)
+        {
+            db_dx[j][0] = 0;
+            db_dx[j][Nz] = 0;
+        }
+
+    }
     
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
@@ -773,12 +765,13 @@ void calcSlopes (     const real        t,
         {
             db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
-//            if(pressureScheme == PRESSURE_LINEAR)
-//            {
-//                db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-//                db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
-//                fprintf(stderr," j = %d, k = %d, db = %e \n",j,k,db_dx[j][k]);
-//            }
+            if( pressureScheme == PRESSURE_LINEAR )
+            {
+//            fprintf(stderr," j = %d, k = %d, Cubic: db = %e \n",j,k,db_dx[j][k]);
+                db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+//            fprintf(stderr," j = %d, k = %d, Linear: db = %e \n",j,k,db_dx[j][k]);
+            }
         }
         db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
         db_dx[j][0] = 0; // Here we just set then so that they are defined
@@ -2360,6 +2353,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             }
             
             
+            
+            
             // Calculate the pressure field in the interior.
             for (j = 0; j < Nx; j++)
             {
@@ -2390,8 +2385,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 drx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*drx[1][k];
                 dzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*dzx[1][k];
                 
-                drx[Nx][k] = drx[Nx-1][k];
-                dzx[Nx][k] = dzx[Nx-1][k];
+                drx[Nx][k] = 1.5*(rhos[Nx][k] - rhos[Nx-1][k]) - 0.5*drx[Nx-1][k];
+                dzx[Nx][k] = 1.5*(ZZ_phi[Nx][k] - ZZ_phi[Nx-1][k]) - 0.5*dzx[Nx-1][k];
             }
             
             // Calculate the hyperbolic differences
@@ -2450,39 +2445,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             for (k = 0; k < Nz; k++)
             {
                 BPx[0][k] = 0;
-            }
-            
-            
-            // Test the calculation of d_z(BPx) = b_x using Sasha's paper.
-            // Calculate the elementary differences in BPx
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nz-1; k++)
-                {
-                    drz[j][k+1] = BPx[j][k+1] - BPx[j][k];
-                    dzz[j][k+1] = ZZ_u[j][k+1] - ZZ_u[j][k];
-                    
-                }
-            }
-            
-            // Extend the differences along the boundaries
-            for (j = 0; j < Nx; j ++)
-            {
-                drz[j][0] = drz[j][1];
-                dzz[j][0] = dzz[j][1];
-                
-                drz[j][Nz] = drz[j][Nz-1];
-                dzz[j][Nz] = dzz[j][Nz-1];
-            }
-            
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    cff = 1/( ( drz[j][k-1] + drz[j][k] )*dzz[j][k-1]*dzz[j][k] );
-                    db_dx[j][k] = cff*drz[j][k-1]*drz[j][k]*( dzz[j][k-1] + dzz[j][k] );
-//                    fprintf(stderr,"j = %d, k = %d, db_dx = %e \n",j,k,db_dx[j][k]);
-                }
             }
             
             
@@ -3407,7 +3369,7 @@ int main (int argc, char ** argv)
     MATALLOC(_dzsq_w,Nx,Nz+1);
     MATALLOC(dz_u,Nx+1,Nz);
     MATALLOC(_dz_u,Nx+1,Nz);
-    MATALLOC(dA_psi,Nx,Nz);
+    MATALLOC(dA_psi,Nx+1,Nz+1);
     VECALLOC(hb_phi,Nx);
     VECALLOC(hb_psi,Nx+1);
     VECALLOC(sb_phi,Nx);
@@ -3466,8 +3428,8 @@ int main (int argc, char ** argv)
     MATALLOC(hzx,Nx,Nz);
     MATALLOC(hzz,Nx,Nz);
     MATALLOC(P,Nx,Nz);
-    MATALLOC(FX,Nx,Nz);
-    MATALLOC(FC,Nx,Nz);
+    MATALLOC(FX,Nx,Nz+1);
+    MATALLOC(FC,Nx+1,Nz);
     
     
     // Boundary layer work arrays
@@ -3477,7 +3439,7 @@ int main (int argc, char ** argv)
     k_bbl = malloc((Nx+1)*sizeof(uint));
     VECALLOC(wn_bbl,Nx+1);
     VECALLOC(wp_bbl,Nx+1);
-    MATALLOC(db_dx,Nx,Nz+1);
+    MATALLOC(db_dx,Nx+1,Nz+1);
     VECALLOC(db_dz,Nz+1);
     
     /////////////////////////////////
@@ -3800,23 +3762,35 @@ int main (int argc, char ** argv)
     real xval1 = 0;
     for (j = 0; j < Nx-1; j++)
     {
-        xval = j*dx*100;
-        xval1 = (j+1)*dx*100;
+        xval = (j+0.5)*dx;
+        xval1 = (j+1.5)*dx;
         for (k = 0; k < Nz-1; k++)
         {
-            dA_psi[j][k] = fabs( 0.5*( xval*ZZ_phi[j][k+1] + xval*ZZ_phi[j+1][k+1] + xval1*ZZ_phi[j+1][k] + xval1*ZZ_phi[j][k] - xval*ZZ_phi[j][k] - xval1*ZZ_phi[j][k+1] - xval1*ZZ_phi[j+1][k+1] - xval*ZZ_phi[j+1][k] ) );
+            dA_psi[j+1][k+1] = fabs( 0.5*( xval*ZZ_phi[j][k+1] + xval*ZZ_phi[j+1][k+1] + xval1*ZZ_phi[j+1][k] + xval1*ZZ_phi[j][k] - xval*ZZ_phi[j][k] - xval1*ZZ_phi[j][k+1] - xval1*ZZ_phi[j+1][k+1] - xval*ZZ_phi[j+1][k] ) );
             
         }
     }
     
-    for (j = 0; j < Nx-1; j++)
+    for (j = 0; j < Nx+1; j++)
     {
-        dA_psi[j][Nz-1] = dA_psi[j][Nz-2];
+        dA_psi[j][Nz] = dA_psi[j][Nz-1];
+        dA_psi[j][0] = dA_psi[j][1];
     }
     
-    for (k = 0; k < Nz; k++)
+    for (k = 0; k < Nz+1; k++)
     {
-        dA_psi[Nx-1][k] =  dA_psi[Nx-2][k];
+        dA_psi[Nx][k] =  dA_psi[Nx-1][k];
+        dA_psi[0][k] = dA_psi[1][k];
+    }
+    
+    
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 1; k < Nz; k++)
+        {
+            area = dx*(ZZ_u[j][k] - ZZ_u[j][k-1]);
+//            fprintf(stderr,"j = %d, k = %d, dA_psi = %f, simple area = %f \n",j,k,dA_psi[j][k],area);
+        }
     }
     
     
