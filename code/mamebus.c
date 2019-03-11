@@ -84,7 +84,7 @@ real * bgc_params = NULL;     // Vector containing biogeochemical parameters, al
 
 // Numerical parameters
 real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
-bool limSlopes = false;    // Use Cox slope limiting
+bool limSlopes = true;    // Use Cox slope limiting
 real Smax = 0.1;        // Max isopycnal slope
 const int idx_uvel = 0;   // Index of buoyancy variable in list of tracers
 const int idx_vvel = 1;   // Index of buoyancy variable in list of tracers
@@ -131,7 +131,7 @@ uint timeSteppingScheme = TIMESTEPPING_AB3;
 uint advectionScheme = ADVECTION_KT00;
 
 // Momentum scheme
-uint momentumScheme = MOMENTUM_TTTW;
+uint momentumScheme = MOMENTUM_NONE;
 
 // Pressure scheme
 uint pressureScheme = PRESSURE_CUBIC;
@@ -591,10 +591,9 @@ void calcSlopes (     const real        t,
     
 #pragma parallel
     
-    
     if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
     {
-        real OneFifth = 0.2;
+        real OneFifth = 1/5;
         real OneTwelfth = 1/12;
         real minVal = 1e-10;
 
@@ -607,10 +606,10 @@ void calcSlopes (     const real        t,
         // Vertical calculations
         for (j = 0; j < Nx; j++)            // Calculate the elementary differences
         {
-            for ( k = 0; k < Nz-1; k++ )
+            for ( k = 1; k < Nz; k++ )
             {
-                drz[j][k+1] = buoy[j][k+1] - buoy[j][k];
-                dzz[j][k+1] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
+                drz[j][k] = buoy[j][k] - buoy[j][k-1];
+                dzz[j][k] = ZZ_phi[j][k] - ZZ_phi[j][k-1];
             }
         }
 
@@ -619,6 +618,11 @@ void calcSlopes (     const real        t,
         {
             drz[j][0] = drz[j][1];
             dzz[j][0] = dzz[j][1];
+            
+            // These values should be copied over to the hyperbolic differences
+            // since we are unable to calculate the differences on the boundaries
+            hrz[j][0] = drz[j][0];
+            hzz[j][0] = dzz[j][0];
 
             drz[j][Nz] = drz[j][Nz-1];
             dzz[j][Nz] = dzz[j][Nz-1];
@@ -628,21 +632,21 @@ void calcSlopes (     const real        t,
         // Calculate the interior hyperbolic differences
         for (j = 0; j < Nx; j++)
         {
-            for (k = 0; k < Nz; k++)
+            for (k = 1; k < Nz; k++)
             {
-                cff = 2*drz[j][k]*drz[j][k+1];
+                cff = 2*drz[j][k]*drz[j][k-1];
                 if (cff > minVal)
                 {
-                    hrz[j][k] = cff/(drz[j][k] + drz[j][k+1]);
+                    hrz[j][k] = cff/(drz[j][k] + drz[j][k-1]);
                 }
                 else
                 {
                     hrz[j][k] = 0;
                 }
-                cff1 = 2*dzz[j][k]*dzz[j][k+1];
+                cff1 = 2*dzz[j][k]*dzz[j][k-1];
                 if (cff1 > minVal)
                 {
-                    hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k+1]);
+                    hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k-1]);
                 }
                 else
                 {
@@ -656,10 +660,10 @@ void calcSlopes (     const real        t,
         // Calculate the top value of the FX's
         for (j = 0; j < Nx; j++)
         {
-            zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the b points.
+            zeta = ZZ_w[j][Nz]; // interpolate to the w points.
             cff = (zeta - ZZ_phi[j][Nz-1]);
             cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
-            FX[j][Nz] = (buoy[j][Nz-1] + 0.5*cff*(buoy[j][Nz-1] - buoy[j][Nz-2])*cff1)*cff;
+            FX[j][Nz-1] = (buoy[j][Nz-1] + 0.5*cff*(buoy[j][Nz-1] - buoy[j][Nz-2])*cff1)*cff;
         }
 
         // Calculate the interior FX values
@@ -667,17 +671,21 @@ void calcSlopes (     const real        t,
         {
             for (k = 0; k < Nz-1; k++)
             {
-                FX[j][k+1] = 0.5*(   (buoy[j][k+1] + buoy[j][k])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]) - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) ) - ( hzz[j][k+1] + hzz[j][k] )*( buoy[j][k+1] - buoy[j][k] - OneTwelfth*( hrz[j][k] + hrz[j][k+1] ) ) )   );
+                FX[j][k] = 0.5*(   (buoy[j][k+1] + buoy[j][k])*(ZZ_phi[j][k+1] - ZZ_phi[j][k])
+                                - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k]
+                                - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) )
+                                            - ( hzz[j][k+1] + hzz[j][k] )*( buoy[j][k+1] - buoy[j][k]
+                                            - OneTwelfth*( hrz[j][k] + hrz[j][k+1] ) ) )   );
             }
         }
 
         // Horizontal Calculation
-        for (j = 0; j < Nx-1; j++)
+        for (j = 1; j < Nx; j++)
         {
             for (k = 0; k < Nz; k++)
             {
-                drx[j+1][k] = buoy[j+1][k] - buoy[j][k];
-                dzx[j+1][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
+                drx[j][k] = buoy[j][k] - buoy[j-1][k];
+                dzx[j][k] = ZZ_phi[j][k] - ZZ_phi[j-1][k];
             }
         }
 
@@ -685,11 +693,16 @@ void calcSlopes (     const real        t,
         // Extend differences along the bounary
         for (k = 0; k < Nz; k++)
         {
-            drx[0][k] = 1.5*(buoy[1][k] - buoy[0][k]) - 0.5*drx[1][k];
-            dzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*dzx[1][k];
+            drx[0][k] = drx[1][k];
+            dzx[0][k] = dzx[1][k];
+            
+            // Copy the values over to the hyperbolic differences.
+            // This is how this is handled in ROMS.
+            hrx[Nx][k] = drx[Nx-1][k];
+            hzx[Nx][k] = dzx[Nx-1][k];
 
-            drx[Nx][k] = 1.5*(buoy[Nx][k] - buoy[Nx-1][k]) - 0.5*drx[Nx-1][k];
-            dzx[Nx][k] = 1.5*(ZZ_phi[Nx][k] - ZZ_phi[Nx-1][k]) - 0.5*dzx[Nx-1][k];
+            drx[Nx][k] = drx[Nx-1][k];
+            dzx[Nx][k] = dzx[Nx-1][k];
         }
 
         // Calculate the hyperbolic differences
@@ -720,14 +733,13 @@ void calcSlopes (     const real        t,
 
 
         // Calculate FC's
-        for (j = 0; j < Nx-1; j++)
+        for (j = 1; j < Nx; j++)
         {
             for (k = 0; k < Nz; k++)
             {
-                FC[j+1][k] = 0.5*( (buoy[j+1][k] + buoy[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
-                                  - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
-                                              - ( hzx[j+1][k] - hzx[j][k] )*( buoy[j+1][k] - buoy[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
-                
+                FC[j][k] = 0.5*( (buoy[j][k] + buoy[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
+                                  - OneFifth*( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k] - OneTwelfth*(hzx[j][k] + hzx[j-1][k]) )
+                                              - ( hzx[j][k] - hzx[j-1][k] )*( buoy[j][k] - buoy[j-1][k] - OneTwelfth*(hrx[j][k] + hrx[j-1][k]) ) ) );
             }
         }
 
@@ -756,7 +768,10 @@ void calcSlopes (     const real        t,
         }
 
     }
+  
+
     
+    real cubic = 0;
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
     {
@@ -767,10 +782,10 @@ void calcSlopes (     const real        t,
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
             if( pressureScheme == PRESSURE_LINEAR )
             {
-//            fprintf(stderr," j = %d, k = %d, Cubic: db = %e \n",j,k,db_dx[j][k]);
+            cubic = db_dx[j][k];
                 db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                 db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
-//            fprintf(stderr," j = %d, k = %d, Linear: db = %e \n",j,k,db_dx[j][k]);
+//            fprintf(stderr," j = %d, k = %d, Linear: db = %e, Cubic: db = %e \n",j,k,db_dx[j][k],cubic);
             }
         }
         db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
@@ -2014,6 +2029,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real nsq_col = 0;
     real nsq_max = 0;
     
+    // TODO remove
+    real siso_max, sgm_max;
+    
     ////////////////////////////////////////
     ///// BEGIN CALCULATING TENDENCIES /////
     ////////////////////////////////////////
@@ -2093,8 +2111,39 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
         }
     }
     
+    
+    // TODO remove
+    // For y-fluxes
+    siso_max = 0;
+    sgm_max = 0;
+    real strj = 0;
+    real strk = 0;
+    for (j = 0; j < Nx; j ++)
+    {
+        for (k = 0; k < Nz; k ++)
+        {
+            if (Sgm_psi[j][k]<sgm_max)
+            {
+                strj = j;
+                strk = k;
+                sgm_max = Sgm_psi[j][k];
+            }
+            if (Siso_w[j][k]<siso_max)
+            {
+                strj = j;
+                strk = k;
+                siso_max = Siso_w[j][k];
+            }
+        }
+    }
+    
+    printf("%le %le %f %f %f \n",sgm_max,siso_max,t/86400,strj,strk);fflush(stdout);
+    printf("test3: %le %le %f\n",fabs(Siso_w[28][34]),fabs(Sgm_psi[28][34]),t/86400);fflush(stdout);
 #pragma parallel
     
+    real siso = 0;
+    real sgm = 0;
+    real z = 0;
     // For z-fluxes
     // N.B. Carefully chosen indices so that we can calculate diffusive CFLs
     // associated with Kgm and Kiso (almost) everywhere.
@@ -2102,6 +2151,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     {
         for (k = 0; k <= Nz; k ++)
         {
+            z = ZZ_u[j][k];
             // Max advecting velocity
             w_dz = fabs(w_r[j][k]) * _dz_w[j][k];
             if (w_dz > w_dz_max)
@@ -2116,20 +2166,24 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             // (i.e. pseudo-vertical diffusivity) tends to be the limiting one.
             
             // "true" slopes in x/sigma coordinates, i.e. slopes relative to grid coordinates
-            Sgm_true = j>0 ? Sgm_psi[j][k] - (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx : 0; // Basically just skips j==0 case
-            Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
+            //Sgm_true = j>0 ? Sgm_psi[j][k] - (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx : 0; // Basically just skips j==0 case
+            //Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
+            Sgm_true = j>0 ? Sgm_psi[j][k] : 0; // Basically just skips j==0 case
+            Siso_true = Siso_w[j][k];
             
             // N.B. Indexing here is slightly off for the GM component, but good enough for a CFL estimate
             zdiff_dzsq = fmax( Kiso_w[j][k]*SQUARE(Siso_true)*_dzsq_w[j][k], Kgm_psi[j][k]*SQUARE(Sgm_true)*_dzsq_psi[j][k] );
             if (zdiff_dzsq > zdiff_dzsq_max)
-            {
-                zdiff_dzsq_max = zdiff_dzsq;
+                {
+                    zdiff_dzsq_max = zdiff_dzsq;
             }
         }
     }
     
-    
     // Calculate the Brunt Vaisalla Frequency
+    // Fix: c = pi \int_N dz
+    //      c/f is the deformation radius
+    // Chelton and others
     for (j = 0; j < Nx; j++)
     {
         for (k = Nz-1; k > 0; k--)
@@ -2161,6 +2215,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/nsq_max;
     
+    if (t > 4.6*86400)
+    {
+        fprintf(stderr,"cfl_z = %le, j = %f, k = %f, siso = %le, sgm = %le  \n", cfl_z, strj, strk,siso,sgm);
+        
+        
+    }
     
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -2203,7 +2263,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
  *
  */
 
-// TO DO: IMPLEMENT SASHA's PRESSURE INTEGRATION
 void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
 {
     // Looping variables
@@ -2257,9 +2316,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                     pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
                     BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
                     BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
-//                    fprintf(stderr,"j = %d, k = %d, BPx = %f \n",j,k,BPx[j][k]);
                     if (j == 1){
-                        BPx[0][k] = BPx[1][k]; // should we do this?
+                        BPx[0][k] = BPx[1][k];
                     }
 
                     
@@ -2279,7 +2337,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             real HalfGRho = 0.5*Grho;
             
             real cff = 0;   // dummy variable to hold numerators and coefficients
-            real bb = 0;    // placeholder for buoyancy
+            real cff1 = 0;
             
             // Calculate the density field
             for (j = 0; j < Nx; j++)
@@ -2290,54 +2348,55 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 }
             }
             
-            
-            // Vertical Calculations
-            // Elementary differences
+            // Compute elementary differences
             for (j = 0; j < Nx; j++)
             {
-                for (k = 0; k < Nz-1; k++)
+                for (k = 1; k < Nz; k++)
                 {
-                    drz[j][k+1] = rhos[j][k+1] - rhos[j][k];
-                    dzz[j][k+1] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
-                    
+                    drz[j][k] = rhos[j][k] - rhos[j][k-1];
+                    dzz[j][k] = ZZ_phi[j][k] - ZZ_phi[j][k-1];
                 }
             }
             
             // Extend the differences along the boundaries
-            for (j = 0; j < Nx; j ++)
+            for (j = 0; j < Nx; j++)
             {
                 drz[j][0] = drz[j][1];
                 dzz[j][0] = dzz[j][1];
+                
+                // These values should be copied over to the hyperbolic differences
+                // since we are unable to calculate the differences on the boundaries
+                hrz[j][0] = drz[j][0];
+                hzz[j][0] = dzz[j][0];
                 
                 drz[j][Nz] = drz[j][Nz-1];
                 dzz[j][Nz] = dzz[j][Nz-1];
             }
             
-            real cff1 = 0;          // another dummy variable to hold calculations
-            // Interior hyperbolic differences
+            
+            // Calculate the interior hyperbolic differences
             for (j = 0; j < Nx; j++)
             {
-                for (k = 0; k < Nz; k++)
+                for (k = 1; k < Nz; k++)
                 {
-                    cff = 2*drz[j][k]*drz[j][k+1];
+                    cff = 2*drz[j][k]*drz[j][k-1];
                     if (cff > minVal)
                     {
-                        hrz[j][k] = cff/(drz[j][k] + drz[j][k+1]);
+                        hrz[j][k] = cff/(drz[j][k] + drz[j][k-1]);
                     }
                     else
                     {
                         hrz[j][k] = 0;
                     }
-                    cff1 = 2*dzz[j][k]*dzz[j][k+1];
+                    cff1 = 2*dzz[j][k]*dzz[j][k-1];
                     if (cff1 > minVal)
                     {
-                        hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k+1]);
+                        hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k-1]);
                     }
                     else
                     {
                         hzz[j][k] = 0;
                     }
-                    
                 }
             }
             
@@ -2346,7 +2405,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             // Calculate the pressure field at the surface
             for (j = 0; j < Nx; j++)
             {
-                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the b points.
+                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the w points.
                 cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
                 cff2 = 0.5*(rhos[j][Nz-1] - rhos[j][Nz-2])*(zeta - ZZ_phi[j][Nz-1])*cff1;
                 P[j][Nz-1] = (rhos[j][Nz-1] + cff2)*(zeta - ZZ_phi[j][Nz-1])/rho0;
@@ -2369,12 +2428,12 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             
             // Horizontal Calculations
             // Elementary Differences
-            for (j = 0; j < Nx-1; j++)
+            for (j = 1; j < Nx; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    drx[j+1][k] = rhos[j+1][k] - rhos[j][k];
-                    dzx[j+1][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
+                    drx[j][k] = rhos[j][k] - rhos[j-1][k];
+                    dzx[j][k] = ZZ_phi[j][k] - ZZ_phi[j-1][k];
                 }
             }
             
@@ -2382,31 +2441,35 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             // Extend differences along the bounary
             for (k = 0; k < Nz; k++)
             {
-                drx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*drx[1][k];
-                dzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*dzx[1][k];
+                drx[0][k] = drx[1][k];
+                dzx[0][k] = dzx[1][k];
                 
-                drx[Nx][k] = 1.5*(rhos[Nx][k] - rhos[Nx-1][k]) - 0.5*drx[Nx-1][k];
-                dzx[Nx][k] = 1.5*(ZZ_phi[Nx][k] - ZZ_phi[Nx-1][k]) - 0.5*dzx[Nx-1][k];
+                // Copy boundary value for hyperbolic averages
+                hrx[0][k] = drx[0][k];
+                hzx[0][k] = dzx[0][k];
+                
+                drx[Nx][k] = drx[Nx-1][k];
+                dzx[Nx][k] = dzx[Nx-1][k];
             }
             
             // Calculate the hyperbolic differences
-            for (j = 0; j < Nx; j++)
+            for (j = 1; j < Nx; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    cff = 2*drx[j][k]*drx[j+1][k];
+                    cff = 2*drx[j][k]*drx[j-1][k];
                     if (cff > minVal)
                     {
-                        hrx[j][k] = cff/(drx[j][k] + drx[j+1][k]);
+                        hrx[j][k] = cff/(drx[j][k] + drx[j-1][k]);
                     }
                     else
                     {
                         hrx[j][k] = 0;
                     }
-                    cff1 = 2*dzx[j][k]*dzx[j+1][k];
+                    cff1 = 2*dzx[j][k]*dzx[j-1][k];
                     if (cff1 > minVal)
                     {
-                        hzx[j][k] = cff1/(dzx[j][k] + dzx[j+1][k]);
+                        hzx[j][k] = cff1/(dzx[j][k] + dzx[j-1][k]);
                     }
                     else
                     {
@@ -2418,26 +2481,26 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             
             
             // Calculate FC's
-            for (j = 0; j < Nx-1; j++)
+            for (j = 1; j < Nx; j++) // the pressure gradient at the western wall is zero.
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    FC[j+1][k] = 0.5*( (rhos[j+1][k] + rhos[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
-                                         - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
-                                        - ( hzx[j+1][k] - hzx[j][k] )*( rhos[j+1][k] - rhos[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) )/rho0;
+                    FC[j][k] = 0.5*( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
+                                         - OneFifth*( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k] - OneTwelfth*(hzx[j][k] + hzx[j-1][k]) )
+                                        - ( hzx[j][k] - hzx[j-1][k] )*( rhos[j][k] - rhos[j-1][k] - OneTwelfth*(hrx[j][k] + hrx[j-1][k]) ) ) )/rho0;
                 }
             }
             
 
             
             // Calculate the pressure gradient
-            for (j = 0; j < Nx-1; j++)
+            for (j = 1; j < Nx-1; j++) // the pressure gradient at the western wall is zero.
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    BPx[j+1][k] =  ( P[j+1][k] - P[j][k] + grav*FC[j+1][k] )*_dx;
+                    BPx[j][k] =  ( P[j][k] - P[j-1][k] + grav*FC[j][k] )*_dx;
                 }
-                BPx[j+1][Nz] = 0;
+                BPx[j][Nz] = 0; // pressure gradient at the surface is zero.
             }
             
             

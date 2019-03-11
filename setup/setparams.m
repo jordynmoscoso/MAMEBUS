@@ -98,7 +98,7 @@ function setparams (local_home_dir,run_name)
   endTime = 50*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1e-1*t1day;
+  outputFreq = 1*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -143,7 +143,7 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
   
   %%% Create tanh-shaped topography
-  shelfdepth = 3000;
+  shelfdepth = 1000;
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < 50
       disp('Shelf is smaller than sml and bbl')
@@ -188,7 +188,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);  
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
-  PARAMS = addParameter(PARAMS,'cflFrac',0.25,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'cflFrac',0.1,PARM_REALF);
   PARAMS = addParameter(PARAMS,'endTime',endTime,PARM_REALF);
   PARAMS = addParameter(PARAMS,'monitorFrequency',outputFreq,PARM_REALF);
   PARAMS = addParameter(PARAMS,'restart',restart,PARM_INT);
@@ -362,12 +362,16 @@ function setparams (local_home_dir,run_name)
   T_relax_max = 30*t1day; %%% Fastest relaxation time
 
   %%% Relax to initial buoyancy at the western boundary
-  uvel_relax = uvel_init;
-  vvel_relax = vvel_init;
+  uvel_relax = zeros(size(uvel_init));
+  vvel_relax = zeros(size(vvel_init));
   buoy_relax = buoy_init;
   T_relax_buoy = -ones(Nx,Nz);
   T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
   T_relax_buoy(XX_tr>=L_relax) = -1;
+  
+  T_relax_veloc = -ones(Nx,Nz);
+  T_relax_veloc(XX_tr<L_relax) = 1./T_relax_max;
+  T_relax_veloc(XX_tr>=L_relax) = -1;
   
   %%% Add relaxation to an atmospheric temperature profile
   buoy_surf_max = 20;
@@ -403,8 +407,10 @@ function setparams (local_home_dir,run_name)
   
   %%% Store tracer relaxation timescales
   T_relax_all = zeros(Ntracs,Nx,Nz);
-  T_relax_all(IDX_UVEL,:,:) = -ones(1,Nx,Nz);
-  T_relax_all(IDX_VVEL,:,:) = -ones(1,Nx,Nz);
+  T_relax_all(IDX_UVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
+  T_relax_all(IDX_VVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
+  
+  
   T_relax_all(IDX_BUOY,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);  
   %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)

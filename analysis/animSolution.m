@@ -18,7 +18,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
  
   %%% Load convenience functions
   addpath ../utils;
-  addpath ./redblue
+  addpath ./redblue/;
   
   mov_on = false;
   if plot_trac
@@ -257,7 +257,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       psi_r_lim = min(psi_r_lim,limval);
       psi_r_lim = max(psi_r_lim,-limval);
 %       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
-      figure(1)
+      figure(100)
       pcolor(XX_psi,ZZ_psi,psi_r_lim);
       shading interp;     
       colormap redblue;
