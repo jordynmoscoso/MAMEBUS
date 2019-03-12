@@ -18,9 +18,9 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
  
   %%% Load convenience functions
   addpath ../utils;
-  addpath ./redblue/;
+  addpath ./redblue;
   
-  mov_on = false;
+  mov_on = true;
   if plot_trac
     mov_name = strcat(run_name,'_',num2str(var_id));
   else

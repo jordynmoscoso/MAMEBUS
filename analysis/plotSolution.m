@@ -144,7 +144,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     
 %     avgTime = 10; % Choose the amount of time to average over (in years)
     LL = yearLength*avgTime;
-    avgStart = lastVal - LL; % Calculate where we start the average.
+    avgStart = round(lastVal - LL); % Calculate where we start the average.
     
     if avgStart < 1
         avgStart = 0;

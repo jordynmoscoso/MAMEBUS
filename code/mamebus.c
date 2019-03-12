@@ -206,13 +206,13 @@ uint * k_bbl = NULL;
 real * wn_bbl = NULL;
 real * wp_bbl = NULL;
 real ** db_dx = NULL;
-real * db_dz = NULL;
+real ** db_dz = NULL;
+real ** db_dx_wrk = NULL;
+real ** db_dz_wrk = NULL;
 
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
 ////////////////////////////////
-
-
 
 
 
@@ -588,11 +588,119 @@ void calcSlopes (     const real        t,
     real z;
     real d2b_dz2;
     real _lambda_sml, lambda_bbl;
+    real interp1 = 9/16;
+    real interp2 = 1/16;
     
 #pragma parallel
     
     if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
     {
+        
+        
+        // Calculate the arrays for the vertical buoyancy gradient
+        // The values of the gradient in the work array sit at the w gridpoints
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (k == 1 || k == Nx-1)
+                {
+                    db_dz_wrk[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_w[j][k];
+                }
+                else
+                {
+                    db_dz_wrk[j][k] = ( buoy[j][k-2] - 27*buoy[j][k-1] + 27*buoy[j][k] - buoy[j][k+1] )*_dz_w[j][k]/24;
+                }
+            }
+        }
+        
+        // Interpolate the vertical gradient on the psi gridpoints
+        // This interpolation is horizontal
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (j == 1 || j == Nz-1)
+                {
+                    db_dz[j][k] = 0.5 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] );
+                }
+                else
+                {
+                    db_dz[j][k] = 9 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] )/16 - ( db_dz_wrk[j-2][k] + db_dz_wrk[j+1][k] )/16;
+                }
+            }
+        }
+        
+        
+//        for (j = 1; j < Nx; j++)
+//        {
+//            for (k = 1; k < Nz; k++)
+//            {
+//                db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
+//            }
+//        }
+        
+        
+        // Calculate the arrays for the horizontal buoyancy gradient
+        // The values of the gradient in the work array sit at the u gridpoints
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                if (j == 1 || j == Nx-1)
+                {
+                    db_dx_wrk[j][k] = (buoy[j][k] - buoy[j-1][k])*_dx;
+                }
+                else
+                {
+                    db_dx_wrk[j][k] = ( ( buoy[j-2][k] - 27*buoy[j-1][k] + 27*buoy[j][k] - buoy[j+1][k] )*_dx )/24;
+                }
+            }
+        }
+        
+        // Interpolate the horizontal gradient on the psi gridpoints
+        // This interpolation is vertical
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (k == 1 || k == Nz-1)
+                {
+                    db_dx[j][k] = 0.5 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] );
+                }
+                else
+                {
+                    db_dx[j][k] = 9 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] )/16 - ( db_dx_wrk[j][k-2] + db_dx_wrk[j][k+1] )/16;
+                }
+            }
+        }
+        
+        
+        // Calculate d(zeta)/dx and subtract off the component due to the grid
+        // the interpolation is horizontal
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (j == 1 || j == Nz-1)
+                {
+                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+                }
+                else
+                {
+                    db_dx[j][k] -= (ZZ_w[j-2][k] - 27*ZZ_w[j-1][k] + 27*ZZ_w[j][k] - ZZ_w[j+1][k])*_dx * db_dz[j][k]/24;
+                }
+
+            }
+        }
+        
+        
+        
+      /*
+         THIS IS COMMENTED OUT TO TEST THE HIGHER ORDER DIFFERENTIATION INSTEAD
+         WE ARE HAVING ISSUES WITH THE BUOYANCY GRADIENT SCHEME. SO THIS IS WHAT
+         I WANT TO TRY INSTEAD.
+       
         real OneFifth = 1/5;
         real OneTwelfth = 1/12;
         real minVal = 1e-10;
@@ -766,6 +874,7 @@ void calcSlopes (     const real        t,
             db_dx[j][0] = 0;
             db_dx[j][Nz] = 0;
         }
+       */
 
     }
   
@@ -778,35 +887,35 @@ void calcSlopes (     const real        t,
         // Calculate horizontal and vertical buoyancy gradients in (x,z) space
         for (k = 1; k < Nz; k ++)
         {
-            db_dz[k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
+            db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
             if( pressureScheme == PRESSURE_LINEAR )
             {
-            cubic = db_dx[j][k];
+//            cubic = db_dx[j][k];
                 db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-                db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[k];
+                db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
 //            fprintf(stderr," j = %d, k = %d, Linear: db = %e, Cubic: db = %e \n",j,k,db_dx[j][k],cubic);
             }
         }
-        db_dz[0] = 0; // N.B. THESE SHOULD NEVER BE USED
+        db_dz[j][0] = 0; // N.B. THESE SHOULD NEVER BE USED
         db_dx[j][0] = 0; // Here we just set then so that they are defined
-        db_dz[Nz] = 0;
+        db_dz[j][Nz] = 0;
         db_dx[j][Nz] = 0;
         
         // Calculate vertical gradients at SML base and BBL top
         if (use_sml)
         {
             // Buoyancy gradient at SML base
-            db_dz_sml = db_dz[k_sml[j]]*wp_sml[j] + db_dz[k_sml[j]+1]*wn_sml[j];
+            db_dz_sml = db_dz[j][k_sml[j]]*wp_sml[j] + db_dz[j][k_sml[j]+1]*wn_sml[j];
             
             // Calculate reciprocal of vertical eddy length scale at SML base
-            d2b_dz2 = (db_dz[k_sml[j]+1]-db_dz[k_sml[j]]) / (ZZ_psi[j][k_sml[j]+1]-ZZ_psi[j][k_sml[j]]);
+            d2b_dz2 = (db_dz[j][k_sml[j]+1]-db_dz[j][k_sml[j]]) / (ZZ_psi[j][k_sml[j]+1]-ZZ_psi[j][k_sml[j]]);
             _lambda_sml = - d2b_dz2 / db_dz_sml;
         }
         if (use_bbl)
         {
             // Buoyancy gradient at BBL top
-            db_dz_bbl = db_dz[k_bbl[j]]*wn_bbl[j] + db_dz[k_bbl[j]-1]*wp_bbl[j];
+            db_dz_bbl = db_dz[j][k_bbl[j]]*wn_bbl[j] + db_dz[j][k_bbl[j]-1]*wp_bbl[j];
             
             // TODO
             lambda_bbl = 0;
@@ -831,7 +940,7 @@ void calcSlopes (     const real        t,
             else
             {
                 // Calculate slope on psi-gridpoints
-                Sgm_psi[j][k] = - db_dx[j][k] / db_dz[k];
+                Sgm_psi[j][k] = - db_dx[j][k] / db_dz[j][k];
                 
                 // TODO replace with exponential taper - see Griffies (2004)
                 // Cox slope-limiting.
@@ -2112,33 +2221,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     }
     
     
-    // TODO remove
-    // For y-fluxes
-    siso_max = 0;
-    sgm_max = 0;
-    real strj = 0;
-    real strk = 0;
-    for (j = 0; j < Nx; j ++)
-    {
-        for (k = 0; k < Nz; k ++)
-        {
-            if (Sgm_psi[j][k]<sgm_max)
-            {
-                strj = j;
-                strk = k;
-                sgm_max = Sgm_psi[j][k];
-            }
-            if (Siso_w[j][k]<siso_max)
-            {
-                strj = j;
-                strk = k;
-                siso_max = Siso_w[j][k];
-            }
-        }
-    }
-    
-    printf("%le %le %f %f %f \n",sgm_max,siso_max,t/86400,strj,strk);fflush(stdout);
-    printf("test3: %le %le %f\n",fabs(Siso_w[28][34]),fabs(Sgm_psi[28][34]),t/86400);fflush(stdout);
 #pragma parallel
     
     real siso = 0;
@@ -2215,12 +2297,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/nsq_max;
     
-    if (t > 4.6*86400)
-    {
-        fprintf(stderr,"cfl_z = %le, j = %f, k = %f, siso = %le, sgm = %le  \n", cfl_z, strj, strk,siso,sgm);
-        
-        
-    }
+//    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
     
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -3503,7 +3580,9 @@ int main (int argc, char ** argv)
     VECALLOC(wn_bbl,Nx+1);
     VECALLOC(wp_bbl,Nx+1);
     MATALLOC(db_dx,Nx+1,Nz+1);
-    VECALLOC(db_dz,Nz+1);
+    MATALLOC(db_dz,Nx+1,Nz+1);
+    MATALLOC(db_dx_wrk,Nx+1,Nz+1);
+    MATALLOC(db_dz_wrk,Nx+1,Nz+1);
     
     /////////////////////////////////
     ///// END MEMORY ALLOCATION /////
