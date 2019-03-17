@@ -213,7 +213,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
           hold off
 %           disp(n)
         case 2 %%% Buoyancy
-          contourf(XX_tr,ZZ_tr,phi,20)
+          contourf(XX_tr,ZZ_tr,phi,100)
 %           shading interp
           colorbar
           title(titlestr)
@@ -264,6 +264,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       h=colorbar;        
       caxis([-limval limval]);
       set(h,'FontSize',18);
+      disp(max(max(psi)))
 
     end
       

@@ -134,7 +134,7 @@ uint advectionScheme = ADVECTION_KT00;
 uint momentumScheme = MOMENTUM_NONE;
 
 // Pressure scheme
-uint pressureScheme = PRESSURE_CUBIC;
+uint pressureScheme = PRESSURE_LINEAR;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -591,12 +591,21 @@ void calcSlopes (     const real        t,
     real interp1 = 9/16;
     real interp2 = 1/16;
     
+    real OneFifth = 1/5;
+    real OneTwelfth = 1/12;
+    real minVal = 1e-10;
+    
+    // define dummy variables for calculations
+    real cff = 0;
+    real cff1 = 0;
+    real zeta = 0;
+    
 #pragma parallel
     
     if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
     {
         
-        
+        /*
         // Calculate the arrays for the vertical buoyancy gradient
         // The values of the gradient in the work array sit at the w gridpoints
         for (j = 0; j < Nx; j++)
@@ -694,20 +703,14 @@ void calcSlopes (     const real        t,
             }
         }
         
-        
+        */
         
       /*
          THIS IS COMMENTED OUT TO TEST THE HIGHER ORDER DIFFERENTIATION INSTEAD
          WE ARE HAVING ISSUES WITH THE BUOYANCY GRADIENT SCHEME. SO THIS IS WHAT
          I WANT TO TRY INSTEAD.
        
-        real OneFifth = 1/5;
-        real OneTwelfth = 1/12;
-        real minVal = 1e-10;
-
-        // define dummy variables for calculations
-        real cff = 0;
-        real cff1 = 0;
+       */
 
         // Calculate the elementary differences in the grid an buoyancy
         // We can reuse the pointers from the pressure gradient calculation
@@ -764,7 +767,7 @@ void calcSlopes (     const real        t,
         }
 
 
-        real zeta = 0;
+
         // Calculate the top value of the FX's
         for (j = 0; j < Nx; j++)
         {
@@ -874,7 +877,7 @@ void calcSlopes (     const real        t,
             db_dx[j][0] = 0;
             db_dx[j][Nz] = 0;
         }
-       */
+
 
     }
   
@@ -2138,8 +2141,17 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real nsq_col = 0;
     real nsq_max = 0;
     
+    real siso = 0;
+    real sgm = 0;
+    real z = 0;
+    real jind = 0;
+    real kind = 0;
+    real jind1 = 0;
+    real kind1 = 0;
+    
     // TODO remove
-    real siso_max, sgm_max;
+    real siso_max = 0;
+    real sgm_max = 0;
     
     ////////////////////////////////////////
     ///// BEGIN CALCULATING TENDENCIES /////
@@ -2223,9 +2235,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     
 #pragma parallel
     
-    real siso = 0;
-    real sgm = 0;
-    real z = 0;
     // For z-fluxes
     // N.B. Carefully chosen indices so that we can calculate diffusive CFLs
     // associated with Kgm and Kiso (almost) everywhere.
@@ -2259,9 +2268,26 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
                 {
                     zdiff_dzsq_max = zdiff_dzsq;
             }
+            
+            siso = fabs(Sgm_true);
+            sgm = fabs(Siso_true);
+            if (sgm > sgm_max)
+            {
+                jind = j;
+                kind = k;
+                sgm_max = sgm;
+            }
+            if (siso > sgm_max)
+            {
+                jind1 = j;
+                kind1 = k;
+                siso_max = siso;
+            }
         }
     }
     
+    
+//    fprintf(stderr," sgm: %f %f %le \n kgm: %f %f %le \n",jind, kind, sgm_max, jind1, kind1, siso_max);
     // Calculate the Brunt Vaisalla Frequency
     // Fix: c = pi \int_N dz
     //      c/f is the deformation radius
@@ -2297,7 +2323,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/nsq_max;
     
-//    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
+    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
     
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -2364,6 +2390,18 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     real alpha = 1e-4; // thermal expansion coefficient
     real zeta = 0;
     
+    real OneFifth = 0.2;
+    real OneTwelfth = 1/12;
+    real minVal = 1e-10;
+    
+    real Grho = grav/rho0;
+    real Grho0 = 1000*Grho;
+    real HalfGRho = 0.5*Grho;
+    
+    real cff = 0;   // dummy variable to hold numerators and coefficients
+    real cff1 = 0;
+    real cff2 = 0;
+    
     
     switch(pressureScheme)
     {
@@ -2404,17 +2442,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         }
         case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
         {
-
-            real OneFifth = 0.2;
-            real OneTwelfth = 1/12;
-            real minVal = 1e-10;
-            
-            real Grho = grav/rho0;
-            real Grho0 = 1000*Grho;
-            real HalfGRho = 0.5*Grho;
-            
-            real cff = 0;   // dummy variable to hold numerators and coefficients
-            real cff1 = 0;
             
             // Calculate the density field
             for (j = 0; j < Nx; j++)
@@ -2478,7 +2505,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             }
             
             
-            real cff2 = 0;          // dummy variable to hold calculations
+            // dummy variable to hold calculations
             // Calculate the pressure field at the surface
             for (j = 0; j < Nx; j++)
             {
