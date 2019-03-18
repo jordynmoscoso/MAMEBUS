@@ -600,6 +600,9 @@ void calcSlopes (     const real        t,
     real cff1 = 0;
     real zeta = 0;
     
+    // TO DO: REMOVE
+    real cubic = 0;
+    
 #pragma parallel
     
     if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
@@ -882,8 +885,6 @@ void calcSlopes (     const real        t,
     }
   
 
-    
-    real cubic = 0;
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
     {
@@ -1716,6 +1717,8 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real preyopt[MZ];
     real ** npzparams = NULL;                                       // 8 X (MP or MZ (whichever is larger))
     int NMAX = 0;
+    real T = 0;                              // Placeholder for Temperature
+    real N = 0;                              // Placeholder for Nitrate
     
     switch (bgcModel)
     {
@@ -1726,8 +1729,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             
         case BGC_NITRATEONLY:
         {
-            real T = 0;                              // Placeholder for Temperature
-            real N = 0;                              // Placeholder for Nitrate
+
             
             // Parameters
             real a_temp = bgc_params[0];
@@ -2289,14 +2291,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     
 //    fprintf(stderr," sgm: %f %f %le \n kgm: %f %f %le \n",jind, kind, sgm_max, jind1, kind1, siso_max);
     // Calculate the Brunt Vaisalla Frequency
-    // Fix: c = pi \int_N dz
-    //      c/f is the deformation radius
     // Chelton and others
     for (j = 0; j < Nx; j++)
     {
         for (k = Nz-1; k > 0; k--)
         {
-            Nsq[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_phi[j][k];
+            Nsq[j][k] = sqrt((buoy[j][k] - buoy[j][k-1])*_dz_phi[j][k]);
         }
     }
     
@@ -2323,7 +2323,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/nsq_max;
     
-    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
+//    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
     
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
@@ -3248,13 +3248,16 @@ int main (int argc, char ** argv)
     real *** phi_out = NULL;
     real *** phi_int = NULL;
     
-    // Work arrays and variables for AB methods
+    // Work arrays, variables for AB methods, and variables for
+    // the shoelace method to calculate the area of a grid cell.
     real * dt_vars = NULL;
     real * dt_vars_1 = NULL;
     real * dt_vars_2 = NULL;
     real h = 0;
     real h1 = 0;
     real h2 = 0;
+    real xval = 0;
+    real xval1 = 0;
     
     // Stores data required for parsing input parameters
     paramdata params[NPARAMS];
@@ -3927,8 +3930,6 @@ int main (int argc, char ** argv)
     
     // Grid areas on the psi-points (with verticies on the phi points)
     // The area is calculated using the shoelace method.
-    real xval = 0;
-    real xval1 = 0;
     for (j = 0; j < Nx-1; j++)
     {
         xval = (j+0.5)*dx;
@@ -3958,7 +3959,6 @@ int main (int argc, char ** argv)
         for (k = 1; k < Nz; k++)
         {
             area = dx*(ZZ_u[j][k] - ZZ_u[j][k-1]);
-//            fprintf(stderr,"j = %d, k = %d, dA_psi = %f, simple area = %f \n",j,k,dA_psi[j][k],area);
         }
     }
     
