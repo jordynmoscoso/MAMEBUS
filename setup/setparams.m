@@ -12,11 +12,7 @@
 %%% the run files will be written. N.B. a directory called 'run_name' will
 %%% be created within local_home_dir to house the files.
 %%%
-function setparams (local_home_dir,run_name)  
-
-%%% TODO move depth tracer and dye tracer to end of tracer matrix as
-%%% examples of how to prescribe arbitrary tracer inputs
-
+function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,shelfdepth)  
   %%% Convenience scripts used in this function
   addpath ../utils;
   
@@ -24,12 +20,64 @@ function setparams (local_home_dir,run_name)
   paramTypes;
   
   
+%%% TODO move depth tracer and dye tracer to end of tracer matrix as
+%%% examples of how to prescribe arbitrary tracer inputs
+
+%%% If set true, set up this run for the cluster
+  use_cluster = true;
+  use_intel = false;
+  use_pbs = use_cluster;
+  cluster_home_dir = '/data3/jmsocoso/MAMEBUS/runs';
+  uname = 'jmoscoso';
+  cluster_addr = 'caolila.atmos.ucla.edu';
+  
+  %%% Run directory
+  run_name = strtrim(run_name);  
+  exec_name = 'mamebus.exe';      
+  local_run_dir = fullfile(local_home_dir,run_name);
+  pfname = fullfile(local_run_dir,[run_name,'_in']);   
+  mkdir(local_run_dir);
+
+  %%% To store parameters  
+  PARAMS = {};
+  
+  %%% Time parameters
+  t1day = 86400; %%% Seconds in 1 day
+  t1year = 365*t1day; %%% Seconds in 1 year
+%   endTime = 50*t1year;
+  restart = false;
+  startIdx = 15;
+%   outputFreq = 1*t1day;
+    
+  %%% Domain dimensions
+  m1km = 1000; %%% Meters in 1 km    
+  H = 3*m1km; %%% Depth, excluding the mixed layer
+  Lx = 300*m1km; %%% Computational domain width
+  
+  %%% Scalar parameter definitions 
+%   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
+  rho0 = 1025; %%% Reference density
+  f0 = 1e-4; %%% Coriolis parameter (CCS)
+  Kgm0 = 500; %%% Reference GM diffusivity
+  Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s
+  Kiso_hb = 200; %%% Reference interior isopycnal diffusivity
+  Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
+  Cp = 4e3; %%% Heat capacity
+  g = 9.81; %%% Gravity
+  s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
+  Hsml = 60; %%% Surface mixed layer thickness
+  Hbbl = 60; %%% Bottom boundary layer thickness
+  r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
+  
+  
 %%% TODO this definitely ought to appear later in this script
 
 
-  
+  plotfigs = 1;
   %%% The number of biogeochemical classes are entered here. 
-  modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+  if (modeltype > 3)
+    modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+  end
 
   switch (modeltype)
     case BGC_SSEM
@@ -60,67 +108,8 @@ function setparams (local_home_dir,run_name)
       bio = 0;
   end
   Nbgc = bio + MN; 
-
-  %%% Check to see if a valid model type is indicated for biogeochemistry,
-  %%% if not use the default single nitrate model (modeltype = 0)
-%   if (MP < 1 || MZ < 1)
-%       modeltype = 0;
-%   end
   
-
-%   pressureScheme = PRESSURE_CUBIC;
-  pressureScheme = PRESSURE_LINEAR;
-        
-  
-  %%% For plotting figures of setup
-  fignum = 1;
-
-  %%% If set true, set up this run for the cluster
-  use_cluster = false;
-  walltime = 24;
-  cluster_home_dir = '/data1/astewart/MAMEBUS/runs';
-  cluster_username = 'astewart';
-  cluster_address = 'ardbeg.atmos.ucla.edu';
-  
-  %%% Run directory
-  run_name = strtrim(run_name);  
-  exec_name = 'mamebus.exe';      
-  local_run_dir = fullfile(local_home_dir,run_name);
-  pfname = fullfile(local_run_dir,[run_name,'_in']);   
-  mkdir(local_run_dir);
-
-  %%% To store parameters  
-  PARAMS = {};
-  
-  %%% Time parameters
-  t1day = 86400; %%% Seconds in 1 day
-  t1year = 365*t1day; %%% Seconds in 1 year
-  endTime = 50*t1year;
-  restart = false;
-  startIdx = 15;
-  outputFreq = 0.01*t1day;
-    
-  %%% Domain dimensions
-  m1km = 1000; %%% Meters in 1 km    
-  H = 3*m1km; %%% Depth, excluding the mixed layer
-  Lx = 300*m1km; %%% Computational domain width
-  
-  %%% Scalar parameter definitions 
-  tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
-  rho0 = 1025; %%% Reference density
-  f0 = 1e-4; %%% Coriolis parameter (CCS)
-  Kgm0 = 500; %%% Reference GM diffusivity
-  Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s
-  Kiso_hb = 200; %%% Reference interior isopycnal diffusivity
-  Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
-  Cp = 4e3; %%% Heat capacity
-  g = 9.81; %%% Gravity
-  s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 60; %%% Surface mixed layer thickness
-  Hbbl = 60; %%% Bottom boundary layer thickness
-  r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
-  
-  %%% Biogeochemical Parameters
+    %%% Biogeochemical Parameters
 
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
@@ -144,8 +133,24 @@ function setparams (local_home_dir,run_name)
   
   %%% Create tanh-shaped topography
   shelfdepth = 3000;
+
+  %%% Check to see if a valid model type is indicated for biogeochemistry,
+  %%% if not use the default single nitrate model (modeltype = 0)
+%   if (MP < 1 || MZ < 1)
+%       modeltype = 0;
+%   end
+  
+
+%   pressureScheme = PRESSURE_CUBIC;
+  pressureScheme = PRESSURE_LINEAR;
+        
+  
+  %%% For plotting figures of setup
+  fignum = 1;
+
+  
   disp(['Shelf Depth: ', num2str(shelfdepth)])
-  if shelfdepth < 50
+  if shelfdepth < Hsml + Hbbl
       disp('Shelf is smaller than sml and bbl')
       return
   end
@@ -331,13 +336,13 @@ function setparams (local_home_dir,run_name)
  
   %%% Load in the surface wind stress.
 %   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
-%   tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
-%   Lmax = 300*m1km;
-%   tau = tau0*cos(pi/2*(xx_psi-Lmax)/Lmax).^2;
+  tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+%   Lmax = 300*m1km/2;
+%   tau = tau0*(sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^2;
 %   tau(xx_psi < 200) = 0;
-  tau = tau0*ones(size(xx_psi));
-  tau(xx_psi < 200) = 0;
-  tau(xx_psi > Lx - 200) = 0;
+%   tau = tau0*ones(size(xx_psi));
+%   tau(xx_psi < 200) = 0;
+%   tau(xx_psi > Lx - 200) = 0;
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -362,16 +367,16 @@ function setparams (local_home_dir,run_name)
   T_relax_max = 30*t1day; %%% Fastest relaxation time
 
   %%% Relax to initial buoyancy at the western boundary
-  uvel_relax = zeros(size(uvel_init));
-  vvel_relax = zeros(size(vvel_init));
+  uvel_relax = -ones(size(uvel_init));
+  vvel_relax = -ones(size(vvel_init));
   buoy_relax = buoy_init;
   T_relax_buoy = -ones(Nx,Nz);
   T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
   T_relax_buoy(XX_tr>=L_relax) = -1;
   
   T_relax_veloc = -ones(Nx,Nz);
-  T_relax_veloc(XX_tr<L_relax) = 1./T_relax_max;
-  T_relax_veloc(XX_tr>=L_relax) = -1;
+%   T_relax_veloc(XX_tr<L_relax) = T_relax_max;
+%   T_relax_veloc(XX_tr>=L_relax) = -1;
   
   %%% Add relaxation to an atmospheric temperature profile
   buoy_surf_max = 20;
@@ -531,20 +536,16 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%
   
   %%% Create a run script
-  createRunScript (local_home_dir,run_name,exec_name, ...
-                   use_cluster,cluster_username,cluster_address, ...
-                   cluster_home_dir,walltime)
+  %%% TO DO ( Updates so all the feed names work correctly )
+  createRunScript (  local_home_dir, run_name, model_code_dir, ...
+                     exec_name, use_intel, use_pbs, use_cluster, ...
+                     uname, cluster_addr, cluster_home_dir)
 
   %%% Create the input parameter file
   writeParamFile(pfname,PARAMS);    
   
   
-  
-  
-  
-  
-  
-  
+
   
   
   
@@ -554,6 +555,8 @@ function setparams (local_home_dir,run_name)
   %%%
   
   % Wind Stress Profile
+  
+  if(plotfigs)
   
   set(0,'DefaultAxesFontSize',14)
   
@@ -636,5 +639,7 @@ function setparams (local_home_dir,run_name)
 %   fignum = fignum+1;
 %   plot(xx_tr,hb_slope)
 %   title('Topographic Slope')
+
+  end
   
 end

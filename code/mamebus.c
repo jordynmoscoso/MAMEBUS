@@ -59,20 +59,20 @@ int MP = 0;
 int MZ = 0;
 int MD = 2;  // Always have one small detrital group and one large.
 int MN = 1;  // Always have one Nitrate
-int nbgc; // Counts number of biogeochemical parameters
+int nbgc;    // Counts number of biogeochemical parameters
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
 real year = 31449600;             // Seconds in a year (52 7-day weeks)
-real grav = 9.8;                     // m/s^2 (gravity)
-real tref = 20;         // Reference surface temperature
+real grav = 9.8;                  // m/s^2 (gravity)
+real tref = 20;                   // Reference surface temperature
 real area = 0;
-real lin2buoy = 62899200;
+real alpha = 1e-4;                // thermal expansion coefficient
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
 real * hb_in = NULL;          // Ocean depth
-real * tau = NULL;           // Surface wind stress
+real * tau = NULL;            // Surface wind stress
 real ** Kgm_psi_ref = NULL;   // Reference GM diffusivity
 real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
@@ -131,7 +131,7 @@ uint timeSteppingScheme = TIMESTEPPING_AB3;
 uint advectionScheme = ADVECTION_KT00;
 
 // Momentum scheme
-uint momentumScheme = MOMENTUM_NONE;
+uint momentumScheme = MOMENTUM_TTTW;
 
 // Pressure scheme
 uint pressureScheme = PRESSURE_LINEAR;
@@ -181,7 +181,7 @@ real ** Kdia_w = NULL;        // Diapycnal diffusivity
 real ** BPa = NULL;           // Baroclinic Pressure
 real ** BPx = NULL;           // Baroclinic Pressure gradient
 real ** BBy = NULL;           // Buoyancy
-real ** Nsq = NULL;
+real ** Nbuoy = NULL;
 
 // Pointers for pressure calculation scheme.
 real ** drx = NULL;     // Stores elementary differences
@@ -939,13 +939,15 @@ void calcSlopes (     const real        t,
             else if (use_bbl && (z < -hb_psi[j] + Hbbl))
             {
                 G_bbl = botStructFun(z,Hbbl,hb_psi[j],lambda_bbl);
-                Sgm_psi[j][k] = - G_bbl * db_dx[j][k] / db_dz_sml;
+                Sgm_psi[j][k] = - G_bbl * db_dx[j][k] / db_dz_bbl;
             }
             else
             {
                 // Calculate slope on psi-gridpoints
                 Sgm_psi[j][k] = - db_dx[j][k] / db_dz[j][k];
-                
+            }
+            
+            //////// FIX THIS
                 // TODO replace with exponential taper - see Griffies (2004)
                 // Cox slope-limiting.
                 if (limSlopes)
@@ -959,7 +961,7 @@ void calcSlopes (     const real        t,
                         Sgm_psi[j][k] = -Smax;
                     }
                 }
-            }
+
         }
     }
     
@@ -1245,7 +1247,7 @@ real single_nitrate (const real t, const int j, const int k,
     real T0 = 20;
     real r = 0.05;
     
-    real f = 0;                           // fraction of exported material
+    real f = 0.1/day;                           // fraction of exported material
     
     // Variables
     real flux = 0;
@@ -1301,9 +1303,9 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-void npzd (const real t, real *** phi, real *** dphi_dt)
+real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,real r_flux)
 {
-    int j,k;                  // counters
+    int a,b;
     
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
@@ -1319,6 +1321,8 @@ void npzd (const real t, real *** phi, real *** dphi_dt)
     real lambda = 0.33;     // grazing efficiency
     real mu = 0.02;         // mortality
     real T0 = 20;           // reference temperature
+    real Psum = 0;
+    real det = 0;           // holder to calculate the total detritus
     
     // These will be calculated outside of MAMEBUS in the future.
     real lp = 5;
@@ -1335,6 +1339,7 @@ void npzd (const real t, real *** phi, real *** dphi_dt)
     real Fk = 0;            // available biomass
     real U = 0;             // updake
     real R = 0;             // remineralization
+    real Rsink = 0;
     real G = 0;
     real GP = 0;            // grazing of phytoplankton
     real GZ = 0;            // grazing of zooplankton
@@ -1346,11 +1351,10 @@ void npzd (const real t, real *** phi, real *** dphi_dt)
     real zeta = 0;          // zooplankton mortality holder
     
     // Parameters for implicit sinking
-    real r_flux = 0;
     real dz = 0;
     real flux = 0;
     real z_star = wsink/r_remin;
-    real f = 0;          // only one percent of material leaves grid cell.
+    real f = 0.1/day;          // only one percent of material leaves grid cell per day
     
     // placeholders for PZD and time tendencies
     real ** T = NULL;
@@ -1375,85 +1379,86 @@ void npzd (const real t, real *** phi, real *** dphi_dt)
     dD_dt = dphi_dt[idx_nitrate + 3];
     
     
+    // Calculate the total amount of phytoplankton in the domain
+    for (a = 0; a < Nx; a++)
+    {
+        for (b = 0; b < Nz; b++)
+        {
+            Psum += P[a][b];
+        }
+    }
+    
     kpar = kw;
     I0 = 0.45*qsw/(kpar*Hsml); // from BEC
     
-    for (j = 0; j < Nx; j++)
-    {
-        r_flux = 0; // set surface flux to zero at the start of every k loop.
-        for (k = Nz-1; k >= 0; k--)
-        {
-            //
-            //   Light and Temperature
-            //
-            
-            IR =I0*exp(kpar*ZZ_phi[j][k]);
-            
-            // Temperature and Irradiance dependent uptake (Sarmiento & Gruber)
-            t_uptake = exp(r*(T[j][k]-T0));
-            l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
-            
-            //
-            //   Phytoplankton
-            //
-            MM = N[j][k]/(kn + N[j][k]);
-            
-            U = l_uptake*t_uptake*MM*P[j][k];
-            
-            // Calculate the grazing component
-            theta = log10(lp/lz)/delta_x;
-            Fk = exp(-theta*theta);
-            
-            // Build grazing
-            G = gmax*Fk/(Fk*P[j][k] + kp);
-            G *= (1-exp(-P[j][k]));         // Limit the grazing if there is not enough in the box.
-            GP = Z[j][k]*P[j][k]*G;
-            
-            // Mortality component
-            MP = mu*P[j][k];
-            
-            
-            //
-            //  Zooplankton
-            //
-            GZ = lambda*G;
-            
-            // Mortality
-            zeta = lambda*gmax*gmax/(4*umax*kp);
-            MZ = zeta*Z[j][k]*Z[j][k];
-            
-            
-            
-            
-            
-            //
-            // Detritus
-            //
-            GD = (1-lambda)*G;
-            
-            // Remineralization
-            R = r_remin*D[j][k];
-            
-//            Dtot = MP + MZ + GD;
-//            flux = (r_flux - (dz*f)*Dtot)/ (1 + dz/(z_star));
-//            R = - flux/z_star + (1-f)*Dtot;
-//            r_flux = fabs(r_flux);
-            
-            
-            //
-            // Update Time Tendencies
-            //
-            dN_dt[j][k] = -U + R;
-            dP_dt[j][k] = U - GP - MP;
-            dZ_dt[j][k] = GZ - MZ;
-            dD_dt[j][k] = -R + MP + MZ + GD;
-            
-        }
-        
-    }
+    //
+    //   Light and Temperature
+    //
+    
+    IR =I0*exp(kpar*ZZ_phi[j][k]);
+    
+    // Temperature and Irradiance dependent uptake (Sarmiento & Gruber)
+    t_uptake = exp(r*(T[j][k]-T0));
+    l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
+    
+    ///////////////////////
+    //   Phytoplankton   //
+    ///////////////////////
+    MM = N[j][k]/(kn + N[j][k]);
+    
+    U = l_uptake*t_uptake*MM*P[j][k];
+    
+    // Calculate the grazing component
+    theta = log10(lp/lz)/delta_x;
+    Fk = exp(-theta*theta);
+    
+    // Build grazing
+    G = gmax*Fk/(Fk*P[j][k] + kp);
+    G *= (1-exp(-Psum));         // Limit the grazing if there is not enough in the box.
+    GP = Z[j][k]*P[j][k]*G;
+    
+    // Mortality component
+    MP = mu*P[j][k];
+    
+    
+    /////////////////////
+    //   Zooplankton   //
+    /////////////////////
+    GZ = lambda*G;
+    
+    // Mortality
+    zeta = lambda*gmax*gmax/(4*umax*kp);
+    MZ = zeta*Z[j][k]*Z[j][k];
+    
+    //
+    // Detritus
+    //
+    GD = (1-lambda)*G;
+    
+
+    // Calculate the flux of detritus into the next gridcell
+    dz = ZZ_w[j][k+1] - ZZ_w[j][k];
+    det = MP + MZ + GD;
+    flux = (r_flux*(1+dz/(2*z_star)) - (dz*f)*det) / ( 1 - dz/(2*z_star) );
+    Rsink = -flux/z_star + (1-f)*det;
+    r_flux = fabs(flux);
+    
+    
+    // Remineralization
+    R = r_remin*D[j][k];
     
     
     
+    //
+    // Update Time Tendencies
+    //
+    dN_dt[j][k] = -U + R;
+    dP_dt[j][k] = U - GP - MP;
+    dZ_dt[j][k] = GZ - MZ;
+    dD_dt[j][k] = -R + MP + MZ + GD;
+    
+    
+    return r_flux;
     
 }
 
@@ -1762,9 +1767,14 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             //
         case BGC_NPZD:
         {
-           
-            npzd(t, phi,dphi_dt);
-            
+            for (j = 0; j < Nx; j++)
+            {
+                r_flux = 0; // set surface flux to zero at the start of every k loop.
+                for (k = Nz-1; k >= 0; k--)
+                {
+                    r_flux = npzd(t,j,k,phi,dphi_dt,r_flux);
+                }
+            }
             break;
         }
             //
@@ -2140,9 +2150,10 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real zdiff_dzsq = 0;
     real zdiff_dzsq_max = 0;
     real cfl_phys = 0;
-    real nsq_col = 0;
-    real nsq_max = 0;
+    real n_col = 0;
+    real n_max = 0;
     
+    // TODO remove: testing purposes
     real siso = 0;
     real sgm = 0;
     real z = 0;
@@ -2151,7 +2162,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real jind1 = 0;
     real kind1 = 0;
     
-    // TODO remove
+    real umax = 0;
+    real wmax = 0;
+    real uval = 0;
     real siso_max = 0;
     real sgm_max = 0;
     
@@ -2220,9 +2233,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
         for (k = 0; k < Nz; k ++)
         {
             // Max advecting velocity
-            if (fabs(u_r[j][k]) > u_max)
+            uval = fabs(u_r[j][k]);
+            if (uval > u_max)
             {
-                u_max = fabs(u_r[j][k]);
+                u_max = uval;
+                jind = j;
+                kind = k;
             }
             
             /// Max effective diffusivity
@@ -2250,6 +2266,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             if (w_dz > w_dz_max)
             {
                 w_dz_max = w_dz;
+                jind1 = j;
+                kind1 = k;
             }
             
             // Max effective diffusivity
@@ -2259,10 +2277,10 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             // (i.e. pseudo-vertical diffusivity) tends to be the limiting one.
             
             // "true" slopes in x/sigma coordinates, i.e. slopes relative to grid coordinates
-            //Sgm_true = j>0 ? Sgm_psi[j][k] - (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx : 0; // Basically just skips j==0 case
-            //Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
-            Sgm_true = j>0 ? Sgm_psi[j][k] : 0; // Basically just skips j==0 case
-            Siso_true = Siso_w[j][k];
+            Sgm_true = j>0 ? Sgm_psi[j][k] - (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx : 0; // Basically just skips j==0 case
+            Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
+//            Sgm_true = j>0 ? Sgm_psi[j][k] : 0; // Basically just skips j==0 case
+//            Siso_true = Siso_w[j][k];
             
             // N.B. Indexing here is slightly off for the GM component, but good enough for a CFL estimate
             zdiff_dzsq = fmax( Kiso_w[j][k]*SQUARE(Siso_true)*_dzsq_w[j][k], Kgm_psi[j][k]*SQUARE(Sgm_true)*_dzsq_psi[j][k] );
@@ -2289,29 +2307,29 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     }
     
     
-//    fprintf(stderr," sgm: %f %f %le \n kgm: %f %f %le \n",jind, kind, sgm_max, jind1, kind1, siso_max);
+//    fprintf(stderr," sgm: %f %f %le \n siso: %f %f %le \n",jind, kind, sgm_max, jind1, kind1, siso_max);
     // Calculate the Brunt Vaisalla Frequency
     // Chelton and others
     for (j = 0; j < Nx; j++)
     {
         for (k = Nz-1; k > 0; k--)
         {
-            Nsq[j][k] = sqrt((buoy[j][k] - buoy[j][k-1])*_dz_phi[j][k]);
+            Nbuoy[j][k] = sqrt(alpha*grav*(buoy[j][k] - buoy[j][k-1])*_dz_phi[j][k]);
         }
     }
     
-    // Integrate the Nsq term
+    // Integrate the N term
     for (j = 0; j < Nx; j++)
     {
-        nsq_col = 0;
+        n_col = 0;
         for (k = Nz-1; k > 0; k--)
         {
-            nsq_col += 0.5*(Nsq[j][k] + Nsq[j][k-1])/_dz_phi[j][k];
+            n_col += 0.5*(Nbuoy[j][k] + Nbuoy[j][k-1])/_dz_phi[j][k];
         }
         
-        if (nsq_max < nsq_col)
+        if (n_max < n_col)
         {
-            nsq_max = nsq_col/(f0*3.1415926);
+            n_max = n_col/_PI;
         }
     }
     
@@ -2321,12 +2339,18 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_w = 0.5/w_dz_max;
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
-    cfl_igw = 0.5*dx/nsq_max;
+    cfl_igw = 0.5*dx/n_max;
     
-//    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
+//    if (t > 4*day)
+//    {
+    
+//        fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
+//    }
+//    fprintf(stderr,"cfl_u = %le, umax = %le, j = %f, k = %f \n, cfl_w = %le, wmax = %le, j = %f, k =  %f \n",cfl_u,u_max,jind, kind, cfl_w, w_dz_max,jind1,kind1);
     
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
+    cfl_phys = fmin(cfl_phys,cfl_igw);
     //    printf(" CFL condition is %f\n", cfl_phys);
     cfl_dt = cfl_phys;
     
@@ -2386,17 +2410,11 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     dv_dt = dphi_dt[idx_vvel];
     
     // Working variables and matrices
-    real pz = 0; // placeholder for the vertical pressure gradient.
-    real alpha = 1e-4; // thermal expansion coefficient
     real zeta = 0;
     
-    real OneFifth = 0.2;
-    real OneTwelfth = 1/12;
+    real OneFifth = 1.0/5.0;
+    real OneTwelfth = 1.0/12.0;
     real minVal = 1e-10;
-    
-    real Grho = grav/rho0;
-    real Grho0 = 1000*Grho;
-    real HalfGRho = 0.5*Grho;
     
     real cff = 0;   // dummy variable to hold numerators and coefficients
     real cff1 = 0;
@@ -2406,49 +2424,60 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     switch(pressureScheme)
     {
             // Calculate the pressure gradient using a linear pressure interpolation
+            // this calculation is the linear version of the  "Sigma coordinate
+            // primitive form" in the Shchepetkin and McWilliams (2003) paper.
         case PRESSURE_LINEAR:
         {
-            // Calculate the baroclinic pressure from the buoyancy profile
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = Nz+1; k >= 0; k--)
-                {
-                    if (k == Nz+1){
-                        BPa[j][k] = 0; // set the surface pressure to zero.
-                    }
-                    else{
-                        BBy[j][k] = buoy[j][k]*alpha*grav; // take our "temperature" buoyancy and convert to actual buoyancy.
-                        BPa[j][k] = BPa[j][k+1] - BBy[j][k]/_dz_w[j][k];
-                    }
-                }
-            }
-            
-            // Calculate the pressure gradient, noting that pz = b (note: u is zero along western boundary).
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    pz = (BBy[j-1][k] + BBy[j][k])/2; // interpolate b onto the u grid points
-                    BPx[j][k] = 0.5*( (BPa[j][k+1] - BPa[j-1][k+1])*_dx + (BPa[j][k] - BPa[j-1][k])*_dx ); // interpolated to u,v grid points
-                    BPx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx*pz; // subtracted after interpolating
-                    if (j == 1){
-                        BPx[0][k] = BPx[1][k];
-                    }
-
-                    
-                }
-            }
-            break;
-        }
-        case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
-        {
-            
             // Calculate the density field
             for (j = 0; j < Nx; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    rhos[j][k] = rho0*(1-alpha*(buoy[j][k] - tref));
+                    rhos[j][k] = (1-alpha*(buoy[j][k] - tref));
+                }
+            }
+            
+            
+            // Integrate the pressure
+            for (j = 0; j < Nx; j++)
+            {
+                // Set the surface pressure to zero
+                P[j][Nz-1] = 0;
+                for (k = Nz-2; k >= 0; k--)
+                {
+                    P[j][k] = P[j][k+1] + grav*0.5*(rhos[j][k] + rhos[j][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]);
+                }
+            }
+            
+            
+            // Calculate the gradient
+            for (j = 1; j < Nx; j++) // the pressure on the western wall is zero
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    // Set the boundary to zero
+                    BPx[0][k] = 0;
+                    BPx[Nx][k] = 0;
+                    
+                    // Calculate the gradient
+                    BPx[j][k] = 0.5*grav*(rhos[j-1][k] + rhos[j][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])*_dx
+                                 - (P[j-1][k] - P[j][k])*_dx;
+                }
+            }
+            
+            
+            
+            break;
+        }
+        case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
+        {
+            
+            // Calculate the density anomaly field
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    rhos[j][k] = (1-alpha*(buoy[j][k] - tref));
                 }
             }
             
@@ -2512,7 +2541,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the w points.
                 cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
                 cff2 = 0.5*(rhos[j][Nz-1] - rhos[j][Nz-2])*(zeta - ZZ_phi[j][Nz-1])*cff1;
-                P[j][Nz-1] = (rhos[j][Nz-1] + cff2)*(zeta - ZZ_phi[j][Nz-1])/rho0;
+                P[j][Nz-1] = grav*(rhos[j][Nz-1] + cff2)*(zeta - ZZ_phi[j][Nz-1]);
             }
             
             
@@ -2523,10 +2552,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             {
                 for (k = Nz-2; k >= 0; k--)
                 {
-                    FX[j][k] = 0.5*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
-                                         - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
-                                                     - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) )/rho0;
-                    P[j][k] = P[j][k+1] + grav*FX[j][k];
+                    P[j][k] = P[j][k+1] + 0.5*grav*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
+                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
+                                                                - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) );;
                 }
             }
             
@@ -2591,7 +2619,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 {
                     FC[j][k] = 0.5*( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
                                          - OneFifth*( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k] - OneTwelfth*(hzx[j][k] + hzx[j-1][k]) )
-                                        - ( hzx[j][k] - hzx[j-1][k] )*( rhos[j][k] - rhos[j-1][k] - OneTwelfth*(hrx[j][k] + hrx[j-1][k]) ) ) )/rho0;
+                                        - ( hzx[j][k] - hzx[j-1][k] )*( rhos[j][k] - rhos[j-1][k] - OneTwelfth*(hrx[j][k] + hrx[j-1][k]) ) ) );
                 }
             }
             
@@ -3585,7 +3613,7 @@ int main (int argc, char ** argv)
     MATALLOC(BPa,Nx,Nz+1);
     MATALLOC(BPx,Nx,Nz);
     MATALLOC(BBy,Nx,Nz);
-    MATALLOC(Nsq,Nx,Nz);
+    MATALLOC(Nbuoy,Nx,Nz);
     
     // Pressure calculation scheme
     MATALLOC(rhos,Nx,Nz);

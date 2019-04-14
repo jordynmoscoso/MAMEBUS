@@ -40,3 +40,5 @@ IDX_VVEL = 2;             %%% Meridional velocity
 IDX_BUOY = 3;             %%% Buoyancy
 IDX_NITRATE = 4;          %%% Nitrate
 
+% model location
+model_code_dir = '/Users/jordynmoscoso/Desktop/MAMEBUS';

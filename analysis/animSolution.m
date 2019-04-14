@@ -213,8 +213,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
           hold off
 %           disp(n)
         case 2 %%% Buoyancy
-          contourf(XX_tr,ZZ_tr,phi,100)
+%           contourf(XX_tr,ZZ_tr,phi,20)
 %           shading interp
+          pcolor(XX_tr,ZZ_tr,phi)
+          shading interp
           colorbar
           title(titlestr)
           colormap default;
@@ -222,6 +224,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
                     title(titlestr)
           hold on
           plot(xx_psi,-hb_psi,'k')
+          plot(xx_psi,-50*ones(size(xx_psi)),'b','LineWidth',1);
           hold off
       end
 %       clabel(C,h,'Color','w');   
@@ -264,7 +267,9 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       h=colorbar;        
       caxis([-limval limval]);
       set(h,'FontSize',18);
-      disp(max(max(psi)))
+%       xx = max(max(abs(psi)));
+%       [i,j] = find(abs(psi) == xx);
+%       disp([xx i j])
 
     end
       
