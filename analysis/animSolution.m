@@ -27,10 +27,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       mov_name = strcat(run_name,'_strfcn',num2str(var_id));
   end
   
-  if var_id > 3
-      var_id = 2;
-      disp('Defaulting to show buoyancy')
-  end
+%   if var_id > 3
+%       var_id = 2;
+%       disp('Defaulting to show buoyancy')
+%   end
       
 
   
@@ -212,7 +212,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
           plot(xx_psi,-hb_psi,'k')
           hold off
 %           disp(n)
-        case 2 %%% Buoyancy
+        case 3 %%% Buoyancy
 %           contourf(XX_tr,ZZ_tr,phi,20)
 %           shading interp
           pcolor(XX_tr,ZZ_tr,phi)
@@ -222,10 +222,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
           colormap default;
           h=colorbar;
                     title(titlestr)
-          hold on
-          plot(xx_psi,-hb_psi,'k')
-          plot(xx_psi,-50*ones(size(xx_psi)),'b','LineWidth',1);
-          hold off
+%           hold on
+%           plot(xx_psi,-hb_psi,'k')
+%           plot(xx_psi,-50*ones(size(xx_psi)),'b','LineWidth',1);
+%           hold off
       end
 %       clabel(C,h,'Color','w');   
 %       set(h,'ShowText','on'); 

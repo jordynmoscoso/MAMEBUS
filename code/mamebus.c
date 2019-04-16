@@ -302,7 +302,6 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
         }
     }
     
-    
 }
 
 
@@ -496,6 +495,7 @@ real surfStructFun (real z, real h_sml, real _lambda)
     }
     
     return G;
+    
 }
 
 
@@ -588,11 +588,11 @@ void calcSlopes (     const real        t,
     real z;
     real d2b_dz2;
     real _lambda_sml, lambda_bbl;
-    real interp1 = 9/16;
-    real interp2 = 1/16;
+    real interp1 = 9.0/16.0;
+    real interp2 = 1.0/16.0;
     
-    real OneFifth = 1/5;
-    real OneTwelfth = 1/12;
+    real OneFifth = 1.0/5.0;
+    real OneTwelfth = 1.0/12.0;
     real minVal = 1e-10;
     
     // define dummy variables for calculations
@@ -605,9 +605,9 @@ void calcSlopes (     const real        t,
     
 #pragma parallel
     
-    if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
-    {
-        
+//   if ( pressureScheme == PRESSURE_CUBIC ) // Default calculated the cubic interpolated pressure gradient.
+//    {
+    
         /*
         // Calculate the arrays for the vertical buoyancy gradient
         // The values of the gradient in the work array sit at the w gridpoints
@@ -706,7 +706,7 @@ void calcSlopes (     const real        t,
             }
         }
         
-        */
+     */
         
       /*
          THIS IS COMMENTED OUT TO TEST THE HIGHER ORDER DIFFERENTIATION INSTEAD
@@ -718,7 +718,7 @@ void calcSlopes (     const real        t,
         // Calculate the elementary differences in the grid an buoyancy
         // We can reuse the pointers from the pressure gradient calculation
         // Vertical calculations
-        for (j = 0; j < Nx; j++)            // Calculate the elementary differences
+  /*      for (j = 0; j < Nx; j++)            // Calculate the elementary differences
         {
             for ( k = 1; k < Nz; k++ )
             {
@@ -726,6 +726,7 @@ void calcSlopes (     const real        t,
                 dzz[j][k] = ZZ_phi[j][k] - ZZ_phi[j][k-1];
             }
         }
+        
 
         // Extend the differences along the boundaries
         for (j = 0; j < Nx; j++)
@@ -793,6 +794,7 @@ void calcSlopes (     const real        t,
             }
         }
 
+
         // Horizontal Calculation
         for (j = 1; j < Nx; j++)
         {
@@ -802,6 +804,7 @@ void calcSlopes (     const real        t,
                 dzx[j][k] = ZZ_phi[j][k] - ZZ_phi[j-1][k];
             }
         }
+
 
 
         // Extend differences along the bounary
@@ -818,6 +821,8 @@ void calcSlopes (     const real        t,
             drx[Nx][k] = drx[Nx-1][k];
             dzx[Nx][k] = dzx[Nx-1][k];
         }
+        
+
 
         // Calculate the hyperbolic differences
         for (j = 0; j < Nx; j++)
@@ -846,6 +851,7 @@ void calcSlopes (     const real        t,
         }
 
 
+
         // Calculate FC's
         for (j = 1; j < Nx; j++)
         {
@@ -857,6 +863,7 @@ void calcSlopes (     const real        t,
             }
         }
 
+        
 
         // Calculate the area integrated buoyancy gradient and divide by the area
         for (j = 1; j < Nx; j ++)
@@ -866,6 +873,8 @@ void calcSlopes (     const real        t,
                     db_dx[j][k] =  (FX[j][k] + FC[j][k-1] - FC[j][k] - FX[j-1][k])/dA_psi[j][k];
             }
         }
+        
+
 
         // extend the buoyancy gradient on the western wall
         for (k = 1; k < Nz-1; k++)
@@ -873,6 +882,8 @@ void calcSlopes (     const real        t,
             db_dx[0][k] = db_dx[1][k];
             db_dx[Nx][k] = db_dx[Nx-1][k];
         }
+        
+
 
         // Make sure the edges are defined, they shouldn't be used.
         for (j = 0; j < Nx+1; j++)
@@ -880,10 +891,13 @@ void calcSlopes (     const real        t,
             db_dx[j][0] = 0;
             db_dx[j][Nz] = 0;
         }
+        
+
 
 
     }
-  
+
+   */
 
     // Calculate the effective isopycnal slope S_e everywhere
     for (j = 1; j < Nx; j ++)
@@ -893,13 +907,13 @@ void calcSlopes (     const real        t,
         {
             db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
-            if( pressureScheme == PRESSURE_LINEAR )
-            {
+//            if( pressureScheme == PRESSURE_LINEAR )
+//            {
 //            cubic = db_dx[j][k];
                 db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                 db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
 //            fprintf(stderr," j = %d, k = %d, Linear: db = %e, Cubic: db = %e \n",j,k,db_dx[j][k],cubic);
-            }
+//            }
         }
         db_dz[j][0] = 0; // N.B. THESE SHOULD NEVER BE USED
         db_dx[j][0] = 0; // Here we just set then so that they are defined
@@ -1310,26 +1324,27 @@ real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
     real kw = 0.04;
-    real kpar = 0;          // light attenuation
-    real IR = 0;            // irradiance profile in cell
-    real temp = 0;          // temperature coefficient
-    real atten = 0;         // biomass amount to attenuate light
-    real I0 = 0;            // Available light at every grid level
-    real wsink = 10/day;    // sinking speed (m/d)
-    real r_remin = 0.04;    // remineralization
-    real delta_x = 0.25;    // width of grazing profile
-    real lambda = 0.33;     // grazing efficiency
-    real mu = 0.02;         // mortality
-    real T0 = 20;           // reference temperature
+    real kc = 0.03;
+    real kpar = 0;              // light attenuation
+    real IR = 0;                // irradiance profile in cell
+    real temp = 0;              // temperature coefficient
+    real atten = 0;             // biomass amount to attenuate light
+    real I0 = 0;                // Available light at every grid level
+    real wsink = 10/day;        // sinking speed (m/d)
+    real r_remin = 0.04/day;    // remineralization
+    real delta_x = 0.25;        // width of grazing profile
+    real lambda = 0.33;         // grazing efficiency
+    real mu = 0.02/day;         // mortality
+    real T0 = 20;               // reference temperature
     real Psum = 0;
-    real det = 0;           // holder to calculate the total detritus
+    real det = 0;               // holder to calculate the total detritus
     
     // These will be calculated outside of MAMEBUS in the future.
     real lp = 5;
     real lz = 10;
     real kn = 0.1;
-    real gmax = 20.7;
-    real umax = 2.6;
+    real gmax = 20.7/day;
+    real umax = 2.6/day;
     real kp = 3;
     
     real MM = 0;            // Mechalis mentin component
@@ -1354,7 +1369,7 @@ real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real dz = 0;
     real flux = 0;
     real z_star = wsink/r_remin;
-    real f = 0.1/day;          // only one percent of material leaves grid cell per day
+    real f = 0;          // only one percent of material leaves grid cell per day
     
     // placeholders for PZD and time tendencies
     real ** T = NULL;
@@ -1406,15 +1421,15 @@ real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     ///////////////////////
     MM = N[j][k]/(kn + N[j][k]);
     
-    U = l_uptake*t_uptake*MM*P[j][k];
+    U = umax*l_uptake*t_uptake*MM*P[j][k];
     
     // Calculate the grazing component
     theta = log10(lp/lz)/delta_x;
     Fk = exp(-theta*theta);
     
     // Build grazing
-    G = gmax*Fk/(Fk*P[j][k] + kp);
-    G *= (1-exp(-Psum));         // Limit the grazing if there is not enough in the box.
+    G = gmax*t_uptake*Fk/(Fk*P[j][k] + kp);
+    G = G*(1-exp(-Psum));         // Limit the grazing if there is not enough in the box.
     GP = Z[j][k]*P[j][k]*G;
     
     // Mortality component
@@ -1448,7 +1463,6 @@ real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     R = r_remin*D[j][k];
     
     
-    
     //
     // Update Time Tendencies
     //
@@ -1457,6 +1471,7 @@ real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     dZ_dt[j][k] = GZ - MZ;
     dD_dt[j][k] = -R + MP + MZ + GD;
     
+//    fprintf(stderr,"dN = %le, dP = %le, dZ = %le, dD = %le \n ", dN_dt[j][k], dP_dt[j][k], dZ_dt[j][k], dD_dt[j][k] );
     
     return r_flux;
     
@@ -1514,178 +1529,7 @@ void ssem (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real DS = 0;            // Small detritus
     real DL = 0;            // Large detritus
     
-    // NPZD arrays as to not over calculate
-    real uptake[MP];        // uptake
-    real mp[MP];            // phytoplankton mortality
-    real mz[MZ];            // zooplankton mortality
-    real palat[MP][MZ];     // phytoplankton palatibility matrix
-    
-    
-    
-    
-    
-    ///////////////////////////////////////
-    ///// BIOGEOCHEMISTRY STARTS HERE /////
-    ///////////////////////////////////////
-    
-    // Calculate palatibility:
-    for (l = 0; l < MP; l++)
-    {
-        for (m = 0; m < MZ; m ++)
-        {
-            palat[l][m] = exp(- POW2((log10(lp[l]) - log10(preyopt[m]))/delx) );
-        }
-    }
-    
-    
-    //
-    // Calculate physical scaling values for temperature dependent uptake
-    // and light dependent uptake.
-    //
-    DS = phi[2+MN+MP+MZ][j][k];
-    DL = phi[2+MN+MP+MZ+1][j][k];
-    tfrac = exp(R*(T-tref));
-    
-    for (l = 0; l < MP; l++)
-    {
-        pbiotot += phi[2+MN+l][j][k];
-    }
-    
-    for (m = 0; m < MZ; m++)
-    {
-        zbiotot += phi[2+MN+MP+m][j][k];
-    }
-    
-    K = kw + kc*(pbiotot+zbiotot);
-    IR = I0*exp(K*ZZ_phi[j][k]/efold);  // Irradiance is here
-    irfrac = IR/I0; // Franks 2001
-    
-    //
-    // NITRATE
-    //
-    for (l = 0; l < MP; l++)
-    {
-        P = phi[2+MN+l][j][k];
-        uptake[l] = irfrac*tfrac*vmax[l]*(N/(N+kn[l]))*P;
-        dn += uptake[l];
-    }
-    remin = rdl*DL + rds*DS;
-    dphi_dt[2][j][k] += -dn + remin;
-    
-    //
-    // PHYTOPLANKTON
-    //
-    
-    for (l = 0; l < MP; l++)
-    {
-        // Reset to zero at the start of every outer loop.
-        graze = 0;
-        // Calculate grazing on the jth phytoplankton by summing over k-zooplankton.
-        P = phi[2+MN+l][j][k];
-        for (m = 0; m < MZ; m ++)
-        {
-            Z = phi[2+MN+MP+m][j][k];
-            graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
-        }
-        mp[l] = mu*P;
-        
-        dp = uptake[l] - graze - mp[l];
-        dphi_dt[2+MN+l][j][k] += dp;
-    }
-    
-    //
-    // ZOOPLANKTON
-    //
-    
-    // Calculate the effect of grazing on zooplankton
-    for (m = 0; m < MZ; m++)
-    {
-        graze = 0;
-        Z = phi[2+MN+MP+m][j][k];
-        for (l = 0; l < MP; l++)
-        {
-            P = phi[2+MN+l][j][k];
-            graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
-        }
-        
-        mz[m] = mu*Z*zbiotot;       // Following Banas 2011
-        dz = eff*graze - mz[m];
-        dphi_dt[2+MN+MP+m][j][k] += dz;
-    }
-    
-    //
-    // DETRITUS
-    //
-    
-    // Detritus is split into two groups, the larger (PON) and smaller (DON) rates are from (Ward et. al. 2012)
-    
-    dd_small = 0; // set the detritus holders to zero.
-    dd_large = 0;
-    // Messy grazing for system closure
-    for (l = 0; l < MP; l++)
-    {
-        graze = 0;
-        // if the phytoplankton being grazed is less than the sinking limit, then, the messy grazing is added to the small DON group.
-        P = phi[2+MN+l][j][k];
-        if (lp[l] < sinklim)
-        {
-            for (m = 0; m < MZ; m ++)
-            {
-                Z = phi[2+MN+MP+m][j][k];
-                graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
-            }
-            dd_small = (1-eff)*graze;
-        }
-        else
-        {
-            for (m = 0; m < MZ; m ++)
-            {
-                Z = phi[2+MN+MP+m][j][k];
-                graze += gmax[m]*(palat[l][m]/(kp[m] + pbiotot))*Z*P*(1-exp(-P));
-            }
-            dd_large = (1-eff)*graze;
-        }
-    }
-    
-    // Add in the effects of mortality
-    for (l = 0; l < MP; l++)
-    {
-        if (lp[l] < sinklim)
-        {
-            dd_small += mp[l];
-        }
-        else
-        {
-            dd_large += mp[l];
-        }
-    }
-    
-    for (m = 0; m < MZ; m++)
-    {
-        if (lz[m] < sinklim)
-        {
-            dd_small += mz[m];
-        }
-        else
-        {
-            dd_large += mz[m];
-        }
-    }
-    
-    
-    // Subtract off remineralization
-    dd_large -= rdl*DL;
-    dd_small -= rds*DS;
-    
-    if (k < Nz)
-    {
-        dphi_dt[2+MN+MP+MZ+1][j][k] -= rsink*(DL - phi[2+MN+MP+MZ+1][j][k+1])*_dz_phi[j][k];
-        dphi_dt[2+MN+MP+MZ+1][j][k+1] += rsink*(DL - phi[2+MN+MP+MZ+1][j][k+1])*_dz_phi[j][k];
-    }
-    
-    dphi_dt[2+MN+MP+MZ+1][j][k] += dd_large;
-    dphi_dt[2+MN+MP+MZ][j][k] += dd_small;
-    
+
 }
 
 
@@ -1713,15 +1557,6 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real r_flux_next = 0;                    // placeholder for function output
     
     // NPZD model parameter vectors
-    real gmax[MZ];
-    real kp[MZ];
-    real kn[MP];
-    real vmax[MP];
-    real lp[MP];
-    real lz[MZ];
-    real preyopt[MZ];
-    real ** npzparams = NULL;                                       // 8 X (MP or MZ (whichever is larger))
-    int NMAX = 0;
     real T = 0;                              // Placeholder for Temperature
     real N = 0;                              // Placeholder for Nitrate
     
@@ -2683,7 +2518,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     }
     
     
-    
 }
 
 
@@ -2740,7 +2574,6 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
     
     // Calculate tracer tendencies due to relaxation
     tderiv_relax (t, phi_wrk, dphi_dt_wrk);
-    
     
     return cfl_dt;
 }
@@ -3317,14 +3150,14 @@ int main (int argc, char ** argv)
     ///// BEGIN DEFINING INPUT PARAMETERS /////
     ///////////////////////////////////////////
     
-    // Domain dimensions and grid sizes
+    // Domain dimensions and grid sizes (5)
     setParam(params,paramcntr++,"Ntracs","%u",&Ntracs,false);
     setParam(params,paramcntr++,"Nx","%u",&Nx,false);
     setParam(params,paramcntr++,"Nz","%u",&Nz,false);
     setParam(params,paramcntr++,"Lx","%lf",&Lx,false);
     setParam(params,paramcntr++,"Lz","%lf",&Lz,false);
     
-    // Time stepping/output parameters
+    // Time stepping/output parameters (7)
     setParam(params,paramcntr++,"cflFrac","%lf",&cflFrac,false);
     setParam(params,paramcntr++,"startTime","%lf",&tmin,true);
     setParam(params,paramcntr++,"endTime","%lf",&tmax,false);
@@ -3333,7 +3166,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"startIdx","%u",&n0,true);
     setParam(params,paramcntr++,"checkConvergence","%d",&checkConvergence,true);
     
-    // Physical constants
+    // Physical constants (6)
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
@@ -3341,12 +3174,12 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
     setParam(params,paramcntr++,"r_bbl","%lf",&r_bbl,true);
     
-    // Sigma-coordinate parameters
+    // Sigma-coordinate parameters (3)
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
     setParam(params,paramcntr++,"theta_s","%lf",&theta_s,true);
     setParam(params,paramcntr++,"theta_b","%lf",&theta_b,true);
     
-    // Scheme selectors
+    // Scheme selectors (6)
     setParam(params,paramcntr++,"timeSteppingScheme","%u",&timeSteppingScheme,true);
     setParam(params,paramcntr++,"advectionScheme","%u",&advectionScheme,true);
     setParam(params,paramcntr++,"momentumScheme","%u",&momentumScheme,true);
@@ -3354,12 +3187,12 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"bgcModel","%u",&bgcModel,true);
     setParam(params,paramcntr++,"KT00_sigma","%lf",&KT00_sigma,true);
     
-    // Biogeochemical parameter inputs
+    // Biogeochemical parameter inputs (3)
     setParam(params,paramcntr++,"MP","%u",&MP,false);
     setParam(params,paramcntr++,"MZ","%u",&MZ,false);
     setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
     
-    // Input file names
+    // Input file names (11)
     setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,true);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
@@ -3523,7 +3356,6 @@ int main (int argc, char ** argv)
     
     
     
-    
     ///////////////////////////////////
     ///// BEGIN MEMORY ALLOCATION /////
     ///////////////////////////////////
@@ -3611,7 +3443,7 @@ int main (int argc, char ** argv)
     MATALLOC(Kiso_w,Nx,Nz+1);
     MATALLOC(Kdia_w,Nx,Nz+1);
     MATALLOC(BPa,Nx,Nz+1);
-    MATALLOC(BPx,Nx,Nz);
+    MATALLOC(BPx,Nx+1,Nz);
     MATALLOC(BBy,Nx,Nz);
     MATALLOC(Nbuoy,Nx,Nz);
     
@@ -3621,10 +3453,10 @@ int main (int argc, char ** argv)
     MATALLOC(drx,Nx+1,Nz);
     MATALLOC(dzz,Nx,Nz+1);
     MATALLOC(dzx,Nx+1,Nz);
-    MATALLOC(hrx,Nx,Nz);
-    MATALLOC(hrz,Nx,Nz);
-    MATALLOC(hzx,Nx,Nz);
-    MATALLOC(hzz,Nx,Nz);
+    MATALLOC(hrx,Nx+1,Nz);
+    MATALLOC(hrz,Nx,Nz+1);
+    MATALLOC(hzx,Nx+1,Nz);
+    MATALLOC(hzz,Nx,Nz+1);
     MATALLOC(P,Nx,Nz);
     MATALLOC(FX,Nx,Nz+1);
     MATALLOC(FC,Nx+1,Nz);
@@ -3645,7 +3477,6 @@ int main (int argc, char ** argv)
     /////////////////////////////////
     ///// END MEMORY ALLOCATION /////
     /////////////////////////////////
-    
     
     
     
@@ -3811,7 +3642,6 @@ int main (int argc, char ** argv)
     //////////////////////////////////////
     ///// END READING PARAMETER DATA /////
     //////////////////////////////////////
-    
     
     
     
@@ -4083,8 +3913,6 @@ int main (int argc, char ** argv)
     
     
     
-    
-    
     ////////////////////////////////////
     ///// BEGIN INITIAL CONDITIONS /////
     ////////////////////////////////////
@@ -4238,7 +4066,6 @@ int main (int argc, char ** argv)
         
         
         
-        
         // Step 3 (optional): apply zonal barotropic pressure gradient correction
         do_pressure_correct(phi_out);
         
@@ -4259,6 +4086,7 @@ int main (int argc, char ** argv)
                 }
             }
         }
+        
         
         
         
@@ -4345,7 +4173,6 @@ int main (int argc, char ** argv)
         }
         
         
-        
         // Copy the next iteration from phi_out back to phi_in,
         // ready for the next time step
         memcpy(phi_in_V,phi_out_V,Ntot*sizeof(real));
@@ -4393,7 +4220,6 @@ int main (int argc, char ** argv)
     ///////////////////////
     ///// END CLEANUP /////
     ///////////////////////
-    
     
     
     

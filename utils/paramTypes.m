@@ -41,4 +41,4 @@ IDX_BUOY = 3;             %%% Buoyancy
 IDX_NITRATE = 4;          %%% Nitrate
 
 % model location
-model_code_dir = '/Users/jordynmoscoso/Desktop/MAMEBUS';
+model_code_dir = '/Users/jordynmoscoso/Desktop/MAMEBUS/code';

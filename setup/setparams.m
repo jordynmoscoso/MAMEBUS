@@ -27,7 +27,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   use_cluster = true;
   use_intel = false;
   use_pbs = use_cluster;
-  cluster_home_dir = '/data3/jmsocoso/MAMEBUS/runs';
+  cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
   uname = 'jmoscoso';
   cluster_addr = 'caolila.atmos.ucla.edu';
   
@@ -73,7 +73,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %%% TODO this definitely ought to appear later in this script
 
 
-  plotfigs = 1;
+  plotfigs = false;
   %%% The number of biogeochemical classes are entered here. 
   if (modeltype > 3)
     modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
@@ -130,9 +130,6 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
-  
-  %%% Create tanh-shaped topography
-  shelfdepth = 3000;
 
   %%% Check to see if a valid model type is indicated for biogeochemistry,
   %%% if not use the default single nitrate model (modeltype = 0)
@@ -141,8 +138,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   end
   
 
-%   pressureScheme = PRESSURE_CUBIC;
-  pressureScheme = PRESSURE_LINEAR;
+  pressureScheme = PRESSURE_CUBIC;
+%   pressureScheme = PRESSURE_LINEAR;
         
   
   %%% For plotting figures of setup
@@ -193,7 +190,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);  
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
-  PARAMS = addParameter(PARAMS,'cflFrac',0.1,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'cflFrac',0.25,PARM_REALF);
   PARAMS = addParameter(PARAMS,'endTime',endTime,PARM_REALF);
   PARAMS = addParameter(PARAMS,'monitorFrequency',outputFreq,PARM_REALF);
   PARAMS = addParameter(PARAMS,'restart',restart,PARM_INT);
@@ -336,13 +333,15 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
  
   %%% Load in the surface wind stress.
 %   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
-  tau = tau0*tanh(((Lx)-xx_psi)/(Lx/4));
+  tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/4)) );
 %   Lmax = 300*m1km/2;
-%   tau = tau0*(sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^2;
+%   tau = 3*tau0*( 4*(sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^2 - (sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^4  )./( 2 + (sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^2).^2;
 %   tau(xx_psi < 200) = 0;
 %   tau = tau0*ones(size(xx_psi));
 %   tau(xx_psi < 200) = 0;
 %   tau(xx_psi > Lx - 200) = 0;
+
+  %%% Create a windstress that goes to zero in the boundary layer.
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -420,10 +419,10 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
       case BGC_NITRATEONLY
-          T_relax_all(IDX_NITRATE,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(IDX_NITRATE,:,:) = 100*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_NPZD
-          T_relax_all(IDX_NITRATE,:,:) = 100*t1day*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(IDX_NITRATE,:,:) = 100*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
           T_relax_all(IDX_NITRATE+1:IDX_NITRATE+3,:,:) = -ones(3,Nx,Nz); % Conserve all other parts of npzd model
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_SSEM

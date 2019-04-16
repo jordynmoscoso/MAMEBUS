@@ -35,7 +35,6 @@ function createRunScript (  local_home_dir, ...
 
   %%% File/directory names      
   local_run_dir = fullfile(local_home_dir,run_name);
-  pbsfname = fullfile(local_run_dir,'pbs_run');
   upfname = fullfile(local_run_dir,'upload.sh');
   downfname = fullfile(local_run_dir,'download.sh');
   cleanfname = fullfile(local_run_dir,'clean.sh');

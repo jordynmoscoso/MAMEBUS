@@ -53,18 +53,27 @@ switch (model_type)
         spec_tot = NP + NZ + ND + 1; % total species available,
         bgc_init = zeros(Nx,Nz,spec_tot); %%% Add one for nitrate
         
-        Pmax = 0.1; % mmol/m3
-        Zmax = 0.1;
-        Dmax = 0.1;
+        Pmax = 0.01; % mmol/m3
+        Zmax = 0;
+        Dmax = 0;
+        
+        euph_init = zeros(Nx,Nz);
+        euph_init(ZZ_tr > -110) = 1;
         
         %%% Initial nitrate profile (Hyperbolic)
         Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
         Ncline = 250; % Approximate guess of the depth of the nutracline
         bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
         
-        bgc_init(:,:,2) = Pmax*ones(Nx,Nz);
-        bgc_init(:,:,3) = Zmax*ones(Nx,Nz);
-        bgc_init(:,:,4) = Dmax*ones(Nx,Nz);
+        figure(300)
+        pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1))
+        title('Initial Nitrate Concentration')
+        colorbar
+        shading interp
+        
+        bgc_init(:,:,2) = Pmax*euph_init;
+        bgc_init(:,:,3) = Zmax*zeros(Nx,Nz);
+        bgc_init(:,:,4) = Dmax*zeros(Nx,Nz);
         
         
     case 3 %%% Size Structured NPZ model based on Banas

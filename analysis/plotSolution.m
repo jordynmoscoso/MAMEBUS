@@ -24,10 +24,13 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     mov_name = strcat(run_name,'_name');
 
     if var_id > 3
-      var_id = 2;
-      disp('Defaulting to show buoyancy')
+      disp('Plotting biogeochemistry solutions')
     end
     
+    if (var_id > 3 && ~plot_trac)
+        plot_trac = true;
+        disp('You have chosen a variable which does not exist')
+    end
     
 
 
@@ -199,12 +202,21 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             minval = max(max(max(avgVals)),maxspeed);
             minval = abs(min(min(min(avgVals)),-minval));
             caxis([-minval minval]);
-        else
+        elseif (var_id == 2) % plot buoyancy
             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:1:20]);
             colorbar; 
             colormap default;
 %             clabel(C,h,'Color','w');  
 %             set(h,'ShowText','on'); 
+        else % plot biogeochemistry
+            pcolor(XX_tr,ZZ_tr,avgVals)
+            shading interp
+            h = colorbar; 
+            colormap jet;
+            maxspeed = 0;
+            minval = max(max(max(avgVals)),maxspeed);
+            minval = abs(min(min(min(avgVals)),-minval));
+            caxis([0 minval]);
         end
         
         % Use a divergent colorscheme if we are looking at positive or
