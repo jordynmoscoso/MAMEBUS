@@ -59,7 +59,9 @@ int MP = 0;
 int MZ = 0;
 int MD = 2;  // Always have one small detrital group and one large.
 int MN = 1;  // Always have one Nitrate
-int nbgc;    // Counts number of biogeochemical parameters
+int nbgc = 0;    // Counts number of biogeochemical parameters
+int conserv_Ntot = true;    // forces conservation of nitrate
+real Nint = 0;              // placeholder for the total domain nitrate
 
 // Scaling Constants
 real day = 86400;                 // Seconds in a day
@@ -90,6 +92,7 @@ const int idx_uvel = 0;   // Index of buoyancy variable in list of tracers
 const int idx_vvel = 1;   // Index of buoyancy variable in list of tracers
 const int idx_buoy = 2;   // Index of buoyancy variable in list of tracers
 const int idx_nitrate = 3;
+const int max_det = 3;
 
 // Sigma-coordinate grid parameters
 real h_c = 1e16;
@@ -172,6 +175,7 @@ real * impl_A = NULL;         // Implicit diffusion solver arrays
 real * impl_B = NULL;
 real * impl_C = NULL;
 real * impl_D = NULL;
+real ** wsink_wrk = NULL;
 real ** Kgm_psi = NULL;       // GM diffusivity
 real ** Kgm_u = NULL;
 real ** Kgm_w = NULL;
@@ -209,10 +213,108 @@ real ** db_dx = NULL;
 real ** db_dz = NULL;
 real ** db_dx_wrk = NULL;
 real ** db_dz_wrk = NULL;
+real ** bot_nflux = NULL;
 
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
 ////////////////////////////////
+
+
+/**
+ * calcDomainAvg
+ *
+ * Takes the area integral of a tracer in the domain
+ * and returns a scalar value
+ *
+ */
+real calcTracAvg (const real t, real *** phi, int var_id, real trac_tot, bool conserve_all)
+{
+    int i,j,k;
+    real dz = 0;
+    real domain_avg = 0;
+    int inc_id = idx_nitrate;
+    
+    if (var_id < 3)
+    {
+        fprintf(stderr,"ERROR: Cannot calculate average, variable is not a tracer \n");
+        return 0;
+    }
+    
+    
+    // If we are conserving total nitrate, calculate all of the nitrate in the domain
+    if (conserve_all)
+    {
+        switch (bgcModel)
+        {
+            case BGC_NITRATEONLY:
+            {
+                // calculate the domain average of the nitrate in the entire domain
+                for (j = 0; j < Nx; j++)
+                {
+                    for (k = 0; k < Nz; k++)
+                    {
+                        dz = ZZ_w[j][k+1] - ZZ_w[j][k];
+                        trac_tot += phi[idx_nitrate][j][k]*dx*dz;
+                        domain_avg += dx*dz;
+                    }
+                }
+                
+                trac_tot = trac_tot/domain_avg;
+                break;
+            }
+            case BGC_NPZD:
+            {
+                // This part of the function takes the total concentration of nitrate,
+                // phytoplankton, zooplankton, and detritus (each has units of mmol N/m^3)
+                // and ensures that the total nitrogen in the entire system is conserved.
+                for (i = idx_nitrate; i < idx_nitrate + MP + MZ + 1; i ++)
+                {
+                    for (j = 0; j < Nx; j++)
+                    {
+                        for (k = 0; k < Nz; k++)
+                        {
+                            dz = ZZ_w[j][k+1] - ZZ_w[j][k];
+                            trac_tot += phi[i][j][k]*dx*dz;
+                            
+                            // only calculate this once
+                            if (i == idx_nitrate)
+                            {
+                                domain_avg += dx*dz;
+                            }
+                        }
+                    }
+                }
+                
+                trac_tot = trac_tot/domain_avg;
+                break;
+            }
+            default:
+                break;
+        }
+        
+    }
+    else // calculate the value of the total tracer in the domain
+    {
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                dz = ZZ_w[j][k+1] - ZZ_w[j][k];
+                trac_tot += phi[var_id][j][k]*dx*dz;
+                domain_avg += dx*dz;
+            }
+        }
+        
+        trac_tot = trac_tot/domain_avg;
+    }
+
+    
+    return trac_tot;
+}
+
+
+
+
 
 
 
@@ -1249,8 +1351,11 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
  */
 real single_nitrate (const real t, const int j, const int k,
                      real *** phi, real *** dphi_dt,
-                     real N, real T, real a_temp, real b_temp, real c_temp, real alpha, real monod, real r_flux)
+                     real N, real T, real umax, real f, real r_flux)
 {
+    // counting
+    int m;
+    
     // Placeholders and values for the irradiance
     real IR = 0;
     real I0 = 0;
@@ -1261,16 +1366,14 @@ real single_nitrate (const real t, const int j, const int k,
     real T0 = 20;
     real r = 0.05;
     
-    real f = 0.1/day;                           // fraction of exported material
-    
     // Variables
+    real remin_frac = 0;
     real flux = 0;
     real t_uptake = 0;                       // temperature dependent uptake rate
-    real remin_in_box = 0;                   // value of remineralization in box
     real lk = 0;                             // light saturation constant
     real l_uptake = 0;                       // light dependent uptake rate
     real uptake = 0;                         // uptake in each grid box
-    real scale_height = 0;                   // scale height from 50 to 200 for remin export (surface to floor) mimics the Martin curve for material export
+    real zstar = 0;                          // scale height from 50 to 200 for remin export (surface to floor) mimics the Martin curve for material export
     real dz = 0;                             // vertical grid spacing placeholder
     
     real remin = 0;
@@ -1284,27 +1387,36 @@ real single_nitrate (const real t, const int j, const int k,
     l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
     
     // Uptake and Remineralizaiton
-    uptake = (l_uptake * t_uptake) * N;
+    uptake = umax * (l_uptake * t_uptake) * N;
     
     // Scale Height for Remin
-    scale_height = 200;
+    zstar = 200;
     dz = ZZ_w[j][k+1] - ZZ_w[j][k];
     
-    flux = (r_flux - (dz * f) * uptake) / ( 1 + dz/scale_height );
-    remin = - flux / scale_height + (1-f)*uptake;
-    r_flux = fabs(flux);             // Move to the next vertical grid cell
-        
-    //    // Uncomment to Return any extra flux of nutrients to bottom grid cell
-//        if (k == 0)
-//        {
-//            remin -= flux / dz;
-//            r_flux = 0;           // Reset flux of nutrients at the surface to zero
-//        }
+    ////////////////
+    ////////////////
+    ////////////////
+    
+    flux = (r_flux + dz * f * uptake)/( 1 + dz/zstar);
+    remin = flux / zstar + (1-f)*uptake;
+    r_flux = flux;             // Move to the next vertical grid cell
+    
+    // if there is material fluxed out of the bottom grid cell, then
+    // instantaneously remineralize within the water column:
+    // this occurs in conserve_nitrate()
+    if (k == 0)
+    {
+        bot_nflux[0][j] = r_flux;
+    }
+    
+
+    
+    
     
     //
     // Update the value of nitrate
     //
-    dphi_dt[idx_nitrate][j][k] += remin + remin_in_box - uptake;
+    dphi_dt[idx_nitrate][j][k] += remin - uptake;
     return r_flux;
     
     if (isnan(uptake))
@@ -1317,7 +1429,12 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,real r_flux)
+void  npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt,
+           real cp, real cz, real cd,
+           real umax, real pi_a, real q10, real kn, real mu1p, real mu2p,
+           real gmax, real kg, real gthr, real bp, real bd, real mu1z, real mu2z,
+           real rs, real rd, real wsink)
+
 {
     int a,b;
     
@@ -1326,154 +1443,140 @@ real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_d
     real kw = 0.04;
     real kc = 0.03;
     real kpar = 0;              // light attenuation
+    real I0 = 0;
     real IR = 0;                // irradiance profile in cell
-    real temp = 0;              // temperature coefficient
-    real atten = 0;             // biomass amount to attenuate light
-    real I0 = 0;                // Available light at every grid level
-    real wsink = 10/day;        // sinking speed (m/d)
-    real r_remin = 0.04/day;    // remineralization
-    real delta_x = 0.25;        // width of grazing profile
-    real lambda = 0.33;         // grazing efficiency
-    real mu = 0.02/day;         // mortality
-    real T0 = 20;               // reference temperature
-    real Psum = 0;
-    real det = 0;               // holder to calculate the total detritus
     
-    // These will be calculated outside of MAMEBUS in the future.
-    real lp = 5;
-    real lz = 10;
-    real kn = 0.1;
-    real gmax = 20.7/day;
-    real umax = 2.6/day;
-    real kp = 3;
+    // place holders for npzd and time tendencies
+    real N = phi[idx_nitrate][j][k];
+    real P = phi[idx_nitrate+1][j][k];
+    real Z = phi[idx_nitrate+2][j][k];
+    real D = phi[idx_nitrate+3][j][k];
+    real T = phi[idx_buoy][j][k];
     
-    real MM = 0;            // Mechalis mentin component
-    real l_uptake = 0;      // light dependent uptake
-    real t_uptake = 0;      // temperature dependent uptake
-    real theta = 0;         // predator to prey ratio
-    real Fk = 0;            // available biomass
-    real U = 0;             // updake
-    real R = 0;             // remineralization
-    real Rsink = 0;
-    real G = 0;
-    real GP = 0;            // grazing of phytoplankton
-    real GZ = 0;            // grazing of zooplankton
-    real GD = 0;            // messy grazing term
-    real Dtot = 0;          // Total detritus term (for implicit sinking)
-    real MZ = 0;            // mortality
-    real MP = 0;
-    real bio = 0;           // available biomass
-    real zeta = 0;          // zooplankton mortality holder
+    // pointers to time tendencies
+    real ** dN_dt = dphi_dt[idx_nitrate];
+    real ** dP_dt = dphi_dt[idx_nitrate+1];
+    real ** dZ_dt = dphi_dt[idx_nitrate+2];
+    real ** dD_dt = dphi_dt[idx_nitrate+3];
     
-    // Parameters for implicit sinking
-    real dz = 0;
-    real flux = 0;
-    real z_star = wsink/r_remin;
-    real f = 0;          // only one percent of material leaves grid cell per day
+    // phytoplankton calculation holders
+    real R = 0;
+    real L = 0;
+    real pmax = 0;
+    real m = 0;
+    real qpow = (T-10.0)/10.0;
     
-    // placeholders for PZD and time tendencies
-    real ** T = NULL;
-    real ** N = NULL;
-    real ** P = NULL;
-    real ** Z = NULL;
-    real ** D = NULL;
-    real ** dN_dt = NULL;
-    real ** dP_dt = NULL;
-    real ** dZ_dt = NULL;
-    real ** dD_dt = NULL;
-    
-    T = phi[idx_buoy];
-    N = phi[idx_nitrate];
-    P = phi[idx_nitrate + 1];
-    Z = phi[idx_nitrate + 2];
-    D = phi[idx_nitrate + 3];
-    
-    dN_dt = dphi_dt[idx_nitrate]; // inert dye is idx_nitrate + 4;
-    dP_dt = dphi_dt[idx_nitrate + 1];
-    dZ_dt = dphi_dt[idx_nitrate + 2];
-    dD_dt = dphi_dt[idx_nitrate + 3];
+    // zooplankton calculation holders
+    real g_rate = 0;
+    real bip = 0;
+    real bid = 0;
+    real biz = 0;
+    real F = 0;
+    real fcomp = 0;
+    real gp = 0;
+    real gd = 0;
+    real gz = 0;
+    real ac = 0;
+    real an = 0;
+    real cr = 106/16;
+    real biomass = 0;
     
     
-    // Calculate the total amount of phytoplankton in the domain
-    for (a = 0; a < Nx; a++)
+    // detritus parameters
+    real md = 0;
+    real ed = 0;
+    real ed_c = 0;
+    real ed_n = 0;
+    real twoThirds = 2.0/3.0;
+    real oneThird = 1.0/3.0;
+    real rremin = 0;
+    
+    
+    ///////////////////////////////////
+    ///// Calculations start here /////
+    ///////////////////////////////////
+    
+    // Calculate the light profile
+    kpar = kw; // This is just constant for now.
+    I0 = 0.45*qsw; // from BEC
+    IR = I0*exp(kpar*ZZ_phi[j][k]);
+    
+    
+    
+    /////////////////////////
+    ///// Phytoplankton /////
+    /////////////////////////
+    pmax = umax*pow(q10,qpow);
+    L = pmax*IR/( (pmax/pi_a) + IR );
+    R = L*N/(N + kn);
+    
+    // Calculate the quadratic mortality term
+    if (P < 0.01)
     {
-        for (b = 0; b < Nz; b++)
-        {
-            Psum += P[a][b];
-        }
+        m = 0;
+    }
+    else
+    {
+        m = mu2p;
     }
     
-    kpar = kw;
-    I0 = 0.45*qsw/(kpar*Hsml); // from BEC
     
-    //
-    //   Light and Temperature
-    //
-    
-    IR =I0*exp(kpar*ZZ_phi[j][k]);
-    
-    // Temperature and Irradiance dependent uptake (Sarmiento & Gruber)
-    t_uptake = exp(r*(T[j][k]-T0));
-    l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
     
     ///////////////////////
-    //   Phytoplankton   //
+    ///// Zooplankton /////
     ///////////////////////
-    MM = N[j][k]/(kn + N[j][k]);
     
-    U = umax*l_uptake*t_uptake*MM*P[j][k];
+    // Calculate the available biomass
+    bip = (14.01 + 12.01*cp)/(14.01 + 12.01*cr);
+    biz = (14.01 + 12.01*cz)/(14.01 + 12.01*cr);
+    bid = (14.01 + 12.01*cd)/(14.01 + 12.01*cr);
+    biomass = bip*P + bid*D;
     
-    // Calculate the grazing component
-    theta = log10(lp/lz)/delta_x;
-    Fk = exp(-theta*theta);
+    // The grazing threshold
+    fcomp = biomass-gthr;
+    F = fcomp < 0 ? 0 : fcomp;
     
-    // Build grazing
-    G = gmax*t_uptake*Fk/(Fk*P[j][k] + kp);
-    G = G*(1-exp(-Psum));         // Limit the grazing if there is not enough in the box.
-    GP = Z[j][k]*P[j][k]*G;
+    // Maximum ingestion rate
+    g_rate = biz*Z*gmax*(F/(F*F + kg*kg));
     
-    // Mortality component
-    MP = mu*P[j][k];
+    // Grazing loss
+    gp = g_rate*P/biomass;
+    gd = g_rate*D/biomass;
     
+    ac = bp*cp*gp + bd*cd*gd;
+    an = bp*gp + bd*gd;
     
-    /////////////////////
-    //   Zooplankton   //
-    /////////////////////
-    GZ = lambda*G;
-    
-    // Mortality
-    zeta = lambda*gmax*gmax/(4*umax*kp);
-    MZ = zeta*Z[j][k]*Z[j][k];
-    
-    //
-    // Detritus
-    //
-    GD = (1-lambda)*G;
-    
-
-    // Calculate the flux of detritus into the next gridcell
-    dz = ZZ_w[j][k+1] - ZZ_w[j][k];
-    det = MP + MZ + GD;
-    flux = (r_flux*(1+dz/(2*z_star)) - (dz*f)*det) / ( 1 - dz/(2*z_star) );
-    Rsink = -flux/z_star + (1-f)*det;
-    r_flux = fabs(flux);
+    // Total grazing for zooplankton in terms of nitrate
+    gz = ac/cz < an ? ac/cz : an;
     
     
-    // Remineralization
-    R = r_remin*D[j][k];
+    
+    ////////////////////
+    ///// Detritus /////
+    ////////////////////
+    md = 1 < cp/cd ? m : m*cp/cd;
+    ed_n = (gp + gd - gz);
+    ed_c = (cp*gp + cd*gd - cz*gz)/cd;
+    ed = ed_n < ed_c ? ed_n : ed_c;
     
     
-    //
-    // Update Time Tendencies
-    //
-    dN_dt[j][k] = -U + R;
-    dP_dt[j][k] = U - GP - MP;
-    dZ_dt[j][k] = GZ - MZ;
-    dD_dt[j][k] = -R + MP + MZ + GD;
+    if (fabs(ZZ_phi[j][k]) > 300)
+    {
+        rremin = rd;
+    }
+    else
+    {
+        rremin = rs;
+    }
     
-//    fprintf(stderr,"dN = %le, dP = %le, dZ = %le, dD = %le \n ", dN_dt[j][k], dP_dt[j][k], dZ_dt[j][k], dD_dt[j][k] );
     
-    return r_flux;
+    
+    
+    dN_dt[j][k] = -R*P + (m - md)*P*P + mu1p*P + twoThirds*(mu1z*Z + mu2z*Z*Z) + gp + gd - gz - ed + rremin*D;
+    dP_dt[j][k] = R*P - gp - m*P*P - mu1p*P;
+    dZ_dt[j][k] = gz - mu1z*Z - mu2z*Z*Z;
+    dD_dt[j][k] = md*P*P + oneThird*(mu1z*Z + mu2z*Z*Z) + ed - rremin*D - gd;
+    
     
 }
 
@@ -1560,11 +1663,44 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real T = 0;                              // Placeholder for Temperature
     real N = 0;                              // Placeholder for Nitrate
     
+    // single nitrate parameters //
+    real umax = 0;
+    real f = 0;
+    
+    // npzd parameters //
+    // nitrate params
+    real cp = 0;
+    real cz = 0;
+    real cd = 0;
+    
+    // phytoplankton params
+    real pi_a = 0;
+    real q10 = 0;
+    real kn = 0;
+    real mu1p = 0;
+    real mu2p = 0;
+    
+    // zooplankton params
+    real gmax = 0;
+    real kg = 0;
+    real gthr = 0;
+    real bp = 0;
+    real bd = 0;
+    real mu1z = 0;
+    real mu2z = 0;
+    
+    // detrital params
+    real rs = 0;
+    real rd = 0;
+    real wsink = 0;
+    
+
+    
     switch (bgcModel)
     {
         case BGC_NONE:
         {
-            return;
+            break;
         }
             
         case BGC_NITRATEONLY:
@@ -1572,24 +1708,20 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 
             
             // Parameters
-            real a_temp = bgc_params[0];
-            real b_temp = bgc_params[1];
-            real c_temp = bgc_params[2];
-            real alpha = bgc_params[3];
-            real monod = bgc_params[4];
+            umax = bgc_params[0];
+            f = bgc_params[1];
             
             for (j = 0; j < Nx; j++)
             {
                 r_flux = 0;
                 for (k = Nz-1; k >= 0; k--)
                 {
-                    
                     // Temperature and Irradiance
                     T = phi[idx_buoy][j][k];
                     N = phi[idx_nitrate][j][k];
                     
                     // Calculate the tendency for the single nitrate model
-                    r_flux = single_nitrate(t,j,k,phi,dphi_dt,N,T,a_temp,b_temp,c_temp,alpha,monod,r_flux);
+                    r_flux = single_nitrate(t,j,k,phi,dphi_dt,N,T,umax,f,r_flux);
                     
                 }
             }
@@ -1602,14 +1734,45 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
             //
         case BGC_NPZD:
         {
+            
+            // npzd parameters //
+            // nitrate params
+            real cp = bgc_params[0];
+            real cz = bgc_params[1];
+            real cd = bgc_params[2];
+            
+            // phytoplankton params
+            umax = bgc_params[3];
+            real pi_a = bgc_params[4];
+            real q10 = bgc_params[5];
+            real kn = bgc_params[6];
+            real mu1p = bgc_params[7];
+            real mu2p = bgc_params[8];
+            
+            // zooplankton params
+            real gmax = bgc_params[9];
+            real kg = bgc_params[10];
+            real gthr = bgc_params[11];
+            real bp = bgc_params[12];
+            real bd = bgc_params[13];
+            real mu1z = bgc_params[14];
+            real mu2z = bgc_params[15];
+            
+            // detrital params
+            real rs = bgc_params[16];
+            real rd = bgc_params[17];
+            real wsink = bgc_params[18];
+            
+            
             for (j = 0; j < Nx; j++)
             {
-                r_flux = 0; // set surface flux to zero at the start of every k loop.
+                r_flux = 0;
                 for (k = Nz-1; k >= 0; k--)
                 {
-                    r_flux = npzd(t,j,k,phi,dphi_dt,r_flux);
+                    npzd(t,j,k,phi,dphi_dt,cp,cz,cd,umax,pi_a,q10,kn,mu1p,mu2p,gmax,kg,gthr,bp,bd,mu1z,mu2z,rs,rd,wsink);
                 }
             }
+            
             break;
         }
             //
@@ -1977,6 +2140,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real cfl_y = 0;
     real cfl_z = 0;;
     real cfl_igw = 0;
+    real cfl_sink = 0;
     real u_max = 0;
     real w_dz = 0;
     real w_dz_max = 0;
@@ -1987,15 +2151,14 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real cfl_phys = 0;
     real n_col = 0;
     real n_max = 0;
+    real wsink = 0;
     
     // TODO remove: testing purposes
     real siso = 0;
     real sgm = 0;
     real z = 0;
-    real jind = 0;
-    real kind = 0;
-    real jind1 = 0;
-    real kind1 = 0;
+    real sink_dz = 0;
+    real sink_dz_max = 0;
     
     real umax = 0;
     real wmax = 0;
@@ -2072,8 +2235,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             if (uval > u_max)
             {
                 u_max = uval;
-                jind = j;
-                kind = k;
             }
             
             /// Max effective diffusivity
@@ -2101,9 +2262,15 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             if (w_dz > w_dz_max)
             {
                 w_dz_max = w_dz;
-                jind1 = j;
-                kind1 = k;
             }
+            
+//            // Calculate CFL conditions for sinking speeds
+//            sink_dz = wsink_wrk[j][k] * _dz_w[j][k];
+//            if (sink_dz > sink_dz_max)
+//            {
+//                sink_dz_max = sink_dz;
+//
+//            }
             
             // Max effective diffusivity
             // A.L.S.: For reasons I don't fully understand, the GM eddy advection
@@ -2128,21 +2295,16 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             sgm = fabs(Siso_true);
             if (sgm > sgm_max)
             {
-                jind = j;
-                kind = k;
                 sgm_max = sgm;
             }
             if (siso > sgm_max)
             {
-                jind1 = j;
-                kind1 = k;
                 siso_max = siso;
             }
         }
     }
     
     
-//    fprintf(stderr," sgm: %f %f %le \n siso: %f %f %le \n",jind, kind, sgm_max, jind1, kind1, siso_max);
     // Calculate the Brunt Vaisalla Frequency
     // Chelton and others
     for (j = 0; j < Nx; j++)
@@ -2175,19 +2337,14 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/n_max;
-    
-//    if (t > 4*day)
-//    {
-    
-//        fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, cfl_z = %le, cfl_igw = %le \n",cfl_u,cfl_w, cfl_y,cfl_z,cfl_igw);
-//    }
-//    fprintf(stderr,"cfl_u = %le, umax = %le, j = %f, k = %f \n, cfl_w = %le, wmax = %le, j = %f, k =  %f \n",cfl_u,u_max,jind, kind, cfl_w, w_dz_max,jind1,kind1);
+    cfl_sink = 0.5/sink_dz_max;
+
     
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
-    cfl_phys = fmin(cfl_phys,cfl_igw);
-    //    printf(" CFL condition is %f\n", cfl_phys);
+    cfl_phys = fmin(fmin(cfl_sink,cfl_igw),cfl_phys);
     cfl_dt = cfl_phys;
+    
     
     ////////////////////////////////
     ///// END CALCULATING CFLS /////
@@ -2581,6 +2738,77 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
 
 
 
+/**
+ *
+ * conserve_nitrate
+ *
+ * Enforce that total nitrate is conerved.
+ *
+ */
+void conserve_nitrate(real t, real dt, real *** phi, real Nint)
+{
+    int j,k,d;
+    real remin_adj = 0;
+    real Ntot_dt = 0; // the total nitrate after one time step
+    real Ntot_col = 0;
+    real N = 0;
+    real dz = 0;
+    int idx_detritus = idx_nitrate + MP + MZ + 1;
+    
+    
+    switch (bgcModel)
+    {
+        case BGC_NONE:
+        {
+             break;
+        }
+            
+        case BGC_NITRATEONLY:
+        {
+            // In order to conserve the total nitrate in the domain, calculate the amount of
+            // nitrate and compare it to the prevously calculated amount.
+            if (conserv_Ntot)
+            {
+                Ntot_dt = calcTracAvg(t,phi,idx_nitrate,Ntot_dt,true);    // calculate the total nitrate
+                remin_adj = Nint - Ntot_dt;   // adjustment to remineralization
+            }
+            
+            
+            // Caclulate the instantaneous remineralizaiton of nutrients
+            // that flux from the lowest grid cell.
+            for (j = 0; j < Nx; j++)
+            {
+                // Assign nitrate to the grid-boxes based on the proportionality of the nitrate in the column
+                for (k = 0; k < Nz; k++)
+                {
+                    N = phi[idx_nitrate][j][k];
+                    phi[idx_nitrate][j][k] += remin_adj*N/(Ntot_dt);
+                }
+            }
+            
+            
+            break;
+        }
+        case BGC_NPZD:
+        {
+            
+            
+            
+            
+            
+            
+            break;
+            
+        }
+        default:
+        {
+            printf("Error: MODELTYPE is undefined");
+            break;
+        }
+    }
+            
+    
+}
 
 
 
@@ -3120,6 +3348,9 @@ int main (int argc, char ** argv)
     real xval = 0;
     real xval1 = 0;
     
+    // BGC parameters
+    real wsink = 0;
+    
     // Stores data required for parsing input parameters
     paramdata params[NPARAMS];
     int paramcntr = 0;
@@ -3436,6 +3667,7 @@ int main (int argc, char ** argv)
     VECALLOC(impl_B,Nz);
     VECALLOC(impl_C,Nz);
     VECALLOC(impl_D,Nz);
+    MATALLOC(wsink_wrk,Nx,Nz+1);
     MATALLOC(Kgm_psi,Nx+1,Nz+1);
     MATALLOC(Kgm_u,Nx+1,Nz);
     MATALLOC(Kgm_w,Nx,Nz+1);
@@ -3473,6 +3705,7 @@ int main (int argc, char ** argv)
     MATALLOC(db_dz,Nx+1,Nz+1);
     MATALLOC(db_dx_wrk,Nx+1,Nz+1);
     MATALLOC(db_dz_wrk,Nx+1,Nz+1);
+    MATALLOC(bot_nflux,max_det,Nx);
     
     /////////////////////////////////
     ///// END MEMORY ALLOCATION /////
@@ -3907,6 +4140,48 @@ int main (int argc, char ** argv)
         }
     }
     
+    // Calculates the sinking speed of detritus tapering in the bottom boundary layer.
+    switch (bgcModel)
+    {
+        case BGC_NONE:
+        {
+            // no sinking occurs
+            break;
+        }
+        case BGC_NITRATEONLY:
+        {
+            // no explicit sinking occurs
+            break;
+        }
+        case BGC_NPZD:
+        {
+            wsink = bgc_params[10];
+            // Calculate the profiles of sinking speeds for the entire domain
+            // sinking speeds are calculated at the w points
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz+1; k++)
+                {
+                    // within the boundary layer, taper the vertical sinking to zero.
+                    if (fabs(ZZ_w[j][k]) > (hb_psi[j] - Hbbl))
+                    {
+                        wsink_wrk[j][k] = wsink - (wsink/Hbbl) * (fabs(ZZ_w[j][k]) - hb_psi[j] + Hbbl);
+                    }
+                    else
+                    {
+                        wsink_wrk[j][k] = wsink;
+                    }
+                    
+                }
+            }
+            break;
+        }
+        default:
+            printf("ERROR: No bgcModel type chosen to indicate sinking speed");
+            break;
+    }
+    
+    
     //////////////////////////
     ///// END GRID SETUP /////
     //////////////////////////
@@ -3978,6 +4253,13 @@ int main (int argc, char ** argv)
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
     {
+        // Step 0: If we enforce a total tracer concentration to be conserved, then calculate the total tracer in the domain
+        if (conserv_Ntot)
+        {
+            Nint = calcTracAvg(t,phi_in,idx_nitrate,Nint,true);
+        }
+        
+        
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (timeSteppingScheme)
         {
@@ -4009,7 +4291,6 @@ int main (int argc, char ** argv)
                     dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
                     // Save h1 for the next time step.
                     h1 = dt;
-                    printf("dt = %f \n",dt);
                     
                     // copy over data for the next timestep
                     memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
@@ -4024,6 +4305,7 @@ int main (int argc, char ** argv)
             }
             case TIMESTEPPING_AB3:
             {
+                
                 // calculate the first few timesteps with lower order schemes
                 if (nIters == 0)
                 {
@@ -4050,6 +4332,7 @@ int main (int argc, char ** argv)
                     h2 = h1;
                     h1 = dt;
                 }
+                
                 break;
             }
             default:
@@ -4061,9 +4344,9 @@ int main (int argc, char ** argv)
         
         
         
-        // Step 2: Add implicit vertical diffusion
+        // Step 2: Add implicit vertical diffusion and remineralization
+        conserve_nitrate(t,dt,phi_out,Nint);
         do_impl_diff(t,dt,phi_out);
-        
         
         
         // Step 3 (optional): apply zonal barotropic pressure gradient correction

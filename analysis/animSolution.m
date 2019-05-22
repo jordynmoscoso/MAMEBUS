@@ -212,7 +212,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
           plot(xx_psi,-hb_psi,'k')
           hold off
 %           disp(n)
-        case 3 %%% Buoyancy
+        case var_id %%% Buoyancy
 %           contourf(XX_tr,ZZ_tr,phi,20)
 %           shading interp
           pcolor(XX_tr,ZZ_tr,phi)
@@ -232,7 +232,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
 %       pcolor(XX_phi,ZZ_phi,phi);
 
            
-%       caxis([0 20]);
+      caxis([0 1]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);
 % axis([0 Lx -500 0])

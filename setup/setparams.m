@@ -65,8 +65,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 60; %%% Surface mixed layer thickness
-  Hbbl = 60; %%% Bottom boundary layer thickness
+  Hsml = 50; %%% Surface mixed layer thickness
+  Hbbl = 40; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   
@@ -223,7 +223,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
         disp('Nitrate only')
       case BGC_NPZD 
          [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr,Nx,Nz);
-          
+         
          disp('NPZD Model')
       case BGC_SSEM
         [bgc_params, bgc_init, nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr,Nx,Nz);
@@ -237,6 +237,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
   PARAMS = addParameter(PARAMS,'bgcFile',bgcFile,PARM_STR);
   PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
+  
   
   
  
@@ -373,9 +374,21 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
   T_relax_buoy(XX_tr>=L_relax) = -1;
   
+  
   T_relax_veloc = -ones(Nx,Nz);
 %   T_relax_veloc(XX_tr<L_relax) = T_relax_max;
 %   T_relax_veloc(XX_tr>=L_relax) = -1;
+  N_relax_max = 100*t1day;
+
+%   if modeltype > 1
+%       % relax to initial nitrate concentration on the western boundary
+%       T_relax_N = -ones(Nx,Nz);
+%       T_relax_N(XX_tr<L_relax) = 1 ./ (1/N_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
+%       T_relax_buoy(XX_tr>=L_relax) = -1;
+%   else
+      T_relax_N = -ones(Nx,Nz);
+%   end
+    T_relax_P = T_relax_max*ones(Nx,Nz);
   
   %%% Add relaxation to an atmospheric temperature profile
   buoy_surf_max = 20;
@@ -390,6 +403,11 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   %%% Relax nitrate to initial conditions
   bgc_relax = bgc_init;
+  bgc_relax_none = zeros(Nx,Nz);
+  
+  Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
+  Ncline = 1000; % restore the nutrients at depth
+  bgc_relax(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
  
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
@@ -400,10 +418,14 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   switch (modeltype)
       case BGC_NITRATEONLY
           phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax,[1 Nx Nz]);
-          phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax,[1 Nx Nz]);
+          phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax_none,[1 Nx Nz]);
       case BGC_NPZD
-          phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax(:,:,1),[1 Nx Nz]);
-          phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax(:,:,1),[1 Nx Nz]);
+          phyto_relax = zeros(Nx,Nz);
+          phyto_relax(abs(ZZ_tr) < Hsml) = eps;
+          
+          phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax_none,[1 Nx Nz]);
+          phi_relax_all(IDX_NITRATE+1,:,:) = reshape(phyto_relax(:,:,1),[1,Nx,Nz]);
+          phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax_none,[1 Nx Nz]);
       case BGC_SSEM
           phi_relax_all(3:end,:,:) = reshape(bgc_relax,[Nbgc Nx Nz]);
   end
@@ -419,11 +441,12 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% TODO NEEDS TO BE UPDATED
   switch (modeltype)
       case BGC_NITRATEONLY
-          T_relax_all(IDX_NITRATE,:,:) = 100*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(IDX_NITRATE,:,:) = reshape(T_relax_N,[1 Nx Nz]); 
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_NPZD
-          T_relax_all(IDX_NITRATE,:,:) = 100*ones(1,Nx,Nz); % Nitrate restored at 100 days conserved
+          T_relax_all(IDX_NITRATE,:,:) = reshape(T_relax_N,[1 Nx Nz]); 
           T_relax_all(IDX_NITRATE+1:IDX_NITRATE+3,:,:) = -ones(3,Nx,Nz); % Conserve all other parts of npzd model
+          T_relax_all(IDX_NITRATE+1,:,:) = reshape(T_relax_P,[1 Nx Nz]); 
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_SSEM
           T_relax_all(IDX_NITRATE:end,:,:) = -ones(Nbgc,Nx,Nz);

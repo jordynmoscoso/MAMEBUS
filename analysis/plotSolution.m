@@ -32,7 +32,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         disp('You have chosen a variable which does not exist')
     end
     
-
+    show_w = true; % plots vertical velocities
 
     %%%%%%%%%%%%%%%%%%%%%
     %%%%% VARIABLES %%%%%
@@ -44,7 +44,8 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     params_file = fullfile(dirpath,[run_name,'_in']);  
     
     [dt_s dt_s_found] = readparam(params_file,'monitorFrequency','%f');
-
+    [modeltype modeltype_found] = readparam(params_file,'bgcModel','%u');
+    
     %%% Plotting grid
     [Nx Nx_found] = readparam(params_file,'Nx','%u');
     [Nz Nz_found] = readparam(params_file,'Nz','%u');
@@ -54,6 +55,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     error('Could not read grid parameters');
     end    
 
+    dx = Lx/Nx;
     %%% Read grid parameters
     [h_c h_c_found] = readparam(params_file,'h_c','%le');
     [theta_s theta_s_found] = readparam(params_file,'theta_s','%lf');
@@ -110,13 +112,6 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     %%% fit into tmax, plus one initial save, plus one final save
     Noutput = floor(endTime/dt_s) + 2;
 
-    %%% Make a movie of the data - allocate a movie array large enough to
-    %%% hold the largest possible number of frames
-    nfig = 107;
-    figure(nfig);
-    clf;
-    axes('FontSize',18);
-
     
     %%% Upload the names of the files in order to pick out the max N value
     A = dir(dirpath);
@@ -149,9 +144,50 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     LL = yearLength*avgTime;
     avgStart = round(lastVal - LL); % Calculate where we start the average.
     
+    
     if avgStart < 1
         avgStart = 0;
     end
+    
+    ndt = 0;
+    
+    if (var_id == 0)
+        title_name = 'Zonal Velocity';
+    elseif (var_id == 1)
+        title_name = 'Meridional Velocity';
+    elseif (var_id == 2)
+        title_name = 'Buoyancy';
+    else
+        % title names
+        switch (modeltype)
+            case 0
+                title_name = 'Depth Tracer';
+            case 1 % nitrate only
+                if (var_id == 3)
+                    title_name = 'Nitrate';
+                else
+                    title_name = 'Depth Tracer';
+                end
+            case 2 % npzd
+                if (var_id == 3)
+                    title_name = 'Nitrate';
+                elseif (var_id == 4)
+                    title_name = 'Phytoplankton';
+                elseif (var_id == 5)
+                    title_name = 'Zooplankton';
+                elseif (var_id == 6)
+                    title_name = 'Detritus';
+                elseif (var_id == 7)
+                    title_name = 'Passive Tracer';
+                else
+                    title_name = 'Depth Tracer';
+                end
+            otherwise
+                title_name = 'Depth Tracer';
+        end
+    end
+            
+    
     
     disp(['Start time is ' num2str(avgStart*dt_s/t1year) ' yrs']);
     disp(['End time is ' num2str(lastVal*dt_s/t1year) ' yrs']);
@@ -159,18 +195,58 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     %%% Create a placeholder for avgVals
     if (plot_trac)
         avgVals = zeros(Nx,Nz);
+        
+        if (modeltype == 1)
+            avgUptake = zeros(Nx,Nz);
+            
+            %%% BGC parameters
+            qsw = 340;
+            kw = 0.04;
+            I0 = 0.45*qsw;
+            T0 = 20;
+            r = 0.05;
+            umax = 2.6;
+            kpar = kw;
+            
+            %%% Light Profile.
+            IR = I0*exp(kpar.*ZZ_tr);
+            IR = IR./(sqrt(IR.^2 + I0.^2));
+        end
     else
         avgVals = zeros(Nx+1,Nz+1);
     end
     
-%     lastVal = 1061;
+%     lastVal = 1200;
 %     avgStart = lastVal - LL;
     
+    tot = zeros(Nx,Nz);
+    conserve = zeros(lastVal-avgStart,1);
+    area = 0;
+    CN = true;
+    trac = 1;
     %%% Averaging loop
     for n = avgStart:lastVal
         if (plot_trac)
             data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
             phi = readOutputFile(data_file,Nx,Nz);
+            
+            
+            
+            %%% calculate the uptake offline for the single nitrate bgc model
+            if (modeltype == 1 && var_id == 3)
+                buoy_id = 2;
+                buoy_file = fullfile(dirpath,['TRAC',num2str(buoy_id),'_n=',num2str(n),'.dat']);
+                buoy = readOutputFile(data_file,Nx,Nz);
+                
+                
+                t_uptake = exp(r.*(buoy - T0*ones(Nx,Nz)));
+                uptake = umax.*t_uptake.*IR.*phi;
+                
+                avgUptake = avgUptake + uptake;
+            end
+            
+            
+
         else
             %%% Load different streamfunctions      
             switch (var_id)
@@ -186,11 +262,21 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
           phi = readOutputFile (data_file,Nx+1,Nz+1);
         end
         
-        avgVals = avgVals + phi/LL;
+
+        avgVals = avgVals + phi;
+        ndt = ndt + 1;
     end
     
+    avgVals = avgVals/ndt;
+    
+    Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
+    Ncline = 250; % Approximate guess of the depth of the nutracline
+    Ninit(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
+
+        
     %%% Plot the average values %%%
-    titlestr = ['Average values over ', num2str(avgTime), ' year(s)'];
+    timelengthstr = lastVal*dt_s/t1year - avgStart*dt_s/t1year;
+    titlestr = [ title_name,' averaged over the final ', num2str(timelengthstr) , ' year(s)'];
     figure
     if (plot_trac)
         if (var_id == 0 || var_id == 1)
@@ -202,22 +288,29 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             minval = max(max(max(avgVals)),maxspeed);
             minval = abs(min(min(min(avgVals)),-minval));
             caxis([-minval minval]);
+            title(titlestr)
         elseif (var_id == 2) % plot buoyancy
             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:1:20]);
             colorbar; 
             colormap default;
+            title(titlestr)
 %             clabel(C,h,'Color','w');  
 %             set(h,'ShowText','on'); 
         else % plot biogeochemistry
-            pcolor(XX_tr,ZZ_tr,avgVals)
+%             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:2:30]);
+%             clabel(C,h,'Color','w');   
+%             set(h,'ShowText','on'); 
+            pcolor(XX_tr,ZZ_tr,avgVals);
             shading interp
-            h = colorbar; 
+            colorbar; 
             colormap jet;
-            maxspeed = 0;
-            minval = max(max(max(avgVals)),maxspeed);
-            minval = abs(min(min(min(avgVals)),-minval));
-            caxis([0 minval]);
+%             caxis([min(min(avgVals)) max(max(avgVals))])
+            caxis([0 0.11])
+            title(titlestr)
+            
         end
+        
+%         set(h,'FontSize',18);
         
         % Use a divergent colorscheme if we are looking at positive or
         % negative values
@@ -235,12 +328,45 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         h = colorbar; 
         colormap redblue;
         caxis([-limval limval]);
-    end
         title(titlestr)
-        hold on
-        plot(xx_psi,-hb_psi,'k')
-        hold off
-        set(h,'FontSize',18);
+    end
+%         title(titlestr)
+%         hold on
+%         plot(xx_psi,-hb_psi,'k')
+%         hold off
+%         set(h,'FontSize',18);
 
+%     if (show_w)
+%         avgVals = zeros(Nx+1,Nz+1);
+%         wvel = zeros(Nx,Nz+1);
+%         dx = Lx/Nx;
+%         
+%         for n = avgStart:lastVal
+%             data_file = fullfile(dirpath,['PSIR_n=',num2str(n),'.dat']);
+%             phi = readOutputFile (data_file,Nx+1,Nz+1);
+%             for j = 1:Nx
+%                 wvel(j,:) = (avgVals(j+1,:) - avgVals(j,:))/dx;
+%             end
+%             avgVals = avgVals + phi;
+%         end
+%         
+%         % calculate the average of the residual stream function
+%         avgVals = avgVals/ndt;
+%         
+%         
+%         for j = 1:Nx
+%             wvel(j,:) = (avgVals(j+1,:) - avgVals(j,:))/dx;
+%         end
+%         
+%         figure
+%         pcolor(XX_w,ZZ_w,wvel)
+%         shading interp
+%         colormap redblue;
+%         colorbar
+%         
+%     end
+        
+        
+        
     %%% TO DO: UPDATE FUNCTION TO INCLUDE VERTICAL VELOCITIES
 end

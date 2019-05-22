@@ -24,20 +24,16 @@ switch (model_type)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     case 1 %%% Nitrate Only Model
-        a_temp = 0.6/t1day;
-        b_temp = 1.066;
-        c_temp = 1;
-        alpha = 0.025/t1day; % s^-1 (W/m^2)^-1
-        monod = 0;
+        umax = 2.6/t1day; % maximum uptake rate
+        f = 0.1;          % fraction of exported material
         
-        params = [a_temp, b_temp, c_temp, alpha, monod];
+        params = [umax,f];
         
         %%% Initial nitrate profile (Hyperbolic)
         Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
         Ncline = 250; % Approximate guess of the depth of the nutracline
         bgc_init = -Nmax*tanh(ZZ_tr./Ncline);
     
-        lp = 0; lz = 0;
         nparams = length(params);
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -45,25 +41,64 @@ switch (model_type)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     case 2 %%% NPZD Model
-        % All the params are atrociosly hard-coded right now. will change
-        % after AGU.
-        params = [];
-        nparams = 0;
+
+        %%% Here's another model. The HADOCC model.
+        % can be updated to keep track of dic and alk
+        
+        % nitrate parameters
+        cp = 6.625;
+        cz = 5.626;
+        cd = 7.5;
+        
+        % phytoplankton parameters
+        umax  = 0.8/t1day;     % 1/d max photosynthetic rate
+        pi_a  =  0.0055/t1day; % m^2 /(W d) initial slope of PI curve
+        q10   = 1;             % temp-dependent growth
+        kn    = 0.1;           % mmol/m^3 half saturation
+        mu1p  = 0.02/t1day;    % 1/d linear mortality
+        mu2p  = 0.05/t1day;    % m^3/mmol d quadratic mortality
+        
+        % zooplantkon parameters
+        gmax  = 1.0/t1day;     % 1/d max grazing rate
+        kg    = 0.75;          % half saturation
+        gthr  = 0.1/t1day;     % 1/d grazing threshold
+        bp    = 0.3;           % assimilation efficiency
+        bd    = 0.5;
+        mu1z  = 0.05/t1day;    % 1/d linear mortality
+        mu2z  = 0.2/t1day;     % m^3/mmol d density dependent mortality
+        
+        % detritus
+        rs    = 0.1/t1day;     % remin shallow
+        rd    = 0.02/t1day;    % remin deep
+        wsink = 10/t1day;      % m/d sinking speed
+        
+        
+        params = [cp, cz, cd, ...
+                    umax, pi_a, q10, kn, mu1p, mu2p, ...
+                    gmax, kg, gthr, bp, bd, mu1z, mu2z, ...
+                    rs, rd, wsink];
+        nparams = length(params);
         
         spec_tot = NP + NZ + ND + 1; % total species available,
         bgc_init = zeros(Nx,Nz,spec_tot); %%% Add one for nitrate
         
-        Pmax = 0.01; % mmol/m3
-        Zmax = 0;
+        Pcline = 250;
+        Pmax = 0.1; % mmol/m3
         Dmax = 0;
         
-        euph_init = zeros(Nx,Nz);
-        euph_init(ZZ_tr > -110) = 1;
+%         figure(301)
+%         pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1))
+%         title('Initial Nitrate Concentration')
+%         colorbar
+%         shading interp
+        
+        euph_init = Pmax*ones(Nx,Nz);
+
         
         %%% Initial nitrate profile (Hyperbolic)
         Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
         Ncline = 250; % Approximate guess of the depth of the nutracline
-        bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
+        bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr/Ncline);
         
         figure(300)
         pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1))
@@ -71,11 +106,22 @@ switch (model_type)
         colorbar
         shading interp
         
-        bgc_init(:,:,2) = Pmax*euph_init;
-        bgc_init(:,:,3) = Zmax*zeros(Nx,Nz);
+        
+        bgc_init(:,:,2) = euph_init;
+        bgc_init(:,:,3) = euph_init;
         bgc_init(:,:,4) = Dmax*zeros(Nx,Nz);
         
         
+        figure(302)
+        pcolor(XX_tr,ZZ_tr,euph_init)
+        shading interp
+        colorbar
+        caxis([0 Pmax])
+        title('Initial Phytoplankton Concentration')
+        
+        
+        
+
     case 3 %%% Size Structured NPZ model based on Banas
         nparams = 0; 
         
