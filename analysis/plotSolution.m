@@ -151,41 +151,52 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     
     ndt = 0;
     
-    if (var_id == 0)
-        title_name = 'Zonal Velocity';
-    elseif (var_id == 1)
-        title_name = 'Meridional Velocity';
-    elseif (var_id == 2)
-        title_name = 'Buoyancy';
+    if (plot_trac)
+        if (var_id == 0)
+            title_name = 'Zonal Velocity';
+        elseif (var_id == 1)
+            title_name = 'Meridional Velocity';
+        elseif (var_id == 2)
+            title_name = 'Buoyancy';
+        else
+            % title names
+            switch (modeltype)
+                case 0
+                    title_name = 'Depth Tracer';
+                case 1 % nitrate only
+                    if (var_id == 3)
+                        title_name = 'Nitrate';
+                    else
+                        title_name = 'Depth Tracer';
+                    end
+                case 2 % npzd
+                    if (var_id == 3)
+                        title_name = 'Nitrate';
+                    elseif (var_id == 4)
+                        title_name = 'Phytoplankton';
+                    elseif (var_id == 5)
+                        title_name = 'Zooplankton';
+                    elseif (var_id == 6)
+                        title_name = 'Detritus';
+                    elseif (var_id == 7)
+                        title_name = 'Passive Tracer';
+                    else
+                        title_name = 'Depth Tracer';
+                    end
+                otherwise
+                    title_name = 'Depth Tracer';
+            end
+        end
     else
-        % title names
-        switch (modeltype)
-            case 0
-                title_name = 'Depth Tracer';
-            case 1 % nitrate only
-                if (var_id == 3)
-                    title_name = 'Nitrate';
-                else
-                    title_name = 'Depth Tracer';
-                end
-            case 2 % npzd
-                if (var_id == 3)
-                    title_name = 'Nitrate';
-                elseif (var_id == 4)
-                    title_name = 'Phytoplankton';
-                elseif (var_id == 5)
-                    title_name = 'Zooplankton';
-                elseif (var_id == 6)
-                    title_name = 'Detritus';
-                elseif (var_id == 7)
-                    title_name = 'Passive Tracer';
-                else
-                    title_name = 'Depth Tracer';
-                end
-            otherwise
-                title_name = 'Depth Tracer';
+        if (var_id == 0)
+            title_name = 'Residual Streamfunction';
+        elseif (var_id == 1)
+            title_name = 'Mean Streamfunction';
+        else 
+            title_name = 'Eddy Streamfunction';
         end
     end
+        
             
     
     
@@ -196,7 +207,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     if (plot_trac)
         avgVals = zeros(Nx,Nz);
         
-        if (modeltype == 1)
+        if (modeltype == 1 || modeltype == 2)
             avgUptake = zeros(Nx,Nz);
             
             %%% BGC parameters
@@ -233,14 +244,19 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             
             
             %%% calculate the uptake offline for the single nitrate bgc model
-            if (modeltype == 1 && var_id == 3)
+            if (modeltype == 2 && var_id == 4)
                 buoy_id = 2;
+                n_id = 3;
+                data_file = fullfile(dirpath,['TRAC',num2str(n_id),'_n=',num2str(n),'.dat']);
+                N = readOutputFile(data_file,Nx,Nz);
                 buoy_file = fullfile(dirpath,['TRAC',num2str(buoy_id),'_n=',num2str(n),'.dat']);
                 buoy = readOutputFile(data_file,Nx,Nz);
+                r = 0.05;
                 
-                
-                t_uptake = exp(r.*(buoy - T0*ones(Nx,Nz)));
-                uptake = umax.*t_uptake.*IR.*phi;
+%                 t_uptake = exp(r.*(buoy - T0*ones(Nx,Nz)));
+                t_uptake = 1;
+                umax = 0.1;
+                uptake = umax.*t_uptake.*IR.*N;
                 
                 avgUptake = avgUptake + uptake;
             end
@@ -273,6 +289,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     Ncline = 250; % Approximate guess of the depth of the nutracline
     Ninit(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
 
+
         
     %%% Plot the average values %%%
     timelengthstr = lastVal*dt_s/t1year - avgStart*dt_s/t1year;
@@ -281,7 +298,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     if (plot_trac)
         if (var_id == 0 || var_id == 1)
             pcolor(XX_tr,ZZ_tr,avgVals)
-            shading interp
+%             shading interp
             h = colorbar; 
             colormap redblue;
             maxspeed = 0;
@@ -294,8 +311,8 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             colorbar; 
             colormap default;
             title(titlestr)
-%             clabel(C,h,'Color','w');  
-%             set(h,'ShowText','on'); 
+            clabel(C,h,'Color','w');  
+            set(h,'ShowText','on'); 
         else % plot biogeochemistry
 %             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:2:30]);
 %             clabel(C,h,'Color','w');   
@@ -304,9 +321,10 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             shading interp
             colorbar; 
             colormap jet;
-%             caxis([min(min(avgVals)) max(max(avgVals))])
-            caxis([0 0.11])
+            caxis([min(min(avgVals)) max(max(avgVals))])
+%             caxis([0 0.11])
             title(titlestr)
+            
             
         end
         
@@ -322,7 +340,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         limval = 2;
         psi_r_lim = min(psi_r_lim,limval);
         psi_r_lim = max(psi_r_lim,-limval);
-%       	contourf(XX_psi,ZZ_psi,psi_r_lim,[-2:0.2:2]); 
+%       	contourf(XX_psi,ZZ_psi,psi_r_lim,[-2:0.5:2]); 
         pcolor(XX_psi,ZZ_psi,psi_r_lim)
         shading interp
         h = colorbar; 
@@ -330,6 +348,9 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         caxis([-limval limval]);
         title(titlestr)
     end
+    
+    
+    
 %         title(titlestr)
 %         hold on
 %         plot(xx_psi,-hb_psi,'k')

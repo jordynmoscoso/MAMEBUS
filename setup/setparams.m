@@ -24,7 +24,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %%% examples of how to prescribe arbitrary tracer inputs
 
 %%% If set true, set up this run for the cluster
-  use_cluster = true;
+  use_cluster = false;
   use_intel = false;
   use_pbs = use_cluster;
   cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
@@ -66,7 +66,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
   Hsml = 50; %%% Surface mixed layer thickness
-  Hbbl = 40; %%% Bottom boundary layer thickness
+  Hbbl = 50; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   
@@ -148,8 +148,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   disp(['Shelf Depth: ', num2str(shelfdepth)])
   if shelfdepth < Hsml + Hbbl
-      disp('Shelf is smaller than sml and bbl')
-      return
+      disp('Full depth mixed layer on the shelf')
   end
   
   Xtopog = 200*m1km;

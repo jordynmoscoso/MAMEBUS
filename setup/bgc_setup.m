@@ -68,7 +68,7 @@ switch (model_type)
         mu2z  = 0.2/t1day;     % m^3/mmol d density dependent mortality
         
         % detritus
-        rs    = 0.1/t1day;     % remin shallow
+        rs    = 0.075/t1day;     % remin shallow
         rd    = 0.02/t1day;    % remin deep
         wsink = 10/t1day;      % m/d sinking speed
         
@@ -97,8 +97,9 @@ switch (model_type)
         
         %%% Initial nitrate profile (Hyperbolic)
         Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-        Ncline = 250; % Approximate guess of the depth of the nutracline
+        Ncline = 50; % Approximate guess of the depth of the nutracline
         bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr/Ncline);
+%         bgc_init(:,:,1) = Nmax*ones(Nx,Nz);
         
         figure(300)
         pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1))

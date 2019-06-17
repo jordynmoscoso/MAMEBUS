@@ -20,7 +20,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   addpath ../utils;
   addpath ./redblue;
   
-  mov_on = false;
+  mov_on = true;
   if plot_trac
     mov_name = strcat(run_name,'_',num2str(var_id));
   else
@@ -232,7 +232,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
 %       pcolor(XX_phi,ZZ_phi,phi);
 
            
-      caxis([0 1]);
+%       caxis([0 1]);
       set(h,'FontSize',18);
 %       axis([0 1 -1 0]);
 % axis([0 Lx -500 0])
