@@ -22,9 +22,9 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
 %%% TODO move depth tracer and dye tracer to end of tracer matrix as
 %%% examples of how to prescribe arbitrary tracer inputs
-
+  plotfigs = true;
 %%% If set true, set up this run for the cluster
-  use_cluster = false;
+  use_cluster = true;
   use_intel = false;
   use_pbs = use_cluster;
   cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
@@ -65,7 +65,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 50; %%% Surface mixed layer thickness
+  Hsml = 55; %%% Surface mixed layer thickness
   Hbbl = 50; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
@@ -73,7 +73,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %%% TODO this definitely ought to appear later in this script
 
 
-  plotfigs = false;
+
   %%% The number of biogeochemical classes are entered here. 
   if (modeltype > 3)
     modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
@@ -474,7 +474,139 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   
   %%% Uniform diffusivity
-  Kgm = Kgm0*ones(Nx+1,Nz+1);             
+  Kgm = Kgm0*ones(Nx+1,Nz+1);   
+  
+  
+  %%% Calculate the diffusivity with influence from the visbeck et al 1997
+  %%% parameterization
+  buoy = buoy_init;
+  db_dz = zeros(Nx+1,Nz+1);
+  db_dx = zeros(Nx+1,Nz+1);
+  
+  H = hb_psi - (Hbbl + Hsml);
+  H(H < 0) = 0;
+  Hmax = max(H);
+  
+  %%% Buoyancy gradients
+  for jj = 2:Nx
+      for kk = 2:Nz
+          db_dz(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj,kk-1))/(ZZ_tr(jj,kk) - ZZ_tr(jj,kk-1)) + ...
+                         (buoy(jj-1,kk) - buoy(jj-1,kk-1))/(ZZ_tr(jj-1,kk) - ZZ_tr(jj-1,kk-1)));
+          db_dx(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj-1,kk))/dx + (buoy(jj,kk-1) - buoy(jj-1,kk-1))/dx);
+          db_dx(jj,kk) = db_dx(jj,kk) - (ZZ_w(jj,kk) - ZZ_w(jj-1,kk))*db_dz(jj,kk)/dx;
+      end
+  end
+  
+  db_dz(:,1) = db_dz(:,2);
+  db_dz(:,Nz+1) = db_dz(:,Nz);
+  db_dz(1,:) = db_dz(2,:);
+  db_dz(Nx+1,:) = db_dz(Nx,:);
+  
+  db_dx(:,1) = db_dx(:,2);
+  db_dx(:,Nz+1) = db_dx(:,Nz);
+  db_dx(1,:) = db_dx(2,:);
+  db_dx(Nx+1,:) = db_dx(Nx,:);
+  
+  Msq = abs(1e-4*g*db_dx);
+%   figure(401)
+%   pcolor(XX_psi,ZZ_psi,Msq)
+%   title('M^2: Horizontal stratification')
+%   shading interp
+%   colorbar
+  
+  % Calculate the vertical stratification:
+  Nbuoy = sqrt(1e-4*g*db_dz);
+  
+%   figure(400)
+%   pcolor(XX_psi,ZZ_psi,Nbuoy)
+%   title('N: vertical stratification')
+%   shading interp 
+%   colorbar
+  
+  Rd = zeros(Nx+1,Nz+1);
+  Rd_avg = zeros(Nx+1,Nz+1);
+  
+  for jj = 1:Nx+1
+      tval = 0;
+      ncol = 0;
+      for kk = Nz:-1:1
+          if (H(jj) ~= 0)
+              Rd(jj,kk) = max(dx,max(Nbuoy(jj,:))*H(jj)/f0);
+              tval = tval + (Msq(jj,kk)/Nbuoy(jj,kk))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/H(jj);
+          else
+              Rd(jj,kk) = 0;
+          end
+          ncol = ncol + 0.5*(Nbuoy(jj,kk)+Nbuoy(jj,kk+1))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/(f0);
+          rval = max(ncol,dx);
+      end
+      Rd_avg(jj,:) = rval*ones(1,Nz+1);
+      
+      kgm_test(jj,:) = 0.015*Rd(jj,:).^2*tval;
+      kgm_temp(jj,:) = 0.015*Rd_avg(jj,:).^2*tval;
+  end
+  
+  
+  
+%   k_vis_one = 0.015*Msq.*Rd.^2./(Nbuoy);
+%   figure(402)
+%   pcolor(XX_psi,ZZ_psi,Rd_avg)
+%   title('Rd avg')
+%   shading interp 
+%   colorbar
+%   
+%   figure(401)
+%   pcolor(XX_psi,ZZ_psi,Rd)
+%   title('Rd')
+%   shading interp 
+%   colorbar
+%   
+%     figure(404)
+%   pcolor(XX_psi,ZZ_psi,kgm_temp)
+%   title('Kgm: Visbeck, Rd:N_{avg}')
+%   shading interp 
+%   colorbar
+%   
+% 
+% 
+%   figure(403)
+%   pcolor(XX_psi,ZZ_psi,kgm_test)
+%   title('Kgm: Visbeck')
+%   shading interp 
+%   colorbar
+  
+%   for jj = 1:Nx+1
+%     k_vis_barotropic(jj,:) = 0.015*Msq(jj,:)*H(jj)*g./(Nbuoy(jj,:)*f0*f0);
+%   end
+%   figure(404)
+%   pcolor(XX_psi,ZZ_psi,log10(k_vis_barotropic))
+%   title('Kgm: Barotropic Rd')
+%   shading interp 
+%   colorbar
+% 
+%   
+%   for jj = 1:Nx+1
+%     k_vis_bt(jj,:) = 0.015*Msq(jj,:)*H(jj)*g./(ncol_bt(jj)*f0*f0);
+%   end
+%   figure(405)
+%   pcolor(XX_psi,ZZ_psi,(k_vis_bt))
+%   title('Kgm: Barotropic Rd, Integrated N')
+%   shading interp 
+%   colorbar
+  lambda = 0.65;
+  
+  for jj = 1:Nx+1
+      for kk = 1:Nz+1 
+        Kgm(jj,kk) = Kgm(jj,kk)*H(jj)*exp(ZZ_psi(jj,kk)/(lambda*hb_psi(jj)))/Hmax;
+      end
+  end
+  
+  figure(400)
+  pcolor(XX_psi,ZZ_psi,Kgm)
+  shading interp
+  colorbar
+  title(['\lambda = ',num2str(lambda)])
+  
+  
   KgmFile = 'Kgm.dat';
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
   PARAMS = addParameter(PARAMS,'KgmFile',KgmFile,PARM_STR);
@@ -503,9 +635,18 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Another guess is a hyperbolic profile decreasing to 200 at the lower
   %%% boundary. 
   Kefold = 1000;
-  Kiso = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi./Kefold);
   
-%   Kiso = Kgm;
+  for jj = 1:Nx+1
+%     Kiso(jj,:) = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi(jj,:)./(0.75*hb_psi(jj)));
+    Kiso(jj,:) = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi(jj,:)./(Kefold));
+  end
+  
+  figure(401)
+  pcolor(XX_psi,ZZ_psi,Kiso)
+  shading interp 
+  colorbar
+  
+  Kiso = Kgm;
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);

@@ -306,6 +306,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             minval = abs(min(min(min(avgVals)),-minval));
             caxis([-minval minval]);
             title(titlestr)
+            shading interp
         elseif (var_id == 2) % plot buoyancy
             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:1:20]);
             colorbar; 
@@ -317,6 +318,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
 %             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:2:30]);
 %             clabel(C,h,'Color','w');   
 %             set(h,'ShowText','on'); 
+%             set(h,'FontSize',18);
             pcolor(XX_tr,ZZ_tr,avgVals);
             shading interp
             colorbar; 
@@ -352,10 +354,10 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     
     
 %         title(titlestr)
-%         hold on
-%         plot(xx_psi,-hb_psi,'k')
-%         hold off
-%         set(h,'FontSize',18);
+        hold on
+        plot(xx_psi,-hb_psi,'k')
+        hold off
+        
 
 %     if (show_w)
 %         avgVals = zeros(Nx+1,Nz+1);

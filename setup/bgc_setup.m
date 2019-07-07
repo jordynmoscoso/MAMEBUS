@@ -53,7 +53,7 @@ switch (model_type)
         % phytoplankton parameters
         umax  = 0.8/t1day;     % 1/d max photosynthetic rate
         pi_a  =  0.0055/t1day; % m^2 /(W d) initial slope of PI curve
-        q10   = 1;             % temp-dependent growth
+        q10   = 2.2;             % temp-dependent growth
         kn    = 0.1;           % mmol/m^3 half saturation
         mu1p  = 0.02/t1day;    % 1/d linear mortality
         mu2p  = 0.05/t1day;    % m^3/mmol d quadratic mortality

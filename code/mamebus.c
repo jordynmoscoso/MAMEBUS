@@ -186,8 +186,6 @@ real ** BPa = NULL;           // Baroclinic Pressure
 real ** BPx = NULL;           // Baroclinic Pressure gradient
 real ** BBy = NULL;           // Buoyancy
 real ** Nbuoy = NULL;
-real ** Msq = NULL;
-real * Rd = NULL;
 
 // Pointers for pressure calculation scheme.
 real ** drx = NULL;     // Stores elementary differences
@@ -639,96 +637,96 @@ void calcSlopes (     const real        t,
     // TO DO: REMOVE
     real cubic = 0;
     
-    if (pressureScheme == PRESSURE_CUBIC)
-    {
-        // Calculate the arrays for the vertical buoyancy gradient
-        // The values of the gradient in the work array sit at the w gridpoints
-        for (j = 1; j < Nx; j++)
-        {
-            for (k = 1; k < Nz; k++)
-            {
-                if (k == 1 || k == Nz-1)
-                {
-                    db_dz_wrk[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_w[j][k];
-                }
-                else
-                {
-                    db_dz_wrk[j][k] = ( buoy[j][k-2] - 27.0*buoy[j][k-1] + 27.0*buoy[j][k] - buoy[j][k+1] )*_dz_w[j][k]/24.0;
-                }
-            }
-        }
-        
-        // Interpolate the vertical gradient on the psi gridpoints
-        // This interpolation is horizontal
-        for (j = 1; j < Nx; j++)
-        {
-            for (k = 1; k < Nz; k++)
-            {
-                if (j == 1 || j == 2 || j == Nx-1)
-                {
-                    db_dz[j][k] = 0.5 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] );
-                }
-                else
-                {
-                    db_dz[j][k] = 9.0 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] )/16.0 - ( db_dz_wrk[j-2][k] + db_dz_wrk[j+1][k] )/16.0;
-                }
-            }
-        }
-        
-        
-        // Calculate the arrays for the horizontal buoyancy gradient
-        // The values of the gradient in the work array sit at the u gridpoints
-        for (j = 1; j < Nx; j++)
-        {
-            for (k = 1; k < Nz; k++)
-            {
-                if (j == 1 || j == Nx-1)
-                {
-                    db_dx_wrk[j][k] = (buoy[j][k] - buoy[j-1][k])*_dx;
-                }
-                else
-                {
-                    db_dx_wrk[j][k] = ( ( buoy[j-2][k] - 27.0*buoy[j-1][k] + 27.0*buoy[j][k] - buoy[j+1][k] )*_dx )/24.0;
-                }
-            }
-        }
-        
-        // Interpolate the horizontal gradient on the psi gridpoints
-        // This interpolation is vertical
-        for (j = 1; j < Nx; j++)
-        {
-            for (k = 1; k < Nz; k++)
-            {
-                if (k == 1 || k == 2 || k == Nz-1)
-                {
-                    db_dx[j][k] = 0.5 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] );
-                }
-                else
-                {
-                    db_dx[j][k] = 9.0 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] )/16.0 - ( db_dx_wrk[j][k-2] + db_dx_wrk[j][k+1] )/16.0;
-                }
-            }
-        }
-        
-        
-        
-        // Calculate d(zeta)/dx and subtract off the component due to the grid
-        // the interpolation is horizontal
-        for (j = 1; j < Nx; j++)
-        {
-            for (k = 1; k < Nz; k++)
-            {
-                if (j == 1 || j == Nx-1)
-                {
-                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-                }
-                else
-                {
-                    db_dx[j][k] -= (ZZ_w[j-2][k] - 27.0*ZZ_w[j-1][k] + 27.0*ZZ_w[j][k] - ZZ_w[j+1][k])*_dx * db_dz[j][k]/24.0;
-                }
-            }
-        }
-    }
+//    if (pressureScheme == PRESSURE_CUBIC)
+//    {
+//        // Calculate the arrays for the vertical buoyancy gradient
+//        // The values of the gradient in the work array sit at the w gridpoints
+//        for (j = 1; j < Nx; j++)
+//        {
+//            for (k = 1; k < Nz; k++)
+//            {
+//                if (k == 1 || k == Nz-1)
+//                {
+//                    db_dz_wrk[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_w[j][k];
+//                }
+//                else
+//                {
+//                    db_dz_wrk[j][k] = ( buoy[j][k-2] - 27.0*buoy[j][k-1] + 27.0*buoy[j][k] - buoy[j][k+1] )*_dz_w[j][k]/24.0;
+//                }
+//            }
+//        }
+//
+//        // Interpolate the vertical gradient on the psi gridpoints
+//        // This interpolation is horizontal
+//        for (j = 1; j < Nx; j++)
+//        {
+//            for (k = 1; k < Nz; k++)
+//            {
+//                if (j == 1 || j == 2 || j == Nx-1)
+//                {
+//                    db_dz[j][k] = 0.5 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] );
+//                }
+//                else
+//                {
+//                    db_dz[j][k] = 9.0 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] )/16.0 - ( db_dz_wrk[j-2][k] + db_dz_wrk[j+1][k] )/16.0;
+//                }
+//            }
+//        }
+//
+//
+//        // Calculate the arrays for the horizontal buoyancy gradient
+//        // The values of the gradient in the work array sit at the u gridpoints
+//        for (j = 1; j < Nx; j++)
+//        {
+//            for (k = 1; k < Nz; k++)
+//            {
+//                if (j == 1 || j == Nx-1)
+//                {
+//                    db_dx_wrk[j][k] = (buoy[j][k] - buoy[j-1][k])*_dx;
+//                }
+//                else
+//                {
+//                    db_dx_wrk[j][k] = ( ( buoy[j-2][k] - 27.0*buoy[j-1][k] + 27.0*buoy[j][k] - buoy[j+1][k] )*_dx )/24.0;
+//                }
+//            }
+//        }
+//
+//        // Interpolate the horizontal gradient on the psi gridpoints
+//        // This interpolation is vertical
+//        for (j = 1; j < Nx; j++)
+//        {
+//            for (k = 1; k < Nz; k++)
+//            {
+//                if (k == 1 || k == 2 || k == Nz-1)
+//                {
+//                    db_dx[j][k] = 0.5 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] );
+//                }
+//                else
+//                {
+//                    db_dx[j][k] = 9.0 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] )/16.0 - ( db_dx_wrk[j][k-2] + db_dx_wrk[j][k+1] )/16.0;
+//                }
+//            }
+//        }
+//
+//
+//
+//        // Calculate d(zeta)/dx and subtract off the component due to the grid
+//        // the interpolation is horizontal
+//        for (j = 1; j < Nx; j++)
+//        {
+//            for (k = 1; k < Nz; k++)
+//            {
+//                if (j == 1 || j == Nx-1)
+//                {
+//                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+//                }
+//                else
+//                {
+//                    db_dx[j][k] -= (ZZ_w[j-2][k] - 27.0*ZZ_w[j-1][k] + 27.0*ZZ_w[j][k] - ZZ_w[j+1][k])*_dx * db_dz[j][k]/24.0;
+//                }
+//            }
+//        }
+//    }
     
 #pragma parallel
 
@@ -740,12 +738,12 @@ void calcSlopes (     const real        t,
         {
             
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
-            if( pressureScheme == PRESSURE_LINEAR )
-            {
+//            if( pressureScheme == PRESSURE_LINEAR )
+//            {
                 db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
                 db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                 db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-            }
+//            }
             // default to the 4th order scheme following Chu et. al. (1997)
             
         }
@@ -911,77 +909,6 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
     
 #pragma parallel
     
-    // Calculate the Brunt Vaisalla Frequency, N
-    // Chelton and others at the psi grid points
-    for (j = 1; j < Nx; j++)
-    {
-        for (k = 1; k < Nz; k++)
-        {
-            cff = 0.5*alpha*grav*( (buoy[j][k] - buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k] - buoy[j-1][k-1])*_dz_w[j-1][k] );
-            Nbuoy[j][k] = sqrt( cff );
-        }
-    }
-    
-    // Calculate the horizontal stratification term
-    for (j = 1; j < Nx; j++)
-    {
-        for (k = 1; k < Nz; k++)
-        {
-            Msq[j][k] = fabs( alpha*grav*db_dx[j][k] );
-        }
-    }
-    
-    
-    // calculate these so they are defined, they are not used
-    for (k = 0; k < Nz; k++)
-    {
-        Nbuoy[0][k] = 0;
-        Nbuoy[Nx][k] = 0;
-        Msq[0][k] = 0;
-        Msq[Nx][k] = 0;
-    }
-    
-    // calculate these so they are defined, they are not used
-    for (j = 0; k < Nx; j++)
-    {
-        Nbuoy[j][0] = 0;
-        Nbuoy[j][Nz] = 0;
-        Msq[j][0] = 0;
-        Msq[j][Nz] = 0;
-    }
-
-
-    
-    // TO DO CALCULATE RD
-    // CALCULATE VALUES AND PRINT
-    for (j = 0; j < Nx+1; j++)
-    {
-        ld = hb_psi[j] - (Hsml + Hbbl);
-        
-        n_col = 0;
-        for (k = Nz-1; k > 0; k--)
-        {
-            cff = 0.5*(Nbuoy[j][k] + Nbuoy[j][k-1])/_dz_phi[j][k];
-            if (!isnan(cff))
-            {
-                n_col += cff;
-            }
-        }
-        
-        
-        if (ld < 0)
-        {
-            Rd[j] = 0;
-        }
-        else
-        {
-            Rd[j] = ld*n_col/(_PI*f0);  // calculate the first baroclinic radius of deformation
-        }
-    }
-    
-    
-    
-    
     
     
     // Current implementation just keeps Kgm constant
@@ -990,19 +917,7 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
         for (k = 0; k < Nz+1; k ++)
         {
             Kgm_psi[j][k] = Kgm_psi_ref[j][k];
-            
-            
-//            if (Nbuoy[j][k] != 0 && !isnan(Nbuoy[j][k]))
-//            {
-//                Kgm_psi[j][k] = ucon*Msq[j][k]*Rd[j]*Rd[j]/Nbuoy[j][k];
-//            }
-//            else
-//            {
-//                Kgm_psi[j][k] = 0;
-//            }
-//
-//            fprintf(stderr,"j = %d, k = %d, %le \n",j,k,Kgm_psi[j][k]);
-//        }
+        }
     }
     
 #pragma parallel
@@ -1387,7 +1302,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     /////////////////////////
     ///// Phytoplankton /////
     /////////////////////////
-    pmax = umax*pow(q10,qpow);
+    pmax = umax*exp(0.05*(T - 20));
     L = pmax*IR/( (pmax/pi_a) + IR );
     R = L*N/(N + kn);
     
@@ -3560,9 +3475,7 @@ int main (int argc, char ** argv)
     MATALLOC(BPa,Nx,Nz+1);
     MATALLOC(BPx,Nx+1,Nz);
     MATALLOC(BBy,Nx,Nz);
-    MATALLOC(Nbuoy,Nx+1,Nz+1);
-    MATALLOC(Msq,Nx+1,Nz+1);
-    VECALLOC(Rd,Nx+1);
+    MATALLOC(Nbuoy,Nx,Nz);
     
     // Pressure calculation scheme
     MATALLOC(rhos,Nx,Nz);
