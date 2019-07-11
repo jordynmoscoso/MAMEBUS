@@ -304,7 +304,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             maxspeed = 0;
             minval = max(max(max(avgVals)),maxspeed);
             minval = abs(min(min(min(avgVals)),-minval));
-            caxis([-minval minval]);
+%             ([-minval minval]);
             title(titlestr)
             shading interp
         elseif (var_id == 2) % plot buoyancy
@@ -323,7 +323,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             shading interp
             colorbar; 
             colormap jet;
-            caxis([min(min(avgVals)) max(max(avgVals))])
+%             caxis([min(min(avgVals)) max(max(avgVals))])
 %             caxis([0 0.11])
             title(titlestr)
             
@@ -347,7 +347,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         shading interp
         h = colorbar; 
         colormap redblue;
-        caxis([-limval limval]);
+%         caxis([-limval limval]);
         title(titlestr)
     end
     

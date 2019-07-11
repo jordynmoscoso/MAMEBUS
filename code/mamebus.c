@@ -1216,329 +1216,170 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-//void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt,
-//           real cp, real cz, real cd,
-//           real umax, real pi_a, real q10, real kn, real mu1p, real mu2p,
-//           real gmax, real kg, real gthr, real bp, real bd, real mu1z, real mu2z,
-//           real rs, real rd, real wsink)
-//
-//{
-//    int a,b;
-//
-//    real qsw = 340;         // surface irradiance
-//    real r = 0.05;          // temperature dependence
-//    real kw = 0.04;
-//    real kc = 0.03;
-//    real kpar = 0;              // light attenuation
-//    real I0 = 0;
-//    real IR = 0;                // irradiance profile in cell
-//
-//    // place holders for npzd and time tendencies
-//    real N = phi[idx_nitrate][j][k];
-//    real P = phi[idx_nitrate+1][j][k];
-//    real Z = phi[idx_nitrate+2][j][k];
-//    real D = phi[idx_nitrate+3][j][k];
-//    real T = phi[idx_buoy][j][k];
-//
-//    // pointers to time tendencies
-//    real ** dN_dt = dphi_dt[idx_nitrate];
-//    real ** dP_dt = dphi_dt[idx_nitrate+1];
-//    real ** dZ_dt = dphi_dt[idx_nitrate+2];
-//    real ** dD_dt = dphi_dt[idx_nitrate+3];
-//
-//    // phytoplankton calculation holders
-//    real R = 0;
-//    real L = 0;
-//    real pmax = 0;
-//    real m = 0;
-//    real qpow = (T-10.0)/10.0;
-//    real psum = 0;
-//
-//    // zooplankton calculation holders
-//    real g_rate = 0;
-//    real bip = 0;
-//    real bid = 0;
-//    real biz = 0;
-//    real F = 0;
-//    real fcomp = 0;
-//    real gp = 0;
-//    real gd = 0;
-//    real gz = 0;
-//    real ac = 0;
-//    real an = 0;
-//    real cr = 106.0/16.0;
-//    real biomass = 0;
-//
-//
-//    // detritus parameters
-//    real md = 0;
-//    real ed = 0;
-//    real ed_c = 0;
-//    real ed_n = 0;
-//    real twoThirds = 2.0/3.0;
-//    real oneThird = 1.0/3.0;
-//    real rremin = 0;
-//    real rsink = 0;
-//
-//
-//    ///////////////////////////////////
-//    ///// Calculations start here /////
-//    ///////////////////////////////////
-//
-//    // Calculate the light profile
-//
-//    for (a = Nz-1; a >= 0; a-- )
-//    {
-//        psum += phi[idx_nitrate+1][j][k]; // calculate the density of phytoplankton above
-//    }
-//
-//
-//    kpar = kw + kc*psum; // This is just constant for now.
-//    I0 = 0.45*qsw; // from BEC
-//    IR = I0*exp(kpar*ZZ_phi[j][k]);
-//
-//
-//
-//    /////////////////////////
-//    ///// Phytoplankton /////
-//    /////////////////////////
-//    pmax = umax*exp(0.05*(T - 20));
-//    L = pmax*IR/( (pmax/pi_a) + IR );
-//    R = L*N/(N + kn);
-//
-//    // Calculate the quadratic mortality term
-//    if (P < 0.01)
-//    {
-//        m = 0;
-//    }
-//    else
-//    {
-//        m = mu2p;
-//    }
-//
-//
-//
-//    ///////////////////////
-//    ///// Zooplankton /////
-//    ///////////////////////
-//
-//    // Calculate the available biomass
-//    bip = (14.01 + 12.01*cp)/(14.01 + 12.01*cr);
-//    biz = (14.01 + 12.01*cz)/(14.01 + 12.01*cr);
-//    bid = (14.01 + 12.01*cd)/(14.01 + 12.01*cr);
-//    biomass = bip*P + bid*D;
-//
-//    // The grazing threshold
-//    fcomp = biomass-gthr;
-//    F = fcomp < 0 ? 0 : fcomp;
-//
-//    // Maximum ingestion rate
-//    g_rate = biz*Z*gmax*(F/(F*F + kg*kg));
-//
-//    // Grazing loss
-//    gp = g_rate*P/biomass;
-//    gd = g_rate*D/biomass;
-//
-//    ac = bp*cp*gp + bd*cd*gd;
-//    an = bp*gp + bd*gd;
-//
-//    // Total grazing for zooplankton in terms of nitrate
-//    gz = ac/cz < an ? ac/cz : an;
-//
-//
-//
-//    ////////////////////
-//    ///// Detritus /////
-//    ////////////////////
-//    md = 1 < cp/cd ? m : m*cp/cd;
-//    ed_n = (gp + gd - gz);
-//    ed_c = (cp*gp + cd*gd - cz*gz)/cd;
-//    ed = ed_n < ed_c ? ed_n : ed_c;
-//
-//    // add in the effect of sinking
-//    if ( k > 0 )
-//    {
-//        rsink = wsink*( phi[idx_nitrate+3][j][k] - phi[idx_nitrate+3][j][k-1] )*_dz_w[j][k];
-//    }
-//
-//
-//    if (fabs(ZZ_phi[j][k]) > Hsml)
-//    {
-//        rremin = rd;
-//    }
-//    else
-//    {
-//        rremin = rs;
-//    }
-//
-//
-//
-//    dN_dt[j][k] = -R*P + (m - md)*P*P + mu1p*P + twoThirds*(mu1z*Z + mu2z*Z*Z) + gp + gd - gz - ed + rremin*D;
-//    dP_dt[j][k] = R*P - gp - m*P*P - mu1p*P;
-//    dZ_dt[j][k] = gz - mu1z*Z - mu2z*Z*Z;
-//    dD_dt[j][k] = md*P*P + oneThird*(mu1z*Z + mu2z*Z*Z) + ed - rremin*D - gd - rsink;
-//
-//}
+void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt,
+           real cp, real cz, real cd,
+           real umax, real pi_a, real q10, real kn, real mu1p, real mu2p,
+           real gmax, real kg, real gthr, real bp, real bd, real mu1z, real mu2z,
+           real rs, real rd, real wsink)
 
-
-real npzd (const real t, const int j, const int k, real *** phi, real *** dphi_dt,real r_flux)
 {
     int a,b;
-    
+
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
     real kw = 0.04;
-    real kpar = 0;          // light attenuation
-    real IR = 0;            // irradiance profile in cell
-    real temp = 0;          // temperature coefficient
-    real atten = 0;         // biomass amount to attenuate light
-    real I0 = 0;            // Available light at every grid level
-    real wsink = 10/day;    // sinking speed (m/d)
-    real r_remin = 0.04;    // remineralization
-    real delta_x = 0.25;    // width of grazing profile
-    real lambda = 0.33;     // grazing efficiency
-    real mu = 0.02;         // mortality
-    real T0 = 20;           // reference temperature
-    real Psum = 0;
-    real det = 0;           // holder to calculate the total detritus
-    
-    // These will be calculated outside of MAMEBUS in the future.
-    real lp = 5;
-    real lz = 10;
-    real kn = 0.1;
-    real gmax = 20.7;
-    real umax = 2.6;
-    real kp = 3;
-    
-    real MM = 0;            // Mechalis mentin component
-    real l_uptake = 0;      // light dependent uptake
-    real t_uptake = 0;      // temperature dependent uptake
-    real theta = 0;         // predator to prey ratio
-    real Fk = 0;            // available biomass
-    real U = 0;             // updake
-    real R = 0;             // remineralization
-    real Rsink = 0;
-    real G = 0;
-    real GP = 0;            // grazing of phytoplankton
-    real GZ = 0;            // grazing of zooplankton
-    real GD = 0;            // messy grazing term
-    real Dtot = 0;          // Total detritus term (for implicit sinking)
-    real MZ = 0;            // mortality
-    real MP = 0;
-    real bio = 0;           // available biomass
-    real zeta = 0;          // zooplankton mortality holder
-    
-    // Parameters for implicit sinking
-    real dz = 0;
-    real flux = 0;
-    real z_star = wsink/r_remin;
-    real f = 0.1/day;          // only one percent of material leaves grid cell per day
-    
-    // placeholders for PZD and time tendencies
-    real ** T = NULL;
-    real ** N = NULL;
-    real ** P = NULL;
-    real ** Z = NULL;
-    real ** D = NULL;
-    real ** dN_dt = NULL;
-    real ** dP_dt = NULL;
-    real ** dZ_dt = NULL;
-    real ** dD_dt = NULL;
-    
-    T = phi[idx_buoy];
-    N = phi[idx_nitrate];
-    P = phi[idx_nitrate + 1];
-    Z = phi[idx_nitrate + 2];
-    D = phi[idx_nitrate + 3];
-    
-    dN_dt = dphi_dt[idx_nitrate]; // inert dye is idx_nitrate + 4;
-    dP_dt = dphi_dt[idx_nitrate + 1];
-    dZ_dt = dphi_dt[idx_nitrate + 2];
-    dD_dt = dphi_dt[idx_nitrate + 3];
-    
-    
-    // Calculate the total amount of phytoplankton in the domain
-    for (a = 0; a < Nx; a++)
+    real kc = 0.03;
+    real kpar = 0;              // light attenuation
+    real I0 = 0;
+    real IR = 0;                // irradiance profile in cell
+
+    // place holders for npzd and time tendencies
+    real N = phi[idx_nitrate][j][k];
+    real P = phi[idx_nitrate+1][j][k];
+    real Z = phi[idx_nitrate+2][j][k];
+    real D = phi[idx_nitrate+3][j][k];
+    real T = phi[idx_buoy][j][k];
+
+    // pointers to time tendencies
+    real ** dN_dt = dphi_dt[idx_nitrate];
+    real ** dP_dt = dphi_dt[idx_nitrate+1];
+    real ** dZ_dt = dphi_dt[idx_nitrate+2];
+    real ** dD_dt = dphi_dt[idx_nitrate+3];
+
+    // phytoplankton calculation holders
+    real R = 0;
+    real L = 0;
+    real pmax = 0;
+    real m = 0;
+    real qpow = (T-10.0)/10.0;
+    real psum = 0;
+
+    // zooplankton calculation holders
+    real g_rate = 0;
+    real bip = 0;
+    real bid = 0;
+    real biz = 0;
+    real F = 0;
+    real fcomp = 0;
+    real gp = 0;
+    real gd = 0;
+    real gz = 0;
+    real ac = 0;
+    real an = 0;
+    real cr = 106.0/16.0;
+    real biomass = 0;
+
+
+    // detritus parameters
+    real md = 0;
+    real ed = 0;
+    real ed_c = 0;
+    real ed_n = 0;
+    real twoThirds = 2.0/3.0;
+    real oneThird = 1.0/3.0;
+    real rremin = 0;
+    real rsink = 0;
+
+
+    ///////////////////////////////////
+    ///// Calculations start here /////
+    ///////////////////////////////////
+
+    // Calculate the light profile
+
+    for (a = Nz-1; a >= 0; a-- )
     {
-        for (b = 0; b < Nz; b++)
-        {
-            Psum += P[a][b];
-        }
+        psum += phi[idx_nitrate+1][j][k]; // calculate the density of phytoplankton above
     }
-    
-    kpar = kw;
-    I0 = 0.45*qsw/(kpar*Hsml); // from BEC
-    
-    //
-    //   Light and Temperature
-    //
-    
-    IR =I0*exp(kpar*ZZ_phi[j][k]);
-    
-    // Temperature and Irradiance dependent uptake (Sarmiento & Gruber)
-    t_uptake = exp(r*(T[j][k]-T0));
-    l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
-    
+
+
+    kpar = kw + kc*psum; // This is just constant for now.
+    I0 = 0.45*qsw; // from BEC
+    IR = I0*exp(kpar*ZZ_phi[j][k]);
+
+
+
+    /////////////////////////
+    ///// Phytoplankton /////
+    /////////////////////////
+    pmax = umax*exp(0.05*(T - 20));
+    L = pmax*IR/( (pmax/pi_a) + IR );
+    R = L*N/(N + kn);
+
+    // Calculate the quadratic mortality term
+    if (P < 0.01)
+    {
+        m = 0;
+    }
+    else
+    {
+        m = mu2p;
+    }
+
+
+
     ///////////////////////
-    //   Phytoplankton   //
+    ///// Zooplankton /////
     ///////////////////////
-    MM = N[j][k]/(kn + N[j][k]);
-    
-    U = l_uptake*t_uptake*MM*P[j][k];
-    
-    // Calculate the grazing component
-    theta = log10(lp/lz)/delta_x;
-    Fk = exp(-theta*theta);
-    
-    // Build grazing
-    G = gmax*Fk/(Fk*P[j][k] + kp);
-    G *= (1-exp(-Psum));         // Limit the grazing if there is not enough in the box.
-    GP = Z[j][k]*P[j][k]*G;
-    
-    // Mortality component
-    MP = mu*P[j][k];
-    
-    
-    /////////////////////
-    //   Zooplankton   //
-    /////////////////////
-    GZ = lambda*G;
-    
-    // Mortality
-    zeta = lambda*gmax*gmax/(4*umax*kp);
-    MZ = zeta*Z[j][k]*Z[j][k];
-    
-    //
-    // Detritus
-    //
-    GD = (1-lambda)*G;
-    
-    
-    // Calculate the flux of detritus into the next gridcell
-    dz = ZZ_w[j][k+1] - ZZ_w[j][k];
-    det = MP + MZ + GD;
-    flux = (r_flux*(1+dz/(2*z_star)) - (dz*f)*det) / ( 1 - dz/(2*z_star) );
-    Rsink = -flux/z_star + (1-f)*det;
-    r_flux = fabs(flux);
-    
-    
-    // Remineralization
-    R = r_remin*D[j][k];
-    
-    
-    
-    //
-    // Update Time Tendencies
-    //
-    dN_dt[j][k] = -U + R;
-    dP_dt[j][k] = U - GP - MP;
-    dZ_dt[j][k] = GZ - MZ;
-    dD_dt[j][k] = -R + MP + MZ + GD;
-    
-    
-    return r_flux;
-    
+
+    // Calculate the available biomass
+    bip = (14.01 + 12.01*cp)/(14.01 + 12.01*cr);
+    biz = (14.01 + 12.01*cz)/(14.01 + 12.01*cr);
+    bid = (14.01 + 12.01*cd)/(14.01 + 12.01*cr);
+    biomass = bip*P + bid*D;
+
+    // The grazing threshold
+    fcomp = biomass-gthr;
+    F = fcomp < 0 ? 0 : fcomp;
+
+    // Maximum ingestion rate
+    g_rate = biz*Z*gmax*(F/(F*F + kg*kg));
+
+    // Grazing loss
+    gp = g_rate*P/biomass;
+    gd = g_rate*D/biomass;
+
+    ac = bp*cp*gp + bd*cd*gd;
+    an = bp*gp + bd*gd;
+
+    // Total grazing for zooplankton in terms of nitrate
+    gz = ac/cz < an ? ac/cz : an;
+
+
+
+    ////////////////////
+    ///// Detritus /////
+    ////////////////////
+    md = 1 < cp/cd ? m : m*cp/cd;
+    ed_n = (gp + gd - gz);
+    ed_c = (cp*gp + cd*gd - cz*gz)/cd;
+    ed = ed_n < ed_c ? ed_n : ed_c;
+
+    // add in the effect of sinking
+    if ( k > 0 )
+    {
+        rsink = wsink*( phi[idx_nitrate+3][j][k] - phi[idx_nitrate+3][j][k-1] )*_dz_w[j][k];
+    }
+
+
+    if (fabs(ZZ_phi[j][k]) > Hsml)
+    {
+        rremin = rd;
+    }
+    else
+    {
+        rremin = rs;
+    }
+
+
+
+    dN_dt[j][k] = -R*P + (m - md)*P*P + mu1p*P + twoThirds*(mu1z*Z + mu2z*Z*Z) + gp + gd - gz - ed + rremin*D;
+    dP_dt[j][k] = R*P - gp - m*P*P - mu1p*P;
+    dZ_dt[j][k] = gz - mu1z*Z - mu2z*Z*Z;
+    dD_dt[j][k] = md*P*P + oneThird*(mu1z*Z + mu2z*Z*Z) + ed - rremin*D - gd - rsink;
+
 }
+
 
 
 

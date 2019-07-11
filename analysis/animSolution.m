@@ -180,7 +180,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
 
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
-      phi = readOutputFile(data_file,Nx,Nz);
+      phi = readOutputFile(data_file,Nx,Nz)
       %%% Plot the tracer     
       switch (var_id)
         case 0 %%% Zonal Velocity 
