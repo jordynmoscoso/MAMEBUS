@@ -30,8 +30,8 @@ switch (model_type)
         params = [umax,f];
         
         %%% Initial nitrate profile (Hyperbolic)
-        Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-        Ncline = 250; % Approximate guess of the depth of the nutracline
+        Nmax = 40; %%% Maximum concentration of nutrient at the ocean bed
+        Ncline = 75; % Approximate guess of the depth of the nutracline
         bgc_init = -Nmax*tanh(ZZ_tr./Ncline);
     
         nparams = length(params);

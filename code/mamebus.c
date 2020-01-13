@@ -637,96 +637,96 @@ void calcSlopes (     const real        t,
     // TO DO: REMOVE
     real cubic = 0;
     
-//    if (pressureScheme == PRESSURE_CUBIC)
-//    {
-//        // Calculate the arrays for the vertical buoyancy gradient
-//        // The values of the gradient in the work array sit at the w gridpoints
-//        for (j = 1; j < Nx; j++)
-//        {
-//            for (k = 1; k < Nz; k++)
-//            {
-//                if (k == 1 || k == Nz-1)
-//                {
-//                    db_dz_wrk[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_w[j][k];
-//                }
-//                else
-//                {
-//                    db_dz_wrk[j][k] = ( buoy[j][k-2] - 27.0*buoy[j][k-1] + 27.0*buoy[j][k] - buoy[j][k+1] )*_dz_w[j][k]/24.0;
-//                }
-//            }
-//        }
-//
-//        // Interpolate the vertical gradient on the psi gridpoints
-//        // This interpolation is horizontal
-//        for (j = 1; j < Nx; j++)
-//        {
-//            for (k = 1; k < Nz; k++)
-//            {
-//                if (j == 1 || j == 2 || j == Nx-1)
-//                {
-//                    db_dz[j][k] = 0.5 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] );
-//                }
-//                else
-//                {
-//                    db_dz[j][k] = 9.0 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] )/16.0 - ( db_dz_wrk[j-2][k] + db_dz_wrk[j+1][k] )/16.0;
-//                }
-//            }
-//        }
-//
-//
-//        // Calculate the arrays for the horizontal buoyancy gradient
-//        // The values of the gradient in the work array sit at the u gridpoints
-//        for (j = 1; j < Nx; j++)
-//        {
-//            for (k = 1; k < Nz; k++)
-//            {
-//                if (j == 1 || j == Nx-1)
-//                {
-//                    db_dx_wrk[j][k] = (buoy[j][k] - buoy[j-1][k])*_dx;
-//                }
-//                else
-//                {
-//                    db_dx_wrk[j][k] = ( ( buoy[j-2][k] - 27.0*buoy[j-1][k] + 27.0*buoy[j][k] - buoy[j+1][k] )*_dx )/24.0;
-//                }
-//            }
-//        }
-//
-//        // Interpolate the horizontal gradient on the psi gridpoints
-//        // This interpolation is vertical
-//        for (j = 1; j < Nx; j++)
-//        {
-//            for (k = 1; k < Nz; k++)
-//            {
-//                if (k == 1 || k == 2 || k == Nz-1)
-//                {
-//                    db_dx[j][k] = 0.5 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] );
-//                }
-//                else
-//                {
-//                    db_dx[j][k] = 9.0 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] )/16.0 - ( db_dx_wrk[j][k-2] + db_dx_wrk[j][k+1] )/16.0;
-//                }
-//            }
-//        }
-//
-//
-//
-//        // Calculate d(zeta)/dx and subtract off the component due to the grid
-//        // the interpolation is horizontal
-//        for (j = 1; j < Nx; j++)
-//        {
-//            for (k = 1; k < Nz; k++)
-//            {
-//                if (j == 1 || j == Nx-1)
-//                {
-//                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-//                }
-//                else
-//                {
-//                    db_dx[j][k] -= (ZZ_w[j-2][k] - 27.0*ZZ_w[j-1][k] + 27.0*ZZ_w[j][k] - ZZ_w[j+1][k])*_dx * db_dz[j][k]/24.0;
-//                }
-//            }
-//        }
-//    }
+    if (pressureScheme == PRESSURE_CUBIC)
+    {
+        // Calculate the arrays for the vertical buoyancy gradient
+        // The values of the gradient in the work array sit at the w gridpoints
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (k == 1 || k == Nz-1)
+                {
+                    db_dz_wrk[j][k] = (buoy[j][k] - buoy[j][k-1])*_dz_w[j][k];
+                }
+                else
+                {
+                    db_dz_wrk[j][k] = ( buoy[j][k-2] - 27.0*buoy[j][k-1] + 27.0*buoy[j][k] - buoy[j][k+1] )*_dz_w[j][k]/24.0;
+                }
+            }
+        }
+
+        // Interpolate the vertical gradient on the psi gridpoints
+        // This interpolation is horizontal
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (j == 1 || j == 2 || j == Nx-1)
+                {
+                    db_dz[j][k] = 0.5 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] );
+                }
+                else
+                {
+                    db_dz[j][k] = 9.0 * ( db_dz_wrk[j][k] + db_dz_wrk[j-1][k] )/16.0 - ( db_dz_wrk[j-2][k] + db_dz_wrk[j+1][k] )/16.0;
+                }
+            }
+        }
+
+
+        // Calculate the arrays for the horizontal buoyancy gradient
+        // The values of the gradient in the work array sit at the u gridpoints
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (j == 1 || j == Nx-1)
+                {
+                    db_dx_wrk[j][k] = (buoy[j][k] - buoy[j-1][k])*_dx;
+                }
+                else
+                {
+                    db_dx_wrk[j][k] = ( ( buoy[j-2][k] - 27.0*buoy[j-1][k] + 27.0*buoy[j][k] - buoy[j+1][k] )*_dx )/24.0;
+                }
+            }
+        }
+
+        // Interpolate the horizontal gradient on the psi gridpoints
+        // This interpolation is vertical
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (k == 1 || k == 2 || k == Nz-1)
+                {
+                    db_dx[j][k] = 0.5 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] );
+                }
+                else
+                {
+                    db_dx[j][k] = 9.0 * ( db_dx_wrk[j][k] + db_dx_wrk[j][k-1] )/16.0 - ( db_dx_wrk[j][k-2] + db_dx_wrk[j][k+1] )/16.0;
+                }
+            }
+        }
+
+
+
+        // Calculate d(zeta)/dx and subtract off the component due to the grid
+        // the interpolation is horizontal
+        for (j = 1; j < Nx; j++)
+        {
+            for (k = 1; k < Nz; k++)
+            {
+                if (j == 1 || j == Nx-1)
+                {
+                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+                }
+                else
+                {
+                    db_dx[j][k] -= (ZZ_w[j-2][k] - 27.0*ZZ_w[j-1][k] + 27.0*ZZ_w[j][k] - ZZ_w[j+1][k])*_dx * db_dz[j][k]/24.0;
+                }
+            }
+        }
+    }
     
 #pragma parallel
 
@@ -738,12 +738,12 @@ void calcSlopes (     const real        t,
         {
             
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
-//            if( pressureScheme == PRESSURE_LINEAR )
-//            {
+            if( pressureScheme == PRESSURE_LINEAR )
+            {
                 db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
                 db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                 db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-//            }
+            }
             // default to the 4th order scheme following Chu et. al. (1997)
             
         }
@@ -1153,6 +1153,9 @@ real single_nitrate (const real t, const int j, const int k,
     real kpar = 0;
     real T0 = 20;
     real r = 0.05;
+    real alpha = 0.25*16/106;          // slope of P-I curve in mmol N/W/m^2
+    real theta_chl_N = 3;              // mg C / mol N;
+    real Isurf = qsw;
     
     // Variables
     real remin_frac = 0;
@@ -1163,19 +1166,22 @@ real single_nitrate (const real t, const int j, const int k,
     real uptake = 0;                         // uptake in each grid box
     real zstar = 0;                          // scale height from 50 to 200 for remin export (surface to floor) mimics the Martin curve for material export
     real dz = 0;                             // vertical grid spacing placeholder
+    real zval = fabs(ZZ_phi[j][k]);          // placeholder for depth
     
     real remin = 0;
+    real kn = 0.1;
     
     kpar = kw; // This is just constant for now.
-    I0 = 0.45*qsw; // from BEC
-    IR = I0*exp(kpar*ZZ_phi[j][k]);
+    I0 = 0.45*qsw/(kpar*zval)*(1-exp( -kpar*zval ));
+//    l_uptake = I0/sqrt(Isurf*Isurf + I0*I0);
+    l_uptake = 1-exp(-I0/qsw);
     
     // Temperature and Irradiance (Sarmiento & Gruber)
     t_uptake = exp(r*(T-T0));
-    l_uptake = IR / sqrt(POW2(IR) + POW2(I0));
+
     
     // Uptake and Remineralizaiton
-    uptake = umax * (l_uptake * t_uptake) * N;
+    uptake = umax * (l_uptake * t_uptake) * N*N/(kn + N)*(1-exp(-N));
     
     // Scale Height for Remin
     zstar = 200;
@@ -1216,14 +1222,10 @@ real single_nitrate (const real t, const int j, const int k,
 
 
 
-void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt,
-           real cp, real cz, real cd,
-           real umax, real pi_a, real q10, real kn, real mu1p, real mu2p,
-           real gmax, real kg, real gthr, real bp, real bd, real mu1z, real mu2z,
-           real rs, real rd, real wsink)
+void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt)
 
 {
-    int a,b;
+    int jj,kk;
 
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
@@ -1232,6 +1234,10 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real kpar = 0;              // light attenuation
     real I0 = 0;
     real IR = 0;                // irradiance profile in cell
+    real Tref = 20;
+    real alpha = 0.25;          // slope of P-I curve in mmol N/W/m^2
+    real theta_chl_N = 3;              // mg chl / mol N;
+    real ptot = 0;                     // integrated phytoplankton concentration
 
     // place holders for npzd and time tendencies
     real N = phi[idx_nitrate][j][k];
@@ -1245,138 +1251,114 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real ** dP_dt = dphi_dt[idx_nitrate+1];
     real ** dZ_dt = dphi_dt[idx_nitrate+2];
     real ** dD_dt = dphi_dt[idx_nitrate+3];
-
-    // phytoplankton calculation holders
-    real R = 0;
-    real L = 0;
-    real pmax = 0;
-    real m = 0;
-    real qpow = (T-10.0)/10.0;
-    real psum = 0;
-
-    // zooplankton calculation holders
-    real g_rate = 0;
-    real bip = 0;
-    real bid = 0;
-    real biz = 0;
+    
+    // FOR TESTING PURPOSES
+    // all parameters are here now, we can add them other places later
+    
+    real kn = 0; // mmol N/m^3
+    real umax = 0; // mmol N/day maximum uptake
+    real gmax = 0; // maximum grading rate
+    real kp = 3; // half saturation for grazing
+    real r_remin = 0.04/day; // remin rate
+    real delta_x = 0.25; // width of grazing profile
+    real lambda = 1.0/3.0; // zooplankton efficiency
+    real mp = 0.02; // mortality
+    real wsink = 10/day; // sinking speed
+    real lp = 5; // size of phytoplankton
+    real lz = 10; // size of zooplankton
+    real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
+    real Isurf = qsw;
+    
+    //NPZD Holders
+    real MM = 0;
+    real uptake = 0;
+    
+    real tlim = 0;
+    real llim = 0;
+    real Ik = 0;
+    
+    real theta = 0;
     real F = 0;
-    real fcomp = 0;
-    real gp = 0;
-    real gd = 0;
-    real gz = 0;
-    real ac = 0;
-    real an = 0;
-    real cr = 106.0/16.0;
-    real biomass = 0;
-
-
-    // detritus parameters
-    real md = 0;
-    real ed = 0;
-    real ed_c = 0;
-    real ed_n = 0;
-    real twoThirds = 2.0/3.0;
-    real oneThird = 1.0/3.0;
-    real rremin = 0;
-    real rsink = 0;
-
-
-    ///////////////////////////////////
-    ///// Calculations start here /////
-    ///////////////////////////////////
-
-    // Calculate the light profile
-
-    for (a = Nz-1; a >= 0; a-- )
+    real G = 0;
+    real MP = 0;
+    real GP = 0;
+    real GZ = 0;
+    real mu2 = 0;
+    real MZ = 0;
+    real GD = 0;
+    real RD = 0;
+    real preyopt = 0;
+    real Dsink = 0;
+    
+    
+    // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
+    umax = 2.6*pow(lp,-0.45);
+    real umax_day = umax/day;
+    kn = 0.1;
+    gmax = 26*pow(lz,-0.4);
+    real gmax_day = gmax/day;;
+    
+    // Build temperature and irradiance limitation profiles
+    
+    for (kk = Nz; kk > k; kk--)
     {
-        psum += phi[idx_nitrate+1][j][k]; // calculate the density of phytoplankton above
+        ptot += phi[idx_nitrate+1][j][kk];
     }
-
-
-    kpar = kw + kc*psum; // This is just constant for now.
-    I0 = 0.45*qsw; // from BEC
-    IR = I0*exp(kpar*ZZ_phi[j][k]);
-
-
-
-    /////////////////////////
-    ///// Phytoplankton /////
-    /////////////////////////
-    pmax = umax*exp(0.05*(T - 20));
-    L = pmax*IR/( (pmax/pi_a) + IR );
-    R = L*N/(N + kn);
-
-    // Calculate the quadratic mortality term
-    if (P < 0.01)
+    
+    
+    
+    kpar = kw + kc*ptot*theta_chl_N;
+    I0 = 0.45*qsw/(kpar*zval)*(1-exp( -kpar*zval ));
+    llim = 1- exp(-I0/Isurf);
+//    llim = I0/sqrt(Isurf*Isurf + I0*I0);
+//    llim = I0/sqrt(Ik*Ik + I0*I0);
+//    llim = I0/Isurf;
+    tlim = exp(r*(T-Tref));
+    
+//    fprintf(stderr,"ptot = %le, kpar %le , z = %le, j = %d, k = %d \n",ptot,kpar,ZZ_phi[j][k],j,k);
+    
+    // Nitrate
+    MM = N/(kn + N);
+    uptake = umax_day*llim*tlim*MM*P;
+    
+    
+    // Phytoplankton
+    preyopt = log10(0.65*pow(lz,0.56));
+    theta = (log10(lp) - preyopt)/delta_x;
+    F = exp(-theta*theta);
+    G = gmax_day*F/(F*P + kp);
+    G = G*(1-exp(-P));
+    GP = G*Z*P;
+    
+    
+    // Zooplankton
+    GZ = lambda*GP;
+    
+    // Detritus (no sinking yet)
+    GD = (1-lambda)*GP;
+    RD = r_remin*D;
+    
+    if (k != 0)
     {
-        m = 0;
+        Dsink = wsink*(D - phi[idx_nitrate+3][j][k-1]);
     }
-    else
+    
+    // Mortality terms
+    MP = mp*umax_day*P;
+    
+    mu2 = lambda*gmax*gmax/(4*umax*kp);
+    mu2 = mu2/day;
+    MZ = mu2*Z*Z;
+    
+    dN_dt[j][k] = -uptake + RD;
+    dP_dt[j][k] = uptake - GP - MP;
+    dZ_dt[j][k] = GZ - MZ;
+    dD_dt[j][k] = MP + MZ + GD - RD - Dsink;
+    
+    if (k != 0)
     {
-        m = mu2p;
+        dD_dt[j][k-1] += Dsink;
     }
-
-
-
-    ///////////////////////
-    ///// Zooplankton /////
-    ///////////////////////
-
-    // Calculate the available biomass
-    bip = (14.01 + 12.01*cp)/(14.01 + 12.01*cr);
-    biz = (14.01 + 12.01*cz)/(14.01 + 12.01*cr);
-    bid = (14.01 + 12.01*cd)/(14.01 + 12.01*cr);
-    biomass = bip*P + bid*D;
-
-    // The grazing threshold
-    fcomp = biomass-gthr;
-    F = fcomp < 0 ? 0 : fcomp;
-
-    // Maximum ingestion rate
-    g_rate = biz*Z*gmax*(F/(F*F + kg*kg));
-
-    // Grazing loss
-    gp = g_rate*P/biomass;
-    gd = g_rate*D/biomass;
-
-    ac = bp*cp*gp + bd*cd*gd;
-    an = bp*gp + bd*gd;
-
-    // Total grazing for zooplankton in terms of nitrate
-    gz = ac/cz < an ? ac/cz : an;
-
-
-
-    ////////////////////
-    ///// Detritus /////
-    ////////////////////
-    md = 1 < cp/cd ? m : m*cp/cd;
-    ed_n = (gp + gd - gz);
-    ed_c = (cp*gp + cd*gd - cz*gz)/cd;
-    ed = ed_n < ed_c ? ed_n : ed_c;
-
-    // add in the effect of sinking
-    if ( k > 0 )
-    {
-        rsink = wsink*( phi[idx_nitrate+3][j][k] - phi[idx_nitrate+3][j][k-1] )*_dz_w[j][k];
-    }
-
-
-    if (fabs(ZZ_phi[j][k]) > Hsml)
-    {
-        rremin = rd;
-    }
-    else
-    {
-        rremin = rs;
-    }
-
-
-
-    dN_dt[j][k] = -R*P + (m - md)*P*P + mu1p*P + twoThirds*(mu1z*Z + mu2z*Z*Z) + gp + gd - gz - ed + rremin*D;
-    dP_dt[j][k] = R*P - gp - m*P*P - mu1p*P;
-    dZ_dt[j][k] = gz - mu1z*Z - mu2z*Z*Z;
-    dD_dt[j][k] = md*P*P + oneThird*(mu1z*Z + mu2z*Z*Z) + ed - rremin*D - gd - rsink;
 
 }
 
@@ -1468,31 +1450,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     real f = 0;
     
     // npzd parameters //
-    // nitrate params
-    real cp = 0;
-    real cz = 0;
-    real cd = 0;
-    
-    // phytoplankton params
-    real pi_a = 0;
-    real q10 = 0;
-    real kn = 0;
-    real mu1p = 0;
-    real mu2p = 0;
-    
-    // zooplankton params
-    real gmax = 0;
-    real kg = 0;
-    real gthr = 0;
-    real bp = 0;
-    real bd = 0;
-    real mu1z = 0;
-    real mu2z = 0;
-    
-    // detrital params
-    real rs = 0;
-    real rd = 0;
-    real wsink = 0;
+
     
 
     
@@ -1536,32 +1494,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         {
             
             // npzd parameters //
-            // nitrate params
-            real cp = bgc_params[0];
-            real cz = bgc_params[1];
-            real cd = bgc_params[2];
-            
-            // phytoplankton params
-            umax = bgc_params[3];
-            real pi_a = bgc_params[4];
-            real q10 = bgc_params[5];
-            real kn = bgc_params[6];
-            real mu1p = bgc_params[7];
-            real mu2p = bgc_params[8];
-            
-            // zooplankton params
-            real gmax = bgc_params[9];
-            real kg = bgc_params[10];
-            real gthr = bgc_params[11];
-            real bp = bgc_params[12];
-            real bd = bgc_params[13];
-            real mu1z = bgc_params[14];
-            real mu2z = bgc_params[15];
-            
-            // detrital params
-            real rs = bgc_params[16];
-            real rd = bgc_params[17];
-            real wsink = bgc_params[18];
+
             
             
             for (j = 0; j < Nx; j++)
@@ -1569,7 +1502,7 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
                 r_flux = 0;
                 for (k = Nz-1; k >= 0; k--)
                 {
-                    npzd(t,j,k,phi,dphi_dt,cp,cz,cd,umax,pi_a,q10,kn,mu1p,mu2p,gmax,kg,gthr,bp,bd,mu1z,mu2z,rs,rd,wsink);
+                    npzd(t,j,k,phi,dphi_dt);
                 }
             }
             
@@ -2025,7 +1958,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     
 #pragma parallel
     
-    // For y-fluxes
+    // For x-fluxes
     for (j = 0; j <= Nx; j ++)
     {
         for (k = 0; k < Nz; k ++)
@@ -2081,8 +2014,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             // "true" slopes in x/sigma coordinates, i.e. slopes relative to grid coordinates
             Sgm_true = j>0 ? Sgm_psi[j][k] - (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx : 0; // Basically just skips j==0 case
             Siso_true = Siso_w[j][k] - (ZZ_psi[j+1][k]-ZZ_psi[j][k])*_dx;
-//            Sgm_true = j>0 ? Sgm_psi[j][k] : 0; // Basically just skips j==0 case
-//            Siso_true = Siso_w[j][k];
+
             
             // N.B. Indexing here is slightly off for the GM component, but good enough for a CFL estimate
             zdiff_dzsq = fmax( Kiso_w[j][k]*SQUARE(Siso_true)*_dzsq_w[j][k], Kgm_psi[j][k]*SQUARE(Sgm_true)*_dzsq_psi[j][k] );
@@ -2135,7 +2067,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_y = 0.5*dxsq/xdiff_max;
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/n_max;
-    cfl_sink = 0.5/sink_dz_max;
+    cfl_sink = 0.5*dx/sink_dz_max;
 
     
     // Actual CFL-limted time step
@@ -3980,6 +3912,7 @@ int main (int argc, char ** argv)
     }
     
     
+    
     //////////////////////////
     ///// END GRID SETUP /////
     //////////////////////////
@@ -4045,6 +3978,8 @@ int main (int argc, char ** argv)
     ///////////////////////////////////////
     ///// BEGIN TIME INTEGRATION LOOP /////
     ///////////////////////////////////////
+    
+    fprintf(stderr,"There are %d tracers in this model \n",Ntracs);
     
     
     // Numerical time-integration loop - keep going while the residual exceeds

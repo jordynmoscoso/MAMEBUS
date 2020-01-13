@@ -12,7 +12,7 @@
 %%% the run files will be written. N.B. a directory called 'run_name' will
 %%% be created within local_home_dir to house the files.
 %%%
-function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,shelfdepth)  
+function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,shelfdepth,use_cluster)  
   %%% Convenience scripts used in this function
   addpath ../utils;
   
@@ -24,7 +24,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %%% examples of how to prescribe arbitrary tracer inputs
   plotfigs = true;
 %%% If set true, set up this run for the cluster
-  use_cluster = true;
+%   use_cluster = true;
   use_intel = false;
   use_pbs = use_cluster;
   cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
@@ -52,7 +52,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
   H = 3*m1km; %%% Depth, excluding the mixed layer
-  Lx = 300*m1km; %%% Computational domain width
+  Lx = 600*m1km; %%% Computational domain width
   
   %%% Scalar parameter definitions 
 %   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
@@ -65,8 +65,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   Cp = 4e3; %%% Heat capacity
   g = 9.81; %%% Gravity
   s0 = tau0/rho0/f0/Kgm0; %%% Theoretical isopycnal slope    
-  Hsml = 55; %%% Surface mixed layer thickness
-  Hbbl = 50; %%% Bottom boundary layer thickness
+  Hsml = 30; %%% Surface mixed layer thickness
+  Hbbl = 30; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
   
   
@@ -113,7 +113,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 
   %%% Grid parameters
   h_c = 300; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
-  theta_s = 6; %%% Sigma coordinate surface stretching parameter (must be in [0,10])
+  theta_s = 9; %%% Sigma coordinate surface stretching parameter (must be in [0,10])
   theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%% Grid parameters (no stretching)
@@ -125,7 +125,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
   Nx = 40; %%% Number of latitudinal grid points 
-  Nz = 40; %%% Number of vertical grid points
+  Nz = 50; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
@@ -138,8 +138,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   end
   
 
-  pressureScheme = PRESSURE_CUBIC;
-%   pressureScheme = PRESSURE_LINEAR;
+%   pressureScheme = PRESSURE_CUBIC;
+  pressureScheme = PRESSURE_LINEAR;
         
   
   %%% For plotting figures of setup
@@ -151,11 +151,39 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
       disp('Full depth mixed layer on the shelf')
   end
   
-  Xtopog = 200*m1km;
+  Xtopog = 205*m1km;
   Ltopog = 25*m1km;
   Htopog = H-shelfdepth;  
-  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
-%   hb = H*ones(size(hb));
+  
+  %%%%% IDEALIZED REGIONAL TOPOGRAPHY
+  % Southern California: 
+    hb = 4500 - (4500-1000)*0.5*(1+tanh((xx_topog-300*m1km)/(Ltopog)));
+    hb = hb + 100 - (1000-50)*0.5*(1+tanh((xx_topog-550*m1km)/(Ltopog)));
+  
+  % Central California:
+%     shelfdepth = 125;
+%     H = 4000;
+%     Htopog = H-shelfdepth;
+%     hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+  
+  % Northern California:
+%     H = 4000;
+%     hb = H - (H-3000)*0.5*(1+tanh((xx_topog-100*m1km)/(Ltopog)));
+%     hb = hb  - (3000-50)*0.5*(1+tanh((xx_topog-340*m1km)/(Ltopog)));
+
+ % Central Peru
+%  Xtopog = 250*m1km;
+%  H = 6000;
+%  shelfdepth = 50;
+%  Ltopog = 15*m1km;
+%  Htopog = H-shelfdepth; 
+%  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+%  hb = hb + 100 - (2000-50)*0.5*(1+tanh((-xx_topog+170*m1km)/(Ltopog)));
+
+ 
+ %%%%%%%% IDEALIZED TOPOGRAPHY (GENERAL)
+ %   hb = H*ones(size(hb));
+%   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
@@ -340,6 +368,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   tau = tau0*ones(size(xx_psi));
 %   tau(xx_psi < 200) = 0;
 %   tau(xx_psi > Lx - 200) = 0;
+  
 
   %%% Create a windstress that goes to zero in the boundary layer.
   tlength = length(tau);
@@ -377,17 +406,15 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   T_relax_veloc = -ones(Nx,Nz);
 %   T_relax_veloc(XX_tr<L_relax) = T_relax_max;
 %   T_relax_veloc(XX_tr>=L_relax) = -1;
-  N_relax_max = 100*t1day;
+  N_relax_max = 30*t1day;
 
 %   if modeltype > 1
 %       % relax to initial nitrate concentration on the western boundary
-%       T_relax_N = -ones(Nx,Nz);
-%       T_relax_N(XX_tr<L_relax) = 1 ./ (1/N_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
-%       T_relax_buoy(XX_tr>=L_relax) = -1;
+      T_relax_N = N_relax_max*ones(Nx,Nz);
 %   else
-      T_relax_N = -ones(Nx,Nz);
+%       T_relax_N = -ones(Nx,Nz);
 %   end
-    T_relax_P = T_relax_max*ones(Nx,Nz);
+
   
   %%% Add relaxation to an atmospheric temperature profile
   buoy_surf_max = 20;
@@ -404,9 +431,17 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   bgc_relax = bgc_init;
   bgc_relax_none = zeros(Nx,Nz);
   
-  Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-  Ncline = 1000; % restore the nutrients at depth
+  Nmax = 40; %%% Maximum concentration of nutrient at the ocean bed
+  Ncline = 75; % restore the nutrients at depth
   bgc_relax(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
+  
+  figure(110)
+  [C h] = contourf(XX_tr,ZZ_tr,bgc_relax(:,:,1),15);
+  shading interp 
+  colorbar;
+  clabel(C,h,'Color','w');  
+  set(h,'ShowText','on'); 
+%   axis([0 3*10^5 -200 0])
  
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
@@ -443,9 +478,9 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
           T_relax_all(IDX_NITRATE,:,:) = reshape(T_relax_N,[1 Nx Nz]); 
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_NPZD
-          T_relax_all(IDX_NITRATE,:,:) = reshape(T_relax_N,[1 Nx Nz]); 
+          T_relax_all(IDX_NITRATE,:,:) = -ones(1,Nx,Nz); 
           T_relax_all(IDX_NITRATE+1:IDX_NITRATE+3,:,:) = -ones(3,Nx,Nz); % Conserve all other parts of npzd model
-          T_relax_all(IDX_NITRATE+1,:,:) = reshape(T_relax_P,[1 Nx Nz]); 
+          T_relax_all(IDX_NITRATE+1,:,:) = -ones(1,Nx,Nz); 
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_SSEM
           T_relax_all(IDX_NITRATE:end,:,:) = -ones(Nbgc,Nx,Nz);
@@ -479,71 +514,71 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   %%% Calculate the diffusivity with influence from the visbeck et al 1997
   %%% parameterization
-  buoy = buoy_init;
-  db_dz = zeros(Nx+1,Nz+1);
-  db_dx = zeros(Nx+1,Nz+1);
-  
+%   buoy = buoy_init;
+%   db_dz = zeros(Nx+1,Nz+1);
+%   db_dx = zeros(Nx+1,Nz+1);
+%   
   H = hb_psi - (Hbbl + Hsml);
   H(H < 0) = 0;
   Hmax = max(H);
-  
-  %%% Buoyancy gradients
-  for jj = 2:Nx
-      for kk = 2:Nz
-          db_dz(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj,kk-1))/(ZZ_tr(jj,kk) - ZZ_tr(jj,kk-1)) + ...
-                         (buoy(jj-1,kk) - buoy(jj-1,kk-1))/(ZZ_tr(jj-1,kk) - ZZ_tr(jj-1,kk-1)));
-          db_dx(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj-1,kk))/dx + (buoy(jj,kk-1) - buoy(jj-1,kk-1))/dx);
-          db_dx(jj,kk) = db_dx(jj,kk) - (ZZ_w(jj,kk) - ZZ_w(jj-1,kk))*db_dz(jj,kk)/dx;
-      end
-  end
-  
-  db_dz(:,1) = db_dz(:,2);
-  db_dz(:,Nz+1) = db_dz(:,Nz);
-  db_dz(1,:) = db_dz(2,:);
-  db_dz(Nx+1,:) = db_dz(Nx,:);
-  
-  db_dx(:,1) = db_dx(:,2);
-  db_dx(:,Nz+1) = db_dx(:,Nz);
-  db_dx(1,:) = db_dx(2,:);
-  db_dx(Nx+1,:) = db_dx(Nx,:);
-  
-  Msq = abs(1e-4*g*db_dx);
-%   figure(401)
-%   pcolor(XX_psi,ZZ_psi,Msq)
-%   title('M^2: Horizontal stratification')
-%   shading interp
-%   colorbar
-  
-  % Calculate the vertical stratification:
-  Nbuoy = sqrt(1e-4*g*db_dz);
-  
-%   figure(400)
-%   pcolor(XX_psi,ZZ_psi,Nbuoy)
-%   title('N: vertical stratification')
-%   shading interp 
-%   colorbar
-  
-  Rd = zeros(Nx+1,Nz+1);
-  Rd_avg = zeros(Nx+1,Nz+1);
-  
-  for jj = 1:Nx+1
-      tval = 0;
-      ncol = 0;
-      for kk = Nz:-1:1
-          if (H(jj) ~= 0)
-              Rd(jj,kk) = max(dx,max(Nbuoy(jj,:))*H(jj)/f0);
-              tval = tval + (Msq(jj,kk)/Nbuoy(jj,kk))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/H(jj);
-          else
-              Rd(jj,kk) = 0;
-          end
-          ncol = ncol + 0.5*(Nbuoy(jj,kk)+Nbuoy(jj,kk+1))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/(f0);
-          rval = max(ncol,dx);
-      end
-      Rd_avg(jj,:) = rval*ones(1,Nz+1);
-      
-      kgm_test(jj,:) = 0.015*Rd(jj,:).^2*tval;
-      kgm_temp(jj,:) = 0.015*Rd_avg(jj,:).^2*tval;
-  end
+%   
+%   %%% Buoyancy gradients
+%   for jj = 2:Nx
+%       for kk = 2:Nz
+%           db_dz(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj,kk-1))/(ZZ_tr(jj,kk) - ZZ_tr(jj,kk-1)) + ...
+%                          (buoy(jj-1,kk) - buoy(jj-1,kk-1))/(ZZ_tr(jj-1,kk) - ZZ_tr(jj-1,kk-1)));
+%           db_dx(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj-1,kk))/dx + (buoy(jj,kk-1) - buoy(jj-1,kk-1))/dx);
+%           db_dx(jj,kk) = db_dx(jj,kk) - (ZZ_w(jj,kk) - ZZ_w(jj-1,kk))*db_dz(jj,kk)/dx;
+%       end
+%   end
+%   
+%   db_dz(:,1) = db_dz(:,2);
+%   db_dz(:,Nz+1) = db_dz(:,Nz);
+%   db_dz(1,:) = db_dz(2,:);
+%   db_dz(Nx+1,:) = db_dz(Nx,:);
+%   
+%   db_dx(:,1) = db_dx(:,2);
+%   db_dx(:,Nz+1) = db_dx(:,Nz);
+%   db_dx(1,:) = db_dx(2,:);
+%   db_dx(Nx+1,:) = db_dx(Nx,:);
+%   
+%   Msq = abs(1e-4*g*db_dx);
+% %   figure(401)
+% %   pcolor(XX_psi,ZZ_psi,Msq)
+% %   title('M^2: Horizontal stratification')
+% %   shading interp
+% %   colorbar
+%   
+%   % Calculate the vertical stratification:
+%   Nbuoy = sqrt(1e-4*g*db_dz);
+%   
+% %   figure(400)
+% %   pcolor(XX_psi,ZZ_psi,Nbuoy)
+% %   title('N: vertical stratification')
+% %   shading interp 
+% %   colorbar
+%   
+%   Rd = zeros(Nx+1,Nz+1);
+%   Rd_avg = zeros(Nx+1,Nz+1);
+%   
+%   for jj = 1:Nx+1
+%       tval = 0;
+%       ncol = 0;
+%       for kk = Nz:-1:1
+%           if (H(jj) ~= 0)
+%               Rd(jj,kk) = max(dx,max(Nbuoy(jj,:))*H(jj)/f0);
+%               tval = tval + (Msq(jj,kk)/Nbuoy(jj,kk))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/H(jj);
+%           else
+%               Rd(jj,kk) = 0;
+%           end
+%           ncol = ncol + 0.5*(Nbuoy(jj,kk)+Nbuoy(jj,kk+1))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/(f0);
+%           rval = max(ncol,dx);
+%       end
+%       Rd_avg(jj,:) = rval*ones(1,Nz+1);
+%       
+%       kgm_test(jj,:) = 0.015*Rd(jj,:).^2*tval;
+%       kgm_temp(jj,:) = 0.015*Rd_avg(jj,:).^2*tval;
+%   end
   
   
   
@@ -596,7 +631,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
-        Kgm(jj,kk) = Kgm(jj,kk)*H(jj)*exp(ZZ_psi(jj,kk)/(lambda*hb_psi(jj)))/Hmax;
+        Kgm(jj,kk) = Kgm(jj,kk)*H(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
       end
   end
   
@@ -626,31 +661,26 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   
   %%% Uniform diffusivity
-%   Kiso = Kiso0*ones(Nx+1,Nz+1);        
+  Kiso0 = 1000;
+  Kiso = Kiso0*ones(Nx+1,Nz+1);        
   %%% First guess is a linearly decreasing profile with depth from Kiso0 to
   %%% Kiso_int, with respect to depth. 
-%   Kiso = (((Kiso0 - Kiso_hb)/H).*ZZ_psi) + Kiso0;
-
   
-  %%% Another guess is a hyperbolic profile decreasing to 200 at the lower
-  %%% boundary. 
-  Kefold = 1000;
+%  for jj = 1:Nx+1
+%       for kk = 1:Nz+1 
+%         Kiso(jj,kk) = Kiso(jj,kk)*exp(ZZ_psi(jj,kk)/(lambda*Hmax));
+%       end
+%   end
   
-  for jj = 1:Nx+1
-%     Kiso(jj,:) = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi(jj,:)./(0.75*hb_psi(jj)));
-    Kiso(jj,:) = Kiso0 + (Kiso0-Kiso_hb)*tanh(ZZ_psi(jj,:)./(Kefold));
-  end
+  Kiso = 2*Kgm;
+  KisoFile = 'Kiso.dat';
+  writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
+  PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
   
   figure(401)
   pcolor(XX_psi,ZZ_psi,Kiso)
   shading interp 
   colorbar
-  
-  Kiso = Kgm;
-  KisoFile = 'Kiso.dat';
-  writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
-  PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
-  
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

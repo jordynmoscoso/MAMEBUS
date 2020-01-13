@@ -14,7 +14,7 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
+function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
 
     %%% Load convenience functions
     addpath ../utils;
@@ -33,6 +33,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     end
     
     show_w = true; % plots vertical velocities
+    plot_uptake = false;
 
     %%%%%%%%%%%%%%%%%%%%%
     %%%%% VARIABLES %%%%%
@@ -96,6 +97,10 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     %%% For convenience
     t1year = 365*86400; %%% Seconds in one year
     t1day = 86400;
+    
+    CtoChl = 100/12; %mmolC /mg Chl
+    NtoChl = 0.8; %mg Chl/mmol N
+    
 
     dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
     xx_psi = 0:dx:Lx;
@@ -165,19 +170,19 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
                     title_name = 'Depth Tracer';
                 case 1 % nitrate only
                     if (var_id == 3)
-                        title_name = 'Nitrate';
+                        title_name = 'Nitrate (mmol/m^3)';
                     else
                         title_name = 'Depth Tracer';
                     end
                 case 2 % npzd
                     if (var_id == 3)
-                        title_name = 'Nitrate';
+                        title_name = 'Nitrate (mmol/m^3)';
                     elseif (var_id == 4)
-                        title_name = 'Phytoplankton';
+                        title_name = 'Phytoplankton (mg Chl/m^3)';
                     elseif (var_id == 5)
-                        title_name = 'Zooplankton';
+                        title_name = 'Zooplankton (mmol N/m^3)';
                     elseif (var_id == 6)
-                        title_name = 'Detritus';
+                        title_name = 'Detritus (mmol N/m^3)';
                     elseif (var_id == 7)
                         title_name = 'Passive Tracer';
                     else
@@ -236,6 +241,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
     CN = true;
     trac = 1;
     %%% Averaging loop
+    ndt = lastVal - avgStart;
     for n = avgStart:lastVal
         if (plot_trac)
             data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
@@ -244,21 +250,50 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             
             
             %%% calculate the uptake offline for the single nitrate bgc model
-            if (modeltype == 2 && var_id == 4)
-                buoy_id = 2;
-                n_id = 3;
-                data_file = fullfile(dirpath,['TRAC',num2str(n_id),'_n=',num2str(n),'.dat']);
-                N = readOutputFile(data_file,Nx,Nz);
-                buoy_file = fullfile(dirpath,['TRAC',num2str(buoy_id),'_n=',num2str(n),'.dat']);
-                buoy = readOutputFile(data_file,Nx,Nz);
-                r = 0.05;
+            if (modeltype == 1 && var_id == 3)
                 
-%                 t_uptake = exp(r.*(buoy - T0*ones(Nx,Nz)));
-                t_uptake = 1;
-                umax = 0.1;
+                data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
+                N = readOutputFile(data_file,Nx,Nz);
+                
+                buoy_id = var_id-1;
+                buoy_file = fullfile(dirpath,['TRAC',num2str(buoy_id),'_n=',num2str(n),'.dat']);
+                buoy = readOutputFile(buoy_file,Nx,Nz);
+                
+                t_uptake = exp(r.*(buoy - T0));
+
                 uptake = umax.*t_uptake.*IR.*N;
                 
+                avgUptake = avgUptake + log10(uptake);
+%                 avgUptake = avgUptake + uptake;
+                plot_uptake = true;
+                
+            elseif (modeltype == 2 && var_id == 4)
+                
+                data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
+                P = readOutputFile(data_file,Nx,Nz);
+                
+                buoy_id = 2;
+                buoy_file = fullfile(dirpath,['TRAC',num2str(buoy_id),'_n=',num2str(n),'.dat']);
+                buoy = readOutputFile(buoy_file,Nx,Nz);
+                
+                N_id = 3;
+                N_file = fullfile(dirpath,['TRAC',num2str(N_id),'_n=',num2str(n),'.dat']);
+                N = readOutputFile(N_file,Nx,Nz);
+                
+                tlim = exp(r*(buoy-T0));
+                umax = umax*(5^(-0.45));
+                kn = 0.1;
+                
+                IR = 0.45*qsw./(kw.*abs(ZZ_tr)).*(1-exp(-kw.*abs(ZZ_tr)));
+                llim = IR/qsw;
+                
+                uptake = umax.*tlim.*llim.*(N./(kn+N)).*P;
+%                 uptake = N./(kn+N);
+                
+                
+                
                 avgUptake = avgUptake + uptake;
+                plot_uptake = true;
             end
             
             
@@ -280,10 +315,14 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         
 
         avgVals = avgVals + phi;
-        ndt = ndt + 1;
     end
     
     avgVals = avgVals/ndt;
+    
+%     if (modeltype == 1 || modeltype == 2 && plot_trac == true)
+%         avgUptake = avgUptake/ndt;
+%     end
+    
     
     Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
     Ncline = 250; % Approximate guess of the depth of the nutracline
@@ -304,28 +343,61 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
             maxspeed = 0;
             minval = max(max(max(avgVals)),maxspeed);
             minval = abs(min(min(min(avgVals)),-minval));
-%             ([-minval minval]);
+            caxis([-minval minval]);
             title(titlestr)
             shading interp
         elseif (var_id == 2) % plot buoyancy
             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:1:20]);
+            sum(avgVals(Nx-7:Nx,Nz))/7
+%             pcolor(XX_tr,ZZ_tr,avgVals)
+%             shading interp;
             colorbar; 
             colormap default;
             title(titlestr)
-            clabel(C,h,'Color','w');  
-            set(h,'ShowText','on'); 
+%             clabel(C,h,'Color','w');  
+%             set(h,'ShowText','on'); 
         else % plot biogeochemistry
 %             [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:2:30]);
 %             clabel(C,h,'Color','w');   
 %             set(h,'ShowText','on'); 
 %             set(h,'FontSize',18);
+            if (var_id == 4 && modeltype == 2)
+                avgVals = avgVals*NtoChl;
+            end
             pcolor(XX_tr,ZZ_tr,avgVals);
+            sum(avgVals(Nx-9:Nx,Nz))/9
             shading interp
             colorbar; 
             colormap jet;
 %             caxis([min(min(avgVals)) max(max(avgVals))])
 %             caxis([0 0.11])
             title(titlestr)
+            plot_uptake = 0;
+            
+            if (var_id == 3 && modeltype == 1 && plot_uptake == 1)
+                titlestr = [ 'Uptake log(mmol N/m^3)/d averaged over the final ', num2str(timelengthstr) , ' year(s)'];
+                figure
+                pcolor(XX_tr,ZZ_tr,avgUptake);
+                shading interp
+                colorbar; 
+                colormap jet;
+%                 caxis([min(min(avgVals)) max(max(avgVals))])
+                caxis([-1 1])
+                title(titlestr)
+                
+            elseif (var_id == 4 && modeltype == 2 && plot_uptake == 1)
+                titlestr = [ 'Uptake (mmol N/m^3/d) averaged over the final ', num2str(timelengthstr) , ' year(s)'];
+                figure
+                pcolor(XX_tr,ZZ_tr,avgUptake);
+                shading interp
+                colorbar; 
+                colormap jet;
+%                 caxis([min(min(avgVals)) max(max(avgVals))])
+%                 caxis([0 5])
+                title(titlestr)
+            end
+            
+            
             
             
         end
@@ -347,7 +419,7 @@ function filenames = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgT
         shading interp
         h = colorbar; 
         colormap redblue;
-%         caxis([-limval limval]);
+        caxis([-limval limval]);
         title(titlestr)
     end
     
