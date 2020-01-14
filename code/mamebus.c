@@ -1231,7 +1231,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real r = 0.05;          // temperature dependence
     real kw = 0.04;
     real kc = 0.03;
-    real kpar = 0;              // light attenuation
+    real kpar = 0.04;              // light attenuation
     real I0 = 0;
     real IR = 0;                // irradiance profile in cell
     real Tref = 20;
@@ -1268,6 +1268,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real lz = 10; // size of zooplankton
     real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
     real Isurf = qsw;
+    real dz = 0;
     
     //NPZD Holders
     real MM = 0;
@@ -1299,21 +1300,24 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real gmax_day = gmax/day;;
     
     // Build temperature and irradiance limitation profiles
+    I0 = Isurf*0.45;
     
-    for (kk = Nz; kk > k; kk--)
+    for (kk = Nz-1; kk > k; kk--)
     {
-        ptot += phi[idx_nitrate+1][j][kk];
+        dz = -(ZZ_w[j][kk+1] - ZZ_w[j][kk]);
+        kpar = kw + phi[idx_nitrate+1][j][kk]*kc*theta_chl_N;
+        
+        IR = I0/(1-kpar*dz);
+        I0 = IR;
     }
     
     
-    
-    kpar = kw + kc*ptot*theta_chl_N;
-    I0 = 0.45*qsw/(kpar*zval)*(1-exp( -kpar*zval ));
-    llim = 1- exp(-I0/Isurf);
-//    llim = I0/sqrt(Isurf*Isurf + I0*I0);
+//    llim = 1- exp(-I0/Isurf);
+    llim = I0/sqrt(Isurf*Isurf + I0*I0);
 //    llim = I0/sqrt(Ik*Ik + I0*I0);
 //    llim = I0/Isurf;
     tlim = exp(r*(T-Tref));
+    fprintf(stderr,"j = %d, k = %d, kpar = %le, dz = %le, llim = %le \n",j,kk,kpar, dz,llim);
     
 //    fprintf(stderr,"ptot = %le, kpar %le , z = %le, j = %d, k = %d \n",ptot,kpar,ZZ_phi[j][k],j,k);
     
