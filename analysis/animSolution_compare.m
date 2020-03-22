@@ -14,7 +14,7 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
+function M = animSolution_compare (local_home_dir,run_name_one,run_name_two,plot_trac,var_id)
  
   %%% Load convenience functions
   addpath ../utils;
@@ -22,9 +22,9 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   
   mov_on = false;
   if plot_trac
-    mov_name = strcat(run_name,'_',num2str(var_id));
+    mov_name = strcat(run_name_one,'_',num2str(var_id));
   else
-      mov_name = strcat(run_name,'_strfcn',num2str(var_id));
+      mov_name = strcat(run_name_one,'_strfcn',num2str(var_id));
   end
   
 %   if var_id > 3
@@ -39,9 +39,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   %%%%%%%%%%%%%%%%%%%%% 
 
   %%% Parameter and data file names
-  run_name = strtrim(run_name);
-  dirpath = fullfile(local_home_dir,run_name);
-  params_file = fullfile(dirpath,[run_name,'_in']);  
+  run_name_one = strtrim(run_name_one);
+  dirpath = fullfile(local_home_dir,run_name_one);
+  dirpath_two = fullfile(local_home_dir,run_name_two);
+  params_file = fullfile(dirpath,[run_name_one,'_in']);  
 
   %%% Plotting grid
   [Nx Nx_found] = readparam(params_file,'Nx','%u');
@@ -92,6 +93,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
   %%% For convenience
   t1year = 365*86400; %%% Seconds in one year
   t1day = 86400;
+  
+  cmap = cmocean('balance');
   
   %%% If user is plotting nitrate, indicate what to plot
 %   if (var_id == 2 && plot_trac)
@@ -181,11 +184,15 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
       %%% Data file name
       data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
       phi = readOutputFile(data_file,Nx,Nz);
+      data_file_two = fullfile(dirpath_two,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
+      phi_two = readOutputFile(data_file_two,Nx,Nz);
+      
+      pltval = phi - phi_two;
       %%% Plot the tracer     
       switch (var_id)
         case 0 %%% Zonal Velocity 
 %           [C h] = contourf(XX_tr,ZZ_tr,phi,0:1:20);
-          pcolor(XX_tr,ZZ_tr,phi)
+          pcolor(XX_tr,ZZ_tr,pltval)
           shading interp
           colorbar 
           caxis([-.03 .03])
@@ -199,7 +206,7 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
 %           min(min(phi))])
 %           set(gca, 'CLim', [0, 20]);
         case 1 %%% Meridional Velocity
-          pcolor(XX_tr,ZZ_tr,phi)
+          pcolor(XX_tr,ZZ_tr,pltval)
           shading interp
           colorbar 
           caxis([-.5 .5])
@@ -215,14 +222,15 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
         case var_id %%% Buoyancy
 %           contourf(XX_tr,ZZ_tr,phi,20)
 %           shading interp
-          pcolor(XX_tr,ZZ_tr,phi)
+          pcolor(XX_tr,ZZ_tr,pltval)
           shading interp
           colorbar
           title(titlestr)
-          colormap default;
+          colormap(cmap);
           h=colorbar;
-          caxis([0 0.07])
-                    title(titlestr)
+          title(titlestr)
+          axis([0 3.5e5 -200 0])
+          caxis([-0.6 0.6])
 %           hold on
 %           plot(xx_psi,-hb_psi,'k')
 %           plot(xx_psi,-50*ones(size(xx_psi)),'b','LineWidth',1);
@@ -242,32 +250,41 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id)
     %%% If plot_trac==false, plot the streamfunction
     else    
     
+      titlestr = ['t = ', num2str(t/t1year), ' yr'];
+      
       %%% Load different streamfunctions      
       switch (var_id)
         case 0 %%% Residual streamfunction
           data_file = fullfile(dirpath,['PSIR_n=',num2str(n),'.dat']);
+          data_file_two = fullfile(dirpath_two,['PSIR_n=',num2str(n),'.dat']);
         case 1 %%% Mean streamfunction
           data_file = fullfile(dirpath,['PSIM_n=',num2str(n),'.dat']);
+          data_file_two = fullfile(dirpath_two,['PSIM_n=',num2str(n),'.dat']);
         case 2 %%% Eddy streamfunction
           data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
+          data_file_two = fullfile(dirpath_two,['PSIR_n=',num2str(n),'.dat']);
       end
                 
       %%% Get the psi values on the gridpoints
-      psi = readOutputFile (data_file,Nx+1,Nz+1);       
+      psi = readOutputFile (data_file,Nx+1,Nz+1);  
+      psi_two = readOutputFile (data_file_two,Nx+1,Nz+1); 
 
+      pltval = psi - psi_two;
       %%% Plot the streamfunction
-      psi_r_lim = psi;
+      psi_r_lim = pltval;
       limval = 2;
       psi_r_lim = min(psi_r_lim,limval);
       psi_r_lim = max(psi_r_lim,-limval);
 %       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
       figure(100)
-      pcolor(XX_psi,ZZ_psi,psi_r_lim);
+      pcolor(XX_psi,ZZ_psi,pltval);
       shading interp;     
       colormap redblue;
       h=colorbar;        
       caxis([-limval limval]);
       set(h,'FontSize',18);
+      title(titlestr)
+     
 %       xx = max(max(abs(psi)));
 %       [i,j] = find(abs(psi) == xx);
 %       disp([xx i j])

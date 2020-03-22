@@ -88,8 +88,8 @@ real * bgc_params = NULL;     // Vector containing biogeochemical parameters, al
 real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
 bool limSlopes = true;    // Use Cox slope limiting
 real Smax = 0.1;        // Max isopycnal slope
-const int idx_uvel = 0;   // Index of buoyancy variable in list of tracers
-const int idx_vvel = 1;   // Index of buoyancy variable in list of tracers
+const int idx_uvel = 0;   // Index of zonal momentum variable in list of tracers
+const int idx_vvel = 1;   // Index of meridional momentum variable in list of tracers
 const int idx_buoy = 2;   // Index of buoyancy variable in list of tracers
 const int idx_nitrate = 3;
 const int max_det = 3;
@@ -137,7 +137,7 @@ uint advectionScheme = ADVECTION_KT00;
 uint momentumScheme = MOMENTUM_TTTW;
 
 // Pressure scheme
-uint pressureScheme = PRESSURE_CUBIC;
+uint pressureScheme = PRESSURE_LINEAR;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -738,12 +738,12 @@ void calcSlopes (     const real        t,
         {
             
             // If the pressure scheme is the linear pressure gradient, then calculate the buoyancy gradient here
-            if( pressureScheme == PRESSURE_LINEAR )
-            {
+//            if( pressureScheme == PRESSURE_LINEAR )
+//            {
                 db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
                 db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                 db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-            }
+//            }
             // default to the 4th order scheme following Chu et. al. (1997)
             
         }
@@ -1238,6 +1238,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real alpha = 0.25;          // slope of P-I curve in mmol N/W/m^2
     real theta_chl_N = 3;              // mg chl / mol N;
     real ptot = 0;                     // integrated phytoplankton concentration
+    int idx_detritus = idx_nitrate+3;
 
     // place holders for npzd and time tendencies
     real N = phi[idx_nitrate][j][k];
@@ -1263,7 +1264,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real delta_x = 0.25; // width of grazing profile
     real lambda = 1.0/3.0; // zooplankton efficiency
     real mp = 0.02; // mortality
-    real wsink = 10/day; // sinking speed
+    real wsink = 25.0/day; // sinking speed
     real lp = 5; // size of phytoplankton
     real lz = 10; // size of zooplankton
     real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
@@ -1290,6 +1291,10 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real RD = 0;
     real preyopt = 0;
     real Dsink = 0;
+    real sf_flux = 0;
+    
+    real fi = 0;
+    real fo = 0;
     
     
     // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
@@ -1313,11 +1318,11 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     
     
 //    llim = 1- exp(-I0/Isurf);
-    llim = I0/sqrt(Isurf*Isurf + I0*I0);
+//    llim = I0/sqrt(Isurf*Isurf + I0*I0);
 //    llim = I0/sqrt(Ik*Ik + I0*I0);
-//    llim = I0/Isurf;
+    llim = I0/Isurf;
     tlim = exp(r*(T-Tref));
-    fprintf(stderr,"j = %d, k = %d, kpar = %le, dz = %le, llim = %le \n",j,kk,kpar, dz,llim);
+//    fprintf(stderr,"j = %d, k = %d, kpar = %le, dz = %le, llim = %le \n",j,kk,kpar, dz,llim);
     
 //    fprintf(stderr,"ptot = %le, kpar %le , z = %le, j = %d, k = %d \n",ptot,kpar,ZZ_phi[j][k],j,k);
     
@@ -1339,13 +1344,27 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     GZ = lambda*GP;
     
     // Detritus (no sinking yet)
-    GD = (1-lambda)*GP;
+    GD = GP - GZ;
     RD = r_remin*D;
     
-    if (k != 0)
+    // Sinking isn't really working now, so let's do without it for the time being.
+    if (k == Nz-1) // This is the surface, so there is no flux through the surface.
     {
-        Dsink = wsink*(D - phi[idx_nitrate+3][j][k-1]);
+        fi = sf_flux;
+        fo = 0.5*fabs(wsink)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
     }
+    else if (k == 0) // don't calculate this value, this likely won't matter for now.
+    {
+        
+    }
+    else
+    {
+        fi = 0.5*wsink*(phi[idx_detritus][j][k+1] + phi[idx_detritus][j][k]);
+        fo = 0.5*fabs(wsink)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+    }
+    
+    Dsink = (fi-fo)*_dz_phi[j][k];
+
     
     // Mortality terms
     MP = mp*umax_day*P;
@@ -1354,15 +1373,11 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     mu2 = mu2/day;
     MZ = mu2*Z*Z;
     
-    dN_dt[j][k] = -uptake + RD;
-    dP_dt[j][k] = uptake - GP - MP;
-    dZ_dt[j][k] = GZ - MZ;
-    dD_dt[j][k] = MP + MZ + GD - RD - Dsink;
+    dN_dt[j][k] += -uptake + RD;
+    dP_dt[j][k] += uptake - GP - MP;
+    dZ_dt[j][k] += GZ - MZ;
+    dD_dt[j][k] += MP + MZ + GD - RD + Dsink;
     
-    if (k != 0)
-    {
-        dD_dt[j][k-1] += Dsink;
-    }
 
 }
 
@@ -1498,8 +1513,6 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
         {
             
             // npzd parameters //
-
-            
             
             for (j = 0; j < Nx; j++)
             {
@@ -2072,8 +2085,9 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/n_max;
     cfl_sink = 0.5*dx/sink_dz_max;
-
     
+//    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, clf_z = %le, cfl_igw = %le, cfl_sink = %le \n",cfl_u, cfl_w, cfl_y, cfl_z, cfl_igw, cfl_sink);
+
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
     cfl_phys = fmin(fmin(cfl_sink,cfl_igw),cfl_phys);
@@ -2084,6 +2098,11 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     ///// END CALCULATING CFLS /////
     ////////////////////////////////
     
+    if (cfl_dt < 1)
+    {
+        fprintf(stderr,"t = %le cfl_u = %le, cfl_w = %le, cfl_y = %le, clf_z = %le, cfl_igw = %le, cfl_sink = %le \n",t/day, cfl_u, cfl_w, cfl_y, cfl_z, cfl_igw, cfl_sink);
+
+    }
     
     
     return cfl_dt;
@@ -2481,12 +2500,17 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
  */
 void conserve_nitrate(real t, real dt, real *** phi, real Nint)
 {
-    int j,k,d;
+    int i,j,k,d;
     real remin_adj = 0;
     real Ntot_dt = 0; // the total nitrate after one time step
     real Ntot_col = 0;
     real N = 0;
     real dz = 0;
+    real ntot = 0;
+    real ptot = 0;
+    real ztot = 0;
+    real dtot = 0;
+    real NN = 0;
     int idx_detritus = idx_nitrate + MP + MZ + 1;
     
     
@@ -2525,10 +2549,22 @@ void conserve_nitrate(real t, real dt, real *** phi, real Nint)
         }
         case BGC_NPZD:
         {
+            for (j = 0; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k++)
+                {
+                    
+                    ntot += phi[idx_nitrate][j][k];
+                    ptot += phi[idx_nitrate+1][j][k];
+                    ztot += phi[idx_nitrate+2][j][k];
+                    dtot += phi[idx_nitrate+3][j][k];
+                    
+                    NN += (ntot + ptot + ztot+ dtot);
+                }
+            }
             
             
-            
-            
+//            fprintf(stderr,"N: %le, P: %le, Z: %le, D: %le, total: %le \n",ntot,ptot,ztot,dtot,NN);
             
             
             break;
@@ -4080,9 +4116,8 @@ int main (int argc, char ** argv)
         }
         
         
-        
+
         // Step 2: Add implicit vertical diffusion and remineralization
-        conserve_nitrate(t,dt,phi_out,Nint);
         do_impl_diff(t,dt,phi_out);
         
         

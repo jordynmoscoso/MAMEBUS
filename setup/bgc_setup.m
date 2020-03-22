@@ -82,7 +82,7 @@ switch (model_type)
         spec_tot = NP + NZ + ND + 1; % total species available,
         bgc_init = zeros(Nx,Nz,spec_tot); %%% Add one for nitrate
         
-        Pcline = 250;
+        Pcline = 200;
         Pmax = 0.1; % mmol/m3
         Dmax = 0;
         
@@ -92,36 +92,45 @@ switch (model_type)
 %         colorbar
 %         shading interp
         
-        euph_init = Pmax*ones(Nx,Nz);
+        euph_init = Pmax*(tanh(ZZ_tr/Pcline))+0.1;
 
         
         %%% Initial nitrate profile (Hyperbolic)
-        Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-        Ncline = 50; % Approximate guess of the depth of the nutracline
-%         bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr/Ncline);
-        bgc_init(:,:,1) = Nmax*ones(Nx,Nz);
+        Nmax = 25; %%% Maximum concentration of nutrient at the ocean bed
+        Ncline = 100; % Approximate guess of the depth of the nutracline
+        bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr/Ncline);
+%         bgc_init(:,:,1) = Nmax*ones(Nx,Nz);
         
-        figure(300)
-        pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1))
-        title('Initial Nitrate Concentration')
-        colorbar
-        shading interp
+%         figure(300)
+%         pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1))
+%         hold on
+%         [C, h] = contour(XX_tr,ZZ_tr,bgc_init(:,:,1),[1 6.5 12.1 17.6 23.1],'-k');
+%         clabel(C,h)
+%         hold off
+%         title('Initial Nitrate Concentration')
+%         colorbar
+%         shading interp
         
         
         bgc_init(:,:,2) = euph_init;
-        bgc_init(:,:,3) = euph_init;
+        bgc_init(:,:,3) = 0.1*euph_init;
         bgc_init(:,:,4) = Dmax*zeros(Nx,Nz);
         
         
-        figure(302)
-        pcolor(XX_tr,ZZ_tr,euph_init)
-        shading interp
-        colorbar
-        caxis([0 Pmax])
-        title('Initial Phytoplankton Concentration')
-        
-        
-        
+%         figure(302)
+%         pcolor(XX_tr,ZZ_tr,euph_init)
+%         shading interp
+%         colorbar
+% %         caxis([0 Pmax])
+%         title('Initial Phytoplankton Concentration')
+%         
+%         
+%         figure(302)
+%         pcolor(XX_tr,ZZ_tr,bgc_init(:,:,3))
+%         shading interp
+%         colorbar
+% %         caxis([0 Pmax])
+%         title('Initial Zooplankton Concentration')
 
     case 3 %%% Size Structured NPZ model based on Banas
         nparams = 0; 

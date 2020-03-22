@@ -19,6 +19,10 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
     %%% Load convenience functions
     addpath ../utils;
     addpath ./redblue
+    
+    fs = 24; % control the size of the font here.
+    fsplt = 24;
+    m1km = 1000;
 
     mov_on = 0;
     mov_name = strcat(run_name,'_name');
@@ -29,11 +33,23 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
     
     if (var_id > 3 && ~plot_trac)
         plot_trac = true;
-        disp('You have chosen a variable which does not exist')
+        disp('Check "plot_trac" and switch to "true" for this variable')
     end
     
     show_w = true; % plots vertical velocities
     plot_uptake = false;
+    
+    plot_density = false;
+    T0 = 20; % reference temperature of water
+    alpha = 1e-4; % thermal coefficient
+    rho0 = 1000;
+    rhosw = 1026;
+    if var_id == 2
+        plot_density = false;
+        if plot_density
+            disp('Plotting density')
+        end
+    end
 
     %%%%%%%%%%%%%%%%%%%%%
     %%%%% VARIABLES %%%%%
@@ -163,6 +179,9 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
             title_name = 'Meridional Velocity';
         elseif (var_id == 2)
             title_name = 'Buoyancy';
+            if plot_density
+                title_name = 'Density (kg/m$^3$)';
+            end
         else
             % title names
             switch (modeltype)
@@ -176,13 +195,13 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
                     end
                 case 2 % npzd
                     if (var_id == 3)
-                        title_name = 'Nitrate (mmol/m^3)';
+                        title_name = 'Nitrate (mmol/m$^3$)';
                     elseif (var_id == 4)
-                        title_name = 'Phytoplankton (mg Chl/m^3)';
+                        title_name = 'Phytoplankton (mg Chl/m$^3$)';
                     elseif (var_id == 5)
-                        title_name = 'Zooplankton (mmol N/m^3)';
+                        title_name = 'Zooplankton (mmol N/m$^3$)';
                     elseif (var_id == 6)
-                        title_name = 'Detritus (mmol N/m^3)';
+                        title_name = 'Detritus (mmol N/m$^3$)';
                     elseif (var_id == 7)
                         title_name = 'Passive Tracer';
                     else
@@ -235,13 +254,8 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
 %     lastVal = 1200;
 %     avgStart = lastVal - LL;
     
-    tot = zeros(Nx,Nz);
-    conserve = zeros(lastVal-avgStart,1);
-    area = 0;
-    CN = true;
-    trac = 1;
     %%% Averaging loop
-    ndt = lastVal - avgStart;
+    ndt = lastVal - avgStart + 1; % add one to account for Matlab Indexing
     for n = avgStart:lastVal
         if (plot_trac)
             data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
@@ -266,34 +280,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
                 avgUptake = avgUptake + log10(uptake);
 %                 avgUptake = avgUptake + uptake;
                 plot_uptake = true;
-                
-            elseif (modeltype == 2 && var_id == 4)
-                
-                data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
-                P = readOutputFile(data_file,Nx,Nz);
-                
-                buoy_id = 2;
-                buoy_file = fullfile(dirpath,['TRAC',num2str(buoy_id),'_n=',num2str(n),'.dat']);
-                buoy = readOutputFile(buoy_file,Nx,Nz);
-                
-                N_id = 3;
-                N_file = fullfile(dirpath,['TRAC',num2str(N_id),'_n=',num2str(n),'.dat']);
-                N = readOutputFile(N_file,Nx,Nz);
-                
-                tlim = exp(r*(buoy-T0));
-                umax = umax*(5^(-0.45));
-                kn = 0.1;
-                
-                IR = 0.45*qsw./(kw.*abs(ZZ_tr)).*(1-exp(-kw.*abs(ZZ_tr)));
-                llim = IR/qsw;
-                
-                uptake = umax.*tlim.*llim.*(N./(kn+N)).*P;
-%                 uptake = N./(kn+N);
-                
-                
-                
-                avgUptake = avgUptake + uptake;
-                plot_uptake = true;
             end
             
             
@@ -316,7 +302,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
 
         avgVals = avgVals + phi;
     end
-    
     avgVals = avgVals/ndt;
     
 %     if (modeltype == 1 || modeltype == 2 && plot_trac == true)
@@ -328,32 +313,74 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
     Ncline = 250; % Approximate guess of the depth of the nutracline
     Ninit(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
 
+    
+    if plot_density
+        tempvals = avgVals;
+        avgVals = 23.5 + rho0*(alpha*(T0 - tempvals));
+    end
 
-        
+%     v = avgVals;
+%     save('meridveloc.mat','v')
+    
     %%% Plot the average values %%%
     timelengthstr = lastVal*dt_s/t1year - avgStart*dt_s/t1year;
-    titlestr = [ title_name,' averaged over the final ', num2str(timelengthstr) , ' year(s)'];
+    titlestr = title_name;
     figure
     if (plot_trac)
         if (var_id == 0 || var_id == 1)
+            cmap = cmocean('balance');
             pcolor(XX_tr,ZZ_tr,avgVals)
 %             shading interp
             h = colorbar; 
-            colormap redblue;
-            maxspeed = 0;
+            colormap(cmap)
+            h.TickLabelInterpreter = 'latex';
+            maxspeed = 0.01;
             minval = max(max(max(avgVals)),maxspeed);
             minval = abs(min(min(min(avgVals)),-minval));
             caxis([-minval minval]);
-            title(titlestr)
+            title(titlestr,'interpreter','latex')
             shading interp
-        elseif (var_id == 2) % plot buoyancy
-            [C h] = contourf(XX_tr,ZZ_tr,avgVals,[0:1:20]);
-            sum(avgVals(Nx-7:Nx,Nz))/7
+        elseif (var_id == 2) % plot buoyancy or density
+            if plot_density
+                cmap = cmocean('dense');
+%                 cvec = round(linspace(23,max(max(avgVals)),10),2);
+                cvec = [23.9 24.6 25.2 25.8 26.4];
+                c = colorbar; 
+                c.TickLabelInterpreter = 'latex';
+                pcolor(XX_tr,ZZ_tr,avgVals)
+                shading interp
+                hold on
+                [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,'-w');
+                hold off
+                axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
+                caxis([23.4 27])
+                set(gca,'TickLabelInterpreter','latex')
+                set(gca,'FontSize',fsplt)
+                set(gcf,'Position',[100 100 724 654])
+                ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
+                xticks([0:50e3:350e3])
+                xticklabels({'$350$' '300' '250' '200' '150' '100' '50' '0'})
+                xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+                yticks(-180:20:0)
+                yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
+                colorbar off
+            else
+                cmap = cmocean('thermal');
+                pcolor(XX_tr,ZZ_tr,avgVals)
+                cvec = 0:2:18;
+                shading interp
+                hold on
+                [C h] = contour(XX_tr,ZZ_tr,avgVals+1,cvec,'-w');
+                hold off
+                axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
+            end
+            clabel(C,h,'Color','w')
 %             pcolor(XX_tr,ZZ_tr,avgVals)
 %             shading interp;
             colorbar; 
-            colormap default;
-            title(titlestr)
+            colormap(cmap);
+            title(titlestr,'interpreter','latex')
+%             axis([min(min(XX_tr)) max(max(XX_tr)) -200 0])
 %             clabel(C,h,'Color','w');  
 %             set(h,'ShowText','on'); 
         else % plot biogeochemistry
@@ -364,14 +391,51 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
             if (var_id == 4 && modeltype == 2)
                 avgVals = avgVals*NtoChl;
             end
+            clr = 'w';
+            % chose the appropriate colormap
+            if (var_id == 3)
+                cmap = cmocean('matter');
+                cvec = [1 6.5 12.1 17.6 23.1];
+                
+            elseif (var_id == 4)
+                cmap = cmocean('speed');
+                cvec = [0.2 0.4 0.9 1.8];
+                clr = 'k';
+            elseif (var_id == 5)
+                cmap = cmocean('amp');
+                cvec = 5;
+            elseif (var_id == 6)
+                cmap = cmocean('turbid');
+                
+                cvec = 5;
+            else
+                disp('Not explicitly chosen yet')
+                cmap = cmocean('deep');
+                cvec = 5;
+            end
+                
             pcolor(XX_tr,ZZ_tr,avgVals);
-            sum(avgVals(Nx-9:Nx,Nz))/9
+            hold on
+            [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,clr);
+            clabel(C,h,'Color',clr)
+            hold off
             shading interp
-            colorbar; 
-            colormap jet;
+            c = colorbar; 
+            colormap(cmap);
+            c.TickLabelInterpreter = 'latex';
+            set(gca,'TickLabelInterpreter','latex')
+            set(gca,'FontSize',fsplt)
+            ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
+            xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+            set(gcf,'Position',[100 100 724 654])
+            xticks(0:50e3:350e3)
+            xticklabels({'$350$' '300' '250' '200' '150' '100' '50' '0'})
+            yticks(-180:20:0)
+            yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
 %             caxis([min(min(avgVals)) max(max(avgVals))])
 %             caxis([0 0.11])
-            title(titlestr)
+            axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
+            title(titlestr,'interpreter','latex')
             plot_uptake = 0;
             
             if (var_id == 3 && modeltype == 1 && plot_uptake == 1)
@@ -423,7 +487,17 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
         title(titlestr)
     end
     
+%     psie = psi_r_lim;
+    save('XX_psi_hi.mat','XX_psi')
+    save('XX_tr_hi.mat','XX_tr')
+    save('ZZ_psi_hi.mat','ZZ_psi')
+    save('ZZ_tr_hi.mat','ZZ_tr')
+    save('hb_psi_hi.mat','hb_psi')
+    save('x_psi_hi.mat','xx_psi')
     
+    
+    
+
     
 %         title(titlestr)
         hold on

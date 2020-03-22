@@ -51,14 +51,14 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
-  H = 3*m1km; %%% Depth, excluding the mixed layer
-  Lx = 600*m1km; %%% Computational domain width
+  H = 4.3*m1km; %%% Depth, excluding the mixed layer
+  Lx = 400*m1km; %%% Computational domain width
   
   %%% Scalar parameter definitions 
 %   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
-  Kgm0 = 500; %%% Reference GM diffusivity
+  Kgm0 = 1200; %%% Reference GM diffusivity
   Kiso0 = 2000; %%% Reference surface isopycnal diffusivity m^2/s
   Kiso_hb = 200; %%% Reference interior isopycnal diffusivity
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity
@@ -124,7 +124,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Grids  
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  Nx = 40; %%% Number of latitudinal grid points 
+  Nx = 50; %%% Number of latitudinal grid points 
   Nz = 50; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
@@ -138,8 +138,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   end
   
 
-%   pressureScheme = PRESSURE_CUBIC;
-  pressureScheme = PRESSURE_LINEAR;
+  pressureScheme = PRESSURE_CUBIC;
+%   pressureScheme = PRESSURE_LINEAR;
         
   
   %%% For plotting figures of setup
@@ -151,20 +151,22 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
       disp('Full depth mixed layer on the shelf')
   end
   
-  Xtopog = 205*m1km;
-  Ltopog = 25*m1km;
-  Htopog = H-shelfdepth;  
+  Xtopog = 305*m1km;
+  Ltopog = 10*m1km;
+%   Htopog = H-shelfdepth;  
   
   %%%%% IDEALIZED REGIONAL TOPOGRAPHY
   % Southern California: 
-    hb = 4500 - (4500-1000)*0.5*(1+tanh((xx_topog-300*m1km)/(Ltopog)));
-    hb = hb + 100 - (1000-50)*0.5*(1+tanh((xx_topog-550*m1km)/(Ltopog)));
+%     hb = 4500 - (4500-1000)*0.5*(1+tanh((xx_topog-300*m1km)/(Ltopog)));
+%     hb = hb + 100 - (1000-50)*0.5*(1+tanh((xx_topog-550*m1km)/(Ltopog)));
   
-  % Central California:
-%     shelfdepth = 125;
-%     H = 4000;
-%     Htopog = H-shelfdepth;
-%     hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+%   Central California:
+    Xtopog = 290*m1km;
+    Ltopog = 30*m1km;
+    shelfdepth = 50;
+    H = 4250;
+    Htopog = H-shelfdepth;
+    hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   
   % Northern California:
 %     H = 4000;
@@ -182,11 +184,16 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 
  
  %%%%%%%% IDEALIZED TOPOGRAPHY (GENERAL)
- %   hb = H*ones(size(hb));
+%   shelfdepth = 250;
+%   H = 3000;
+%   Htopog = H-shelfdepth;
 %   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+
+
+
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
-  
+%   
   % calculate shelf slope:
   hb_slope = (hb_psi(2:end) - hb_psi(1:end-1))./(dx);
   min(hb_slope)
@@ -288,11 +295,11 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   vvel_init = zeros(Nx,Nz);
   
   %%% Initial buoyancy
-  Hexp = 500;
-  Tmax = 20 - 5*XX_tr/Lx;
-  Tmin = 0;
-%   buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
-  buoy_init = 20*(1-tanh(-ZZ_tr./Hexp));
+  Hexp = 150;
+  Tmax = 22 - 5*XX_tr/Lx;
+  Tmin = 4;
+  buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));
+%   buoy_init = 20*(1-tanh(-ZZ_tr./Hexp));
   
   
   %%% Initial depth tracer
@@ -362,8 +369,9 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Load in the surface wind stress.
 %   [tau,tlength] = sfc_wind_stress(tau0,Lx,xx_psi);
   tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/4)) );
-%   Lmax = 300*m1km/2;
+%    Lmax = Lx;
 %   tau = 3*tau0*( 4*(sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^2 - (sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^4  )./( 2 + (sech(pi/2*(xx_psi-Lmax)/(Lmax/3))).^2).^2;
+%   tau = -(tau + max(abs(tau)));
 %   tau(xx_psi < 200) = 0;
 %   tau = tau0*ones(size(xx_psi));
 %   tau(xx_psi < 200) = 0;
@@ -404,16 +412,11 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   
   T_relax_veloc = -ones(Nx,Nz);
-%   T_relax_veloc(XX_tr<L_relax) = T_relax_max;
-%   T_relax_veloc(XX_tr>=L_relax) = -1;
-  N_relax_max = 30*t1day;
-
-%   if modeltype > 1
-%       % relax to initial nitrate concentration on the western boundary
-      T_relax_N = N_relax_max*ones(Nx,Nz);
-%   else
-%       T_relax_N = -ones(Nx,Nz);
-%   end
+  
+  T_relax_N = -ones(Nx,Nz); % conserve all nutrients
+  % this restores to an offshore profile of nitrate over 30 days
+  T_relax_N(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
+  T_relax_N(XX_tr>=L_relax) = -1;
 
   
   %%% Add relaxation to an atmospheric temperature profile
@@ -431,17 +434,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   bgc_relax = bgc_init;
   bgc_relax_none = zeros(Nx,Nz);
   
-  Nmax = 40; %%% Maximum concentration of nutrient at the ocean bed
-  Ncline = 75; % restore the nutrients at depth
-  bgc_relax(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
-  
-  figure(110)
-  [C h] = contourf(XX_tr,ZZ_tr,bgc_relax(:,:,1),15);
-  shading interp 
-  colorbar;
-  clabel(C,h,'Color','w');  
-  set(h,'ShowText','on'); 
-%   axis([0 3*10^5 -200 0])
+  n_relax = bgc_init(:,:,1);
  
   %%% Store tracer relaxation data in 3D matrices
   phi_relax_all = zeros(Ntracs,Nx,Nz);
@@ -454,19 +447,20 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
           phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax,[1 Nx Nz]);
           phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax_none,[1 Nx Nz]);
       case BGC_NPZD
-          phyto_relax = zeros(Nx,Nz);
-          phyto_relax(abs(ZZ_tr) < Hsml) = eps;
-          
-          phi_relax_all(IDX_NITRATE,:,:) = reshape(bgc_relax_none,[1 Nx Nz]);
-          phi_relax_all(IDX_NITRATE+1,:,:) = reshape(phyto_relax(:,:,1),[1,Nx,Nz]);
+%           phyto_relax = zeros(Nx,Nz);
+%           phyto_relax(abs(ZZ_tr) < Hsml) = eps;
+%           
+          phi_relax_all(IDX_NITRATE,:,:) = reshape(n_relax,[1 Nx Nz]);
+          phi_relax_all(IDX_NITRATE+1,:,:) = reshape(bgc_relax_none,[1,Nx,Nz]);
           phi_relax_all(Nphys+Nbgc,:,:) = reshape(bgc_relax_none,[1 Nx Nz]);
       case BGC_SSEM
           phi_relax_all(3:end,:,:) = reshape(bgc_relax,[Nbgc Nx Nz]);
   end
   phi_relax_all(Nphys+Nbgc+1,:,:) = reshape(dtr_relax,[1 Nx Nz]);
   
+  
   %%% Store tracer relaxation timescales
-  T_relax_all = zeros(Ntracs,Nx,Nz);
+  T_relax_all = -ones(Ntracs,Nx,Nz);
   T_relax_all(IDX_UVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
   T_relax_all(IDX_VVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
   
@@ -478,10 +472,10 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
           T_relax_all(IDX_NITRATE,:,:) = reshape(T_relax_N,[1 Nx Nz]); 
           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_NPZD
-          T_relax_all(IDX_NITRATE,:,:) = -ones(1,Nx,Nz); 
-          T_relax_all(IDX_NITRATE+1:IDX_NITRATE+3,:,:) = -ones(3,Nx,Nz); % Conserve all other parts of npzd model
-          T_relax_all(IDX_NITRATE+1,:,:) = -ones(1,Nx,Nz); 
-          T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
+%           T_relax_all(IDX_NITRATE,:,:) = -ones(1,Nx,Nz);
+%           T_relax_all(IDX_NITRATE+1:IDX_NITRATE+3,:,:) = -ones(3,Nx,Nz); % Conserve all other parts of npzd model
+%           T_relax_all(IDX_NITRATE+1,:,:) = -ones(1,Nx,Nz); 
+%           T_relax_all(Nphys+Nbgc,:,:) = -ones(1,Nx,Nz); % Total dye conserved
       case BGC_SSEM
           T_relax_all(IDX_NITRATE:end,:,:) = -ones(Nbgc,Nx,Nz);
   end
@@ -509,138 +503,18 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   
   %%% Uniform diffusivity
-  Kgm = Kgm0*ones(Nx+1,Nz+1);   
-  
-  
-  %%% Calculate the diffusivity with influence from the visbeck et al 1997
-  %%% parameterization
-%   buoy = buoy_init;
-%   db_dz = zeros(Nx+1,Nz+1);
-%   db_dx = zeros(Nx+1,Nz+1);
-%   
+  Kgm = Kgm0*ones(Nx+1,Nz+1);     
   H = hb_psi - (Hbbl + Hsml);
   H(H < 0) = 0;
   Hmax = max(H);
-%   
-%   %%% Buoyancy gradients
-%   for jj = 2:Nx
-%       for kk = 2:Nz
-%           db_dz(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj,kk-1))/(ZZ_tr(jj,kk) - ZZ_tr(jj,kk-1)) + ...
-%                          (buoy(jj-1,kk) - buoy(jj-1,kk-1))/(ZZ_tr(jj-1,kk) - ZZ_tr(jj-1,kk-1)));
-%           db_dx(jj,kk) = 0.5*( (buoy(jj,kk) - buoy(jj-1,kk))/dx + (buoy(jj,kk-1) - buoy(jj-1,kk-1))/dx);
-%           db_dx(jj,kk) = db_dx(jj,kk) - (ZZ_w(jj,kk) - ZZ_w(jj-1,kk))*db_dz(jj,kk)/dx;
-%       end
-%   end
-%   
-%   db_dz(:,1) = db_dz(:,2);
-%   db_dz(:,Nz+1) = db_dz(:,Nz);
-%   db_dz(1,:) = db_dz(2,:);
-%   db_dz(Nx+1,:) = db_dz(Nx,:);
-%   
-%   db_dx(:,1) = db_dx(:,2);
-%   db_dx(:,Nz+1) = db_dx(:,Nz);
-%   db_dx(1,:) = db_dx(2,:);
-%   db_dx(Nx+1,:) = db_dx(Nx,:);
-%   
-%   Msq = abs(1e-4*g*db_dx);
-% %   figure(401)
-% %   pcolor(XX_psi,ZZ_psi,Msq)
-% %   title('M^2: Horizontal stratification')
-% %   shading interp
-% %   colorbar
-%   
-%   % Calculate the vertical stratification:
-%   Nbuoy = sqrt(1e-4*g*db_dz);
-%   
-% %   figure(400)
-% %   pcolor(XX_psi,ZZ_psi,Nbuoy)
-% %   title('N: vertical stratification')
-% %   shading interp 
-% %   colorbar
-%   
-%   Rd = zeros(Nx+1,Nz+1);
-%   Rd_avg = zeros(Nx+1,Nz+1);
-%   
-%   for jj = 1:Nx+1
-%       tval = 0;
-%       ncol = 0;
-%       for kk = Nz:-1:1
-%           if (H(jj) ~= 0)
-%               Rd(jj,kk) = max(dx,max(Nbuoy(jj,:))*H(jj)/f0);
-%               tval = tval + (Msq(jj,kk)/Nbuoy(jj,kk))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/H(jj);
-%           else
-%               Rd(jj,kk) = 0;
-%           end
-%           ncol = ncol + 0.5*(Nbuoy(jj,kk)+Nbuoy(jj,kk+1))*(ZZ_psi(jj,kk+1) - ZZ_psi(jj,kk))/(f0);
-%           rval = max(ncol,dx);
-%       end
-%       Rd_avg(jj,:) = rval*ones(1,Nz+1);
-%       
-%       kgm_test(jj,:) = 0.015*Rd(jj,:).^2*tval;
-%       kgm_temp(jj,:) = 0.015*Rd_avg(jj,:).^2*tval;
-%   end
   
-  
-  
-%   k_vis_one = 0.015*Msq.*Rd.^2./(Nbuoy);
-%   figure(402)
-%   pcolor(XX_psi,ZZ_psi,Rd_avg)
-%   title('Rd avg')
-%   shading interp 
-%   colorbar
-%   
-%   figure(401)
-%   pcolor(XX_psi,ZZ_psi,Rd)
-%   title('Rd')
-%   shading interp 
-%   colorbar
-%   
-%     figure(404)
-%   pcolor(XX_psi,ZZ_psi,kgm_temp)
-%   title('Kgm: Visbeck, Rd:N_{avg}')
-%   shading interp 
-%   colorbar
-%   
-% 
-% 
-%   figure(403)
-%   pcolor(XX_psi,ZZ_psi,kgm_test)
-%   title('Kgm: Visbeck')
-%   shading interp 
-%   colorbar
-  
-%   for jj = 1:Nx+1
-%     k_vis_barotropic(jj,:) = 0.015*Msq(jj,:)*H(jj)*g./(Nbuoy(jj,:)*f0*f0);
-%   end
-%   figure(404)
-%   pcolor(XX_psi,ZZ_psi,log10(k_vis_barotropic))
-%   title('Kgm: Barotropic Rd')
-%   shading interp 
-%   colorbar
-% 
-%   
-%   for jj = 1:Nx+1
-%     k_vis_bt(jj,:) = 0.015*Msq(jj,:)*H(jj)*g./(ncol_bt(jj)*f0*f0);
-%   end
-%   figure(405)
-%   pcolor(XX_psi,ZZ_psi,(k_vis_bt))
-%   title('Kgm: Barotropic Rd, Integrated N')
-%   shading interp 
-%   colorbar
-  lambda = 0.65;
+  lambda = 0.5;
   
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
         Kgm(jj,kk) = Kgm(jj,kk)*H(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
       end
   end
-  
-  figure(400)
-  pcolor(XX_psi,ZZ_psi,Kgm)
-  shading interp
-  colorbar
-  title(['\lambda = ',num2str(lambda)])
-  
   
   KgmFile = 'Kgm.dat';
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
@@ -661,7 +535,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   
   %%% Uniform diffusivity
-  Kiso0 = 1000;
+  Kiso0 = 2000;
   Kiso = Kiso0*ones(Nx+1,Nz+1);        
   %%% First guess is a linearly decreasing profile with depth from Kiso0 to
   %%% Kiso_int, with respect to depth. 
@@ -676,11 +550,6 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
-  
-  figure(401)
-  pcolor(XX_psi,ZZ_psi,Kiso)
-  shading interp 
-  colorbar
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -781,7 +650,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Plot diapynal and isopycnal diffusivities together.
   % Diapycnal Diffusivities
   figure(fignum)
-  subplot(1,2,1)
+  subplot(1,3,1)
   pcolor(XX_psi,ZZ_psi,Kdia)
   title('Diapycnal diffusivity, \kappa_{\nu}')
   shading interp
@@ -796,13 +665,24 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
   % Isopycnal diffusivity
   figure(fignum);
-  subplot(1,2,2)
+  subplot(1,3,2)
   pcolor(XX_psi,ZZ_psi,Kiso)
   title('Isopycnal Diffusivity, \kappa_{iso}')
   shading interp
   colorbar
   xlabel('Distance (km)')
+  
+  % Isopycnal diffusivity
+  figure(fignum);
+  subplot(1,3,3)
+  pcolor(XX_psi,ZZ_psi,Kgm)
+  title('Gent/McWilliams Diffusivity, \kappa_{gm}')
+  shading interp
+  colorbar
+  xlabel('Distance (km)')
   fignum = fignum+1;
+  
+  
   
   % Initial buoyancy
   figure(fignum);
@@ -814,24 +694,36 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   % Initial buoyancy
   figure(fignum);
   fignum = fignum+1;
-  contourf(XX_tr,ZZ_tr,buoy_init,10);
+  [C h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
+  clabel(C,h)
   title('Initial Buoyancy')
   colorbar
   
   figure(fignum)
   fignum = fignum+1;
-  contourf(XX_tr,ZZ_tr,dtr_init,-(0:200:H));
+  contourf(XX_tr,ZZ_tr,dtr_init,15);
   colorbar
   title('Depth Tracer, t = 0')
   xlabel('Distance (km)')
   ylabel('Depth (m)')
-  
-%   % Slope
-%   figure(fignum)
-%   fignum = fignum+1;
-%   plot(xx_tr,hb_slope)
-%   title('Topographic Slope')
 
   end
+  
+%   save('buoy_init.mat','buoy_init')
+%   save('Kgm.mat','Kgm')
+%   save('Kiso.mat','Kiso')
+%   save('Kdia.mat','Kdia')
+%   save('dtr_init.mat','dtr_init')
+%   save('buoy_relax.mat','buoy_relax')
+%   save('tau.mat','tau')
+%   save('wscurl.mat','wsc')
+%   save('bgc_init.mat','bgc_init')
+%   save('ZZ_tr.mat','ZZ_tr')
+%   save('XX_tr.mat','XX_tr')
+%   save('ZZ_psi.mat','ZZ_psi')
+%   save('XX_psi.mat','XX_psi')
+%   save('x_psi.mat','xx_psi')
+%     save('topog.mat','hb_psi')
+    save('buoy_relax.mat','buoy_relax')
   
 end
