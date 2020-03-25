@@ -22,7 +22,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
 %%% TODO move depth tracer and dye tracer to end of tracer matrix as
 %%% examples of how to prescribe arbitrary tracer inputs
-  plotfigs = true;
+  plotfigs = false;
 %%% If set true, set up this run for the cluster
 %   use_cluster = true;
   use_intel = false;
@@ -190,6 +190,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
 
 
+%%%%%%%%%% No topography %%%%%%%%%%%
+hb = H*ones(size(xx_topog));
 
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
@@ -724,6 +726,6 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   save('XX_psi.mat','XX_psi')
 %   save('x_psi.mat','xx_psi')
 %     save('topog.mat','hb_psi')
-    save('buoy_relax.mat','buoy_relax')
+%     save('buoy_relax.mat','buoy_relax')
   
 end

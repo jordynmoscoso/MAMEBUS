@@ -488,12 +488,12 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals] = plotSolution (local_home_dir,run_
     end
     
 %     psie = psi_r_lim;
-    save('XX_psi_hi.mat','XX_psi')
-    save('XX_tr_hi.mat','XX_tr')
-    save('ZZ_psi_hi.mat','ZZ_psi')
-    save('ZZ_tr_hi.mat','ZZ_tr')
-    save('hb_psi_hi.mat','hb_psi')
-    save('x_psi_hi.mat','xx_psi')
+%     save('XX_psi_hi.mat','XX_psi')
+%     save('XX_tr_hi.mat','XX_tr')
+%     save('ZZ_psi_hi.mat','ZZ_psi')
+%     save('ZZ_tr_hi.mat','ZZ_tr')
+%     save('hb_psi_hi.mat','hb_psi')
+%     save('x_psi_hi.mat','xx_psi')
     
     
     
