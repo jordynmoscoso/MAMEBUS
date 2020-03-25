@@ -955,17 +955,18 @@ void calcSlopes (     const real        t,
         }
         case PRESSURE_CUBIC: // Calculate the buoyancy gradient using the Shchepetkin & McWilliams (2003) scheme.
         {
-            for (j = 1; j < Nx; j ++)
-            {
-                for (k = 1; k < Nz; k ++)
-                {
-                    
-                    db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-
-                }
-            }
+//Linear
+//            for (j = 1; j < Nx; j ++)
+//            {
+//                for (k = 1; k < Nz; k ++)
+//                {
+//
+//                    db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
+//                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+//                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+//
+//                }
+//            }
             
             
             
