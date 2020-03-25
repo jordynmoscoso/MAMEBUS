@@ -1134,8 +1134,8 @@ void calcSlopes (     const real        t,
             {
                 for (k = 1; k < Nz; k++)
                 {
-                    cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) );
-                    db_dx[j][k] = -cff * (FX[j-1][k] - FX[j][k] + FC[j][k] - FC[j][k-1] );
+                    cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) ); // calculate the area
+                    db_dx[j][k] = - cff * (FX[j-1][k] - FX[j][k] + FC[j][k] - FC[j][k-1] );
                 }
             }
             
