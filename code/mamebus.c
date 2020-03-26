@@ -1022,10 +1022,10 @@ void calcSlopes (     const real        t,
             for (j = 0; j < Nx; j++)
             {
                 // use boundary conditions
-                hrz[j][Nz-1] = 1.5 * (buoy[j][Nz-1] - buoy[j][Nz-2]) - 0.5 * hrz[j][Nz-1];
+                hrz[j][Nz-1] = 1.5 * (buoy[j][Nz-1] - buoy[j][Nz-2]) - 0.5 * hrz[j][Nz-2];
                 hrz[j][0] = 1.5 * (buoy[j][1] - buoy[j][0]) - 0.5 * hrz[j][1];
-                
-                hzz[j][Nz-1] = 1.5 * (ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5 * hzz[j][Nz-1];
+
+                hzz[j][Nz-1] = 1.5 * (ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5 * hzz[j][Nz-2];
                 hzz[j][0] = 1.5 * (ZZ_phi[j][1] - ZZ_phi[j][0]) - 0.5 * hzz[j][1];
             }
 
@@ -1104,28 +1104,25 @@ void calcSlopes (     const real        t,
 
             // Calculate the boundary conditions
             // Copy boundary value for hyperbolic averages
-            for (j = 1; j < Nx; j++)
+            for (k = 0; k < Nz; k++)
             {
-                for (k = 0; k < Nz; k++)
-                {
                     hrx[0][k] = 1.5 * (buoy[1][k] - buoy[0][k]) - 0.5 * hrx[1][k];
-                    hrx[Nx][k] = 1.5 * (buoy[Nx-1][k] - buoy[Nx-2][k]) - 0.5 * hrx[1][k];
-                    
+                    hrx[Nx][k] = 1.5 * (buoy[Nx-1][k] - buoy[Nx-2][k]) - 0.5 * hrx[Nx-2][k];
+
                     hzx[0][k] = 1.5 * (ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5 * hzx[1][k];
                     hzx[Nx-1][k] = 1.5 * (ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5 * hzx[Nx-2][k];
-                }
             }
 
 
 
             // Calculate FC's
-            for (j = 1; j < Nx; j++) // the pressure gradient at the western wall is zero.
+            for (j = 1; j < Nx-1; j++) // the pressure gradient at the western wall is zero.
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    FC[j][k] = 0.5*( (buoy[j][k] + buoy[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
-                                         - OneFifth*( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k] - OneTwelfth*(hzx[j][k] + hzx[j-1][k]) )
-                                        - ( hzx[j][k] - hzx[j-1][k] )*( buoy[j][k] - buoy[j-1][k] - OneTwelfth*(hrx[j][k] + hrx[j-1][k]) ) ) );
+                    FC[j][k] = 0.5*( (buoy[j+1][k] + buoy[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
+                                         - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
+                                        - ( hzx[j+1][k] - hzx[j][k] )*( buoy[j+1][k] - buoy[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
                 }
             }
             
@@ -1135,8 +1132,17 @@ void calcSlopes (     const real        t,
             {
                 for (k = 1; k < Nz; k++)
                 {
-                    cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) ); // calculate the area
-                    db_dx[j][k] = - cff * (FX[j-1][k] - FX[j][k] + FC[j][k] - FC[j][k-1] );
+                    if (k == Nz-1)
+                    {
+                        cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) ); // calculate the area
+                        db_dx[j][k] = - cff * (FX[j-1][k] - FX[j][k] - FC[j][k-1] );
+                    }
+                    else
+                    {
+                        cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) ); // calculate the area
+                        db_dx[j][k] = - cff * (FX[j-1][k] - FX[j][k] + FC[j][k] - FC[j][k-1] );
+                    }
+                   
                 }
             }
             
@@ -2507,8 +2513,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_z = 0.5/zdiff_dzsq_max;
     cfl_igw = 0.5*dx/n_max;
     cfl_sink = 0.5*dx/sink_dz_max;
-    
-//    fprintf(stderr,"cfl_u = %le, cfl_w = %le, cfl_y = %le, clf_z = %le, cfl_igw = %le, cfl_sink = %le \n",cfl_u, cfl_w, cfl_y, cfl_z, cfl_igw, cfl_sink);
 
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
