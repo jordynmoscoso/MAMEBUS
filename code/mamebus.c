@@ -526,6 +526,7 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
  * h_sml is the surface mixed layer thickness
  * _lambda is the reciprocal of the vertical eddy lengthscale at the SML base, and defines the vertical derivative of G at the SML base
  *
+ *TO DO: update the code so that it mateches the manuscript.
  */
 real surfStructFun (real z, real h_sml, real _lambda)
 {
@@ -670,185 +671,183 @@ void calcPressure(const real t, real ** buoy)
         case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
         {
             
+            // Vertical Calculation
             // Compute elementary differences
             for (j = 0; j < Nx; j++)
             {
-                for (k = 1; k < Nz; k++)
+                for (k = 0; k < Nz-1; k++)
                 {
-                    drz[j][k] = rhos[j][k] - rhos[j][k-1];
-                    dzz[j][k] = ZZ_phi[j][k] - ZZ_phi[j][k-1];
+                    // starts with +1/2 (0) and ends with Nz-3/2 (Nz-2)
+                    drz[j][k] = rhos[j][k+1] - rhos[j][k];
+                    dzz[j][k] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
                 }
             }
+
             
-            // Extend the differences along the boundaries
+            // Calculate the harmonic averages:
             for (j = 0; j < Nx; j++)
             {
-                drz[j][0] = drz[j][1];
-                dzz[j][0] = dzz[j][1];
-                
-                drz[j][Nz] = drz[j][Nz-1];
-                dzz[j][Nz] = dzz[j][Nz-1];
-            }
-            
-            
-            // Calculate the interior hyperbolic differences
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 1; k < Nz; k++)
+                for (k = 1; k < Nz-1; k++)
                 {
-                    cff = 2*drz[j][k]*drz[j][k-1];
+                    cff = drz[j][k-1]*drz[j][k];
                     if (cff > minVal)
                     {
-                        hrz[j][k] = cff/(drz[j][k] + drz[j][k-1]);
+                        hrz[j][k] = 2*cff/(drz[j][k-1] + drz[j][k]);
                     }
                     else
                     {
                         hrz[j][k] = 0;
                     }
-                    cff1 = 2*dzz[j][k]*dzz[j][k-1];
-                    if (cff1 > minVal)
+
+                    cff1 = dzz[j][k-1]*dzz[j][k];
+                    if (cff > minVal)
                     {
-                        hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k-1]);
+                        hzz[j][k] = 2*cff1/(dzz[j][k-1] + drz[j][k]);
                     }
                     else
                     {
                         hzz[j][k] = 0;
                     }
                 }
+
+                // Set the boundary conditions
+                hrz[j][0] = 1.5*(rhos[j][1] - rhos[j][0]) - 0.5*hrz[j][1];
+                hzz[j][0] = 1.5*(ZZ_phi[j][1] - ZZ_phi[j][0]) - 0.5*hzz[j][1];
+
+                hrz[j][Nz-1] = 1.5*(rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hrz[j][Nz-2];
+                hzz[j][Nz-1] = 1.5*(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5*hzz[j][Nz-2];
             }
-            
+
+
+            // Calculate the pressure at the surface
             for (j = 0; j < Nx; j++)
             {
-                // use boundary conditions
-                hrz[j][Nz-1] = 1.5 * (rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5 * hrz[j][Nz-1];
-                hrz[j][0] = 1.5 * (rhos[j][1] - rhos[j][0]) - 0.5 * hrz[j][1];
-                
-                hzz[j][Nz-1] = 1.5 * (ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5 * hzz[j][Nz-1];
-                hzz[j][0] = 1.5 * (ZZ_phi[j][1] - ZZ_phi[j][0]) - 0.5 * hzz[j][1];
+                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
+                P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
+                                 + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
+                P[j][Nz-1] = 0;
             }
-            
-            
-            // dummy variable to hold calculations
-            // Calculate the pressure field at the surface
+
+
+            // Calculate the pressure by vertically integrating
             for (j = 0; j < Nx; j++)
             {
-                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the w points.
-                cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
-                cff2 = 0.5*(rhos[j][Nz-1] - rhos[j][Nz-2])*(zeta - ZZ_phi[j][Nz-1])*cff1;
-                P[j][Nz-1] = grav*(rhos[j][Nz-1] + cff2)*(zeta - ZZ_phi[j][Nz-1]);
-            }
-            
-            
-            
-            
-            // Calculate the pressure field in the interior.
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = Nz-2; k >= 0; k--)
+                for (k = Nz-2; k >= 0; k --)
                 {
-                    P[j][k] = P[j][k+1] + 0.5*grav*( ( rhos[j][k+1] + rhos[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
-                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
-                                                                - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) );;
+                    P[j][k] = P[j][k+1] + grav * 0.5 * ( (rhos[j][k+1] + rhos[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
+                                - OneFifth * ( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k]
+                                    - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) )
+                                - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k]
+                                    - OneTwelfth* ( hrz[j][k+1] + hrz[j][k] ) ) ) );
                 }
             }
-            
+
+
             // Horizontal Calculations
             // Elementary Differences
-            for (j = 1; j < Nx; j++)
+            for (j = 0; j < Nx-1; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    drx[j][k] = rhos[j][k] - rhos[j-1][k];
-                    dzx[j][k] = ZZ_phi[j][k] - ZZ_phi[j-1][k];
+                    drx[j][k] = rhos[j+1][k] - rhos[j][k];
+                    dzx[j][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
                 }
             }
-            
-            
-            // Extend differences along the bounary
+
+            // Calculate the harmonic average:
             for (k = 0; k < Nz; k++)
             {
-                drx[0][k] = drx[1][k];
-                dzx[0][k] = dzx[1][k];
-                
-                drx[Nx][k] = drx[Nx-1][k];
-                dzx[Nx][k] = dzx[Nx-1][k];
-            }
-            
-            // Calculate the hyperbolic differences
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
+                for (j = 1; j < Nx-1; j++)
                 {
-                    cff = 2*drx[j][k]*drx[j-1][k];
+                    cff = drx[j-1][k]*drx[j][k];
                     if (cff > minVal)
                     {
-                        hrx[j][k] = cff/(drx[j][k] + drx[j-1][k]);
+                        hrx[j][k] = 2*cff/(drx[j-1][k] + drx[j][k]);
                     }
                     else
                     {
                         hrx[j][k] = 0;
                     }
-                    cff1 = 2*dzx[j][k]*dzx[j-1][k];
+                    cff1 = dzx[j-1][k]*dzx[j][k];
                     if (cff1 > minVal)
                     {
-                        hzx[j][k] = cff1/(dzx[j][k] + dzx[j-1][k]);
+                        hzx[j][k] = 2*cff1/(dzx[j-1][k] + dzx[j][k]);
                     }
                     else
                     {
                         hzx[j][k] = 0;
                     }
                 }
-            }
-            
-            // Calculate the boundary conditions
-            // Copy boundary value for hyperbolic averages
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    hrx[0][k] = 1.5 * (rhos[1][k] - rhos[0][k]) - 0.5 * hrx[1][k];
-                    hrx[Nx][k] = 1.5 * (rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5 * hrx[1][k];
-                    
-                    hzx[0][k] = 1.5 * (ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5 * hzx[1][k];
-                    hzx[Nx-1][k] = 1.5 * (ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5 * hzx[Nx-2][k];
-                }
-            }
-            
-            
-            
-            // Calculate FC's
-            for (j = 1; j < Nx; j++) // the pressure gradient at the western wall is zero.
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    FC[j][k] = 0.5*( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
-                                         - OneFifth*( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k] - OneTwelfth*(hzx[j][k] + hzx[j-1][k]) )
-                                        - ( hzx[j][k] - hzx[j-1][k] )*( rhos[j][k] - rhos[j-1][k] - OneTwelfth*(hrx[j][k] + hrx[j-1][k]) ) ) );
-                }
-            }
-            
 
-            
-            // Calculate the pressure gradient
-            for (j = 1; j < Nx-1; j++) // the pressure gradient at the western wall is zero.
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    BPx[j][k] =  ( P[j][k] - P[j-1][k] + grav*FC[j][k] )*_dx;
-//                    fprintf(stderr,"CUBIC: j = %d, k = %d, BPx = %le \n",j,k,BPx[j][k]);
-
-                }
-                BPx[j][Nz] = 0; // pressure gradient at the surface is zero.
+//                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
+//                hzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*hzx[1][k];
+//
+//                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
+//                hzx[Nx-1][k] = 1.5*(ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5*hzx[Nx-2][k];
+                // Test extending the boundary only
+                hrx[0][k] = hrx[1][k];
+                hzx[0][k] = hzx[1][k];
+                
+                hrx[Nx-1][k] = hrx[Nx-2][k];
+                hzx[Nx-1][k] = hzx[Nx-2][k];
             }
-            
-            
-            // Set the pressure gradient on the western boundary to zero
+
+
+            // Calculate the gradient along the horizontal component of the line integral
             for (k = 0; k < Nz; k++)
             {
-                BPx[0][k] = 0;
+                for (j = 1; j < Nx-1; j++)
+                {
+                    FC[j][k] = 0.5 * ( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
+                                      - OneFifth * ( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k]
+                                                - OneTwelfth * ( hzx[j][k] + hzx[j-1][k] ) )
+                                            - (hzx[j][k] - hzx[j-1][k])*( rhos[j][k] - rhos[j-1][k]
+                                                - OneTwelfth * ( hrx[j][k] - hrx[j-1][k] ) ) ) );
+                }
             }
+
+
+            // Calculate the pressure gradient
+            // BPx is stored on the u grid points, meaning that FC starts on the 1/2 (between phi_0 and phi_1) points
+            // And the left boundary BPx[0][k] occurs on the left of phi_0 so on the -1/2 grid points.
+            for (j = 1; j < Nx; j++)
+            {
+                for (k = 0; k < Nz; k ++)
+                {
+                    // Set the boundary to zero
+                    BPx[0][k] = 0;
+                    BPx[Nx][k] = 0;
+
+                    BPx[j][k] = (grav * FC[j][k] - (P[j-1][k] - P[j][k]))*_dx;
+                    
+                }
+            }
+        
             
-            
+//            // LINEAR: Integrate the pressure
+//            for (j = 0; j < Nx; j++)
+//            {
+//                // Set the surface pressure to zero
+//                P[j][Nz-1] = 0;
+//                for (k = Nz-2; k >= 0; k--)
+//                {
+//                    P[j][k] = P[j][k+1] + grav*0.5*(rhos[j][k] + rhos[j][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]);
+//                }
+//            }
+//
+//
+//            // Calculate the gradient
+//            for (j = 1; j < Nx; j++) // the pressure on the western wall is zero
+//            {
+//                for (k = 0; k < Nz; k++)
+//                {
+//
+//                    // Calculate the gradient
+//                    cff = 0.5*grav*(rhos[j-1][k] + rhos[j][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])*_dx
+//                                 - (P[j-1][k] - P[j][k])*_dx;
+//                    fprintf(stderr,"j = %d, k = %d, L = %le, C = %le \n", j, k,cff,BPx[j][k]);
+//                }
+//            }
             
             break;
         }
@@ -929,7 +928,7 @@ void calcSlopes (     const real        t,
     real cff1 = 0;
     real cff2 = 0;
     
-    // Calculate the pressure gradient so that we can calculate the buoyancy gradient from the pressure using the hydrostatic relationship.
+    // Calculate the pressure gradient so that we can calculate the buoyancy gradient from the pressure using the hydrostatic relationship
     calcPressure(t,buoy);
     
 #pragma parallel
@@ -947,214 +946,189 @@ void calcSlopes (     const real        t,
                     db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
                     db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                     db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-                    
 //                    fprintf(stderr,"j = %d, k = %d, db_dx = %le, db_dz = %le \n",j,k,db_dx[j][k],db_dz[j][k]);
                 }
             }
+            
             break;
         }
         case PRESSURE_CUBIC: // Calculate the buoyancy gradient using the Shchepetkin & McWilliams (2003) scheme.
         {
 //Linear
-//            for (j = 1; j < Nx; j ++)
-//            {
-//                for (k = 1; k < Nz; k ++)
-//                {
-//
-//                    db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-//                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-//                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-//
-//                }
-//            }
+            for (j = 1; j < Nx; j ++)
+            {
+                for (k = 1; k < Nz; k ++)
+                {
+                    db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
+                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+//                    fprintf(stderr,"j = %d, k = %d, db_dx = %le, db_dz = %le \n",j,k,db_dx[j][k],db_dz[j][k]);
+                }
+            }
             
-            
-            
-                    
-                    
+                        
+            // Vertical Calculation
             // Compute elementary differences
             for (j = 0; j < Nx; j++)
             {
-                for (k = 1; k < Nz; k++)
+                for (k = 0; k < Nz-1; k++)
                 {
-                    drz[j][k] = buoy[j][k] - buoy[j][k-1];
-                    dzz[j][k] = ZZ_phi[j][k] - ZZ_phi[j][k-1];
+                    // starts with +1/2 (0) and ends with Nz-3/2 (Nz-2)
+                    drz[j][k] = buoy[j][k+1] - buoy[j][k];
                 }
             }
 
-            // Extend the differences along the boundaries
+
+            // Calculate the harmonic averages:
             for (j = 0; j < Nx; j++)
             {
-                drz[j][0] = drz[j][1];
-                dzz[j][0] = dzz[j][1];
-                
-                drz[j][Nz] = drz[j][Nz-1];
-                dzz[j][Nz] = dzz[j][Nz-1];
-            }
-
-
-            // Calculate the interior hyperbolic differences
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 1; k < Nz; k++)
+                for (k = 1; k < Nz-1; k++)
                 {
-                    cff = 2*drz[j][k]*drz[j][k-1];
+                    cff = drz[j][k-1]*drz[j][k];
                     if (cff > minVal)
                     {
-                        hrz[j][k] = cff/(drz[j][k] + drz[j][k-1]);
+                        hrz[j][k] = 2*cff/(drz[j][k-1] + drz[j][k]);
                     }
                     else
                     {
                         hrz[j][k] = 0;
                     }
-                    cff1 = 2*dzz[j][k]*dzz[j][k-1];
-                    if (cff1 > minVal)
-                    {
-                        hzz[j][k] = cff1/(dzz[j][k] + dzz[j][k-1]);
-                    }
-                    else
-                    {
-                        hzz[j][k] = 0;
-                    }
                 }
-            }
 
-            for (j = 0; j < Nx; j++)
-            {
-                // use boundary conditions
-                hrz[j][Nz-1] = 1.5 * (buoy[j][Nz-1] - buoy[j][Nz-2]) - 0.5 * hrz[j][Nz-2];
-                hrz[j][0] = 1.5 * (buoy[j][1] - buoy[j][0]) - 0.5 * hrz[j][1];
-
-                hzz[j][Nz-1] = 1.5 * (ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5 * hzz[j][Nz-2];
-                hzz[j][0] = 1.5 * (ZZ_phi[j][1] - ZZ_phi[j][0]) - 0.5 * hzz[j][1];
+                // Set the boundary conditions
+                hrz[j][0] = 1.5*(buoy[j][1] - buoy[j][0]) - 0.5*hrz[j][1];
+                hrz[j][Nz-1] = 1.5*(buoy[j][Nz-1] - buoy[j][Nz-2]) - 0.5*hrz[j][Nz-2];
+//                hrz[j][0] = hrz[j][1];
+//                hrz[j][Nz-1] = hrz[j][Nz-2];
             }
 
 
-            // dummy variable to hold calculations
-            // Calculate the pressure field at the surface
+            // Calculate the buoyancy gradient at the surface
             for (j = 0; j < Nx; j++)
             {
-                zeta = 0.5*(ZZ_psi[j][Nz] + ZZ_psi[j+1][Nz]); // interpolate to the w points.
-                cff1 = 1/(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]);
-                cff2 = 0.5*(buoy[j][Nz-1] - buoy[j][Nz-2])*(zeta - ZZ_phi[j][Nz-1])*cff1;
-                FX[j][Nz-1] = (buoy[j][Nz-1] + cff2)*(zeta - ZZ_phi[j][Nz-1]);
+                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
+                FX[j][Nz-1] = cff*(buoy[j][Nz-1]
+                                 + 0.5 * cff * ( buoy[j][Nz-1] - buoy[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
             }
 
 
-
-
-            // Calculate the pressure field in the interior.
+            // Calculate the vertical component of the gradient
+            // At the moment the correction term is causing problems, so we set it to zero.
+            cff2 = 0;
             for (j = 0; j < Nx; j++)
             {
-                for (k = Nz-2; k >= 0; k--)
+                for (k = Nz-2; k >= 1; k --)
                 {
-                    FX[j][k] = 0.5*( ( buoy[j][k+1] + buoy[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
-                                                    - OneFifth*( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k] - OneTwelfth*(hzz[j][k+1] + hzz[j][k]) )
-                                                                - ( hzz[j][k+1] - hzz[j][k] )*( buoy[j][k+1] - buoy[j][k] - OneTwelfth*(hrz[j][k+1] + hrz[j][k]) ) ) );;
+                    FX[j][k] = 0.5 * ( (buoy[j][k] + buoy[j][k-1])*( ZZ_phi[j][k] - ZZ_phi[j][k-1] )
+                                - cff2 * ( ( hrz[j][k] - hrz[j][k-1] )*( ZZ_phi[j][k] - ZZ_phi[j][k-1]
+                                    - OneTwelfth*( hzz[j][k] + hzz[j][k-1] ) )
+                                - ( hzz[j][k] - hzz[j][k-1] )*( buoy[j][k] - buoy[j][k-1]
+                                    - OneTwelfth* ( hrz[j][k] + hrz[j][k-1] ) ) ) );
                 }
             }
+
 
             // Horizontal Calculations
             // Elementary Differences
-            for (j = 1; j < Nx; j++)
+            for (j = 0; j < Nx-1; j++)
             {
                 for (k = 0; k < Nz; k++)
                 {
-                    drx[j][k] = buoy[j][k] - buoy[j-1][k];
-                    dzx[j][k] = ZZ_phi[j][k] - ZZ_phi[j-1][k];
+                    drx[j][k] = buoy[j+1][k] - buoy[j][k];
                 }
             }
 
-
-            // Extend differences along the bounary
+            // Calculate the harmonic average:
             for (k = 0; k < Nz; k++)
             {
-                drx[0][k] = drx[1][k];
-                dzx[0][k] = dzx[1][k];
-                
-                drx[Nx][k] = drx[Nx-1][k];
-                dzx[Nx][k] = dzx[Nx-1][k];
-            }
-
-            // Calculate the hyperbolic differences
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
+                for (j = 1; j < Nx-1; j++)
                 {
-                    cff = 2*drx[j][k]*drx[j-1][k];
+                    cff = drx[j-1][k]*drx[j][k];
                     if (cff > minVal)
                     {
-                        hrx[j][k] = cff/(drx[j][k] + drx[j-1][k]);
+                        hrx[j][k] = 2*cff/(drx[j-1][k] + drx[j][k]);
                     }
                     else
                     {
                         hrx[j][k] = 0;
                     }
-                    cff1 = 2*dzx[j][k]*dzx[j-1][k];
-                    if (cff1 > minVal)
-                    {
-                        hzx[j][k] = cff1/(dzx[j][k] + dzx[j-1][k]);
-                    }
-                    else
-                    {
-                        hzx[j][k] = 0;
-                    }
                 }
+
+                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
+                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
+
+                // Test extending the boundary only
+//                hrx[0][k] = hrx[1][k];
+//                hrx[Nx-1][k] = hrx[Nx-2][k];
             }
 
-            // Calculate the boundary conditions
-            // Copy boundary value for hyperbolic averages
+
+            // Calculate the gradient along the horizontal component of the line integral
             for (k = 0; k < Nz; k++)
             {
-                    hrx[0][k] = 1.5 * (buoy[1][k] - buoy[0][k]) - 0.5 * hrx[1][k];
-                    hrx[Nx][k] = 1.5 * (buoy[Nx-1][k] - buoy[Nx-2][k]) - 0.5 * hrx[Nx-2][k];
-
-                    hzx[0][k] = 1.5 * (ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5 * hzx[1][k];
-                    hzx[Nx-1][k] = 1.5 * (ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5 * hzx[Nx-2][k];
-            }
-
-
-
-            // Calculate FC's
-            for (j = 1; j < Nx-1; j++) // the pressure gradient at the western wall is zero.
-            {
-                for (k = 0; k < Nz; k++)
+                for (j = 1; j < Nx; j++)
                 {
-                    FC[j][k] = 0.5*( (buoy[j+1][k] + buoy[j][k])*(ZZ_phi[j+1][k] - ZZ_phi[j][k])
-                                         - OneFifth*( ( hrx[j+1][k] - hrx[j][k] )*( ZZ_phi[j+1][k] - ZZ_phi[j][k] - OneTwelfth*(hzx[j+1][k] + hzx[j][k]) )
-                                        - ( hzx[j+1][k] - hzx[j][k] )*( buoy[j+1][k] - buoy[j][k] - OneTwelfth*(hrx[j+1][k] + hrx[j][k]) ) ) );
+                    FC[j][k] = 0.5 * ( (buoy[j][k] + buoy[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
+                                      - OneFifth * ( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k]
+                                                - OneTwelfth * ( hzx[j][k] + hzx[j-1][k] ) )
+                                            - (hzx[j][k] - hzx[j-1][k])*( buoy[j][k] - buoy[j-1][k]
+                                                - OneTwelfth * ( hrx[j][k] - hrx[j-1][k] ) ) ) );
                 }
             }
-            
-            
-            
+
+            // Calculate the area of the square using the shoelace method
             for (j = 1; j < Nx; j++)
             {
                 for (k = 1; k < Nz; k++)
                 {
+                    dA_psi[j][k] = 0.5*dx*fabs( ZZ_phi[j-1][k-1] + ZZ_phi[j][k-1] - ZZ_phi[j][k] - ZZ_phi[j-1][k]);
+                }
+            }
+
+
+            // Calculate the bouyancy gradient
+            for (j = 1; j < Nx; j++)
+            {
+                for (k = 1; k < Nz; k ++)
+                {
+                    cff = 1.0/dA_psi[j][k];
                     if (k == Nz-1)
                     {
-                        cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) ); // calculate the area
-                        db_dx[j][k] = - cff * (FX[j-1][k] - FX[j][k] - FC[j][k-1] );
+                        // The Shchepetkin/McWilliams 2003 paper says to do this but it seems to be causing an error. So we'll use the linear calculation for the surface.
+//                        db_dx[j][k] = -(FC[j][k] + FX[j-1][k] - FX[j][k])*cff;
+                        db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                        db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
                     }
                     else
                     {
-                        cff = 1.0/(0.5 * dx * fabs( ZZ_phi[j-1][k] - ZZ_phi[j-1][k-1] + ZZ_phi[j][k] - ZZ_phi[j][k-1]  ) ); // calculate the area
-                        db_dx[j][k] = - cff * (FX[j-1][k] - FX[j][k] + FC[j][k] - FC[j][k-1] );
+                        db_dx[j][k] = -(FC[j][k] - FC[j][k-1] + FX[j-1][k] - FX[j][k])*cff;
                     }
-                   
                 }
             }
+
+
+
+            // Set the boundary to zero
+            // these should never be used, but defined just in case
+            for (k = 0; k < Nz; k++)
+            {
+                db_dx[0][k] = 0;
+                db_dx[Nx][k] = 0;
+            }
             
-            
-//            for (j = 1; j < Nx; j++)
+//
+//
+//            if (t > day*100)
 //            {
-//                for (k = 1; k < Nz; k++)
+//                for (j = 1; j < Nx; j++)
 //                {
-//                    cff2 = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-//                    cff2 -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-//                    fprintf(stderr,"L: j = %d, k = %d, db_dx = %le \n", j,k,cff2);
-//                    fprintf(stderr,"C: j = %d, k = %d, db_dx = %le \n", j,k,db_dx[j][k]);
+//                    for (k = 1; k < Nz; k++)
+//                    {
+//                        cff2 = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+//                        cff2 -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+//                        fprintf(stderr,"L: j = %d, k = %d, db_dx = %le \n", j,k,cff2);
+//                        fprintf(stderr,"C: j = %d, k = %d, db_dx = %le \n", j,k,db_dx[j][k]);
+//                    }
 //                }
 //            }
             
@@ -2524,11 +2498,11 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     ///// END CALCULATING CFLS /////
     ////////////////////////////////
     
-    if (cfl_dt < 1)
-    {
-        fprintf(stderr,"t = %le cfl_u = %le, cfl_w = %le, cfl_y = %le, clf_z = %le, cfl_igw = %le, cfl_sink = %le \n",t/day, cfl_u, cfl_w, cfl_y, cfl_z, cfl_igw, cfl_sink);
-
-    }
+//    if (cfl_dt < 1)
+//    {
+//        fprintf(stderr,"t = %le cfl_u = %le, cfl_w = %le, cfl_y = %le, clf_z = %le, cfl_igw = %le, cfl_sink = %le \n",t/day, cfl_u, cfl_w, cfl_y, cfl_z, cfl_igw, cfl_sink);
+//
+//    }
     
     
     return cfl_dt;
