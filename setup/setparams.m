@@ -124,7 +124,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Grids  
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  Nx = 70; %%% Number of latitudinal grid points 
+  Nx = 50; %%% Number of latitudinal grid points 
   Nz = 50; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
@@ -186,12 +186,12 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
  %%%%%%%% IDEALIZED TOPOGRAPHY (GENERAL)
 %   shelfdepth = 250;
   H = 3000;
-  Htopog = H-shelfdepth;
-  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+%   Htopog = H-shelfdepth;
+%   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
 
 
 %%%%%%%%%% No topography %%%%%%%%%%%
-% hb = H*ones(size(xx_topog));
+hb = H*ones(size(xx_topog));
 
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);

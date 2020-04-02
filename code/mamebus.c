@@ -105,6 +105,8 @@ real dx = 0;
 real _dx = 0;
 real _2dx = 0;
 real dxsq = 0;
+real minVal = 1e-12;      // Minimum values for harmonic averages
+real cff = 0;             // dummy variable to hold numerators and coefficients
 real * sigma_phi = NULL;  // Stretched coordinate grids
 real * sigma_psi = NULL;
 real ** _dz_phi = NULL;   // Grid spacings
@@ -123,6 +125,10 @@ real ** ZZ_phi = NULL;    // Depth grids
 real ** ZZ_psi = NULL;
 real ** ZZ_u = NULL;
 real ** ZZ_w = NULL;
+
+
+// Debugging parameter
+bool debug = false;
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -148,6 +154,10 @@ static const char OUTN_PSIM[] = "PSIM";
 static const char OUTN_PSIE[] = "PSIE";
 static const char OUTN_PSIR[] = "PSIR";
 static const char OUTN_TRAC[] = "TRAC";
+
+// Debugging
+static const char OUTN_DBDX_CUBIC[] = "DB_DX_CUBIC";
+static const char OUTN_DBDX_LINEAR[] = "DB_DX_LINEAR";
 
 // Work arrays for calculating time derivatives
 real * phi_wrk_V = NULL;      // Current iteration data - work array
@@ -615,9 +625,7 @@ void calcPressure(const real t, real ** buoy)
     
     real OneFifth = 1.0/5.0;
     real OneTwelfth = 1.0/12.0;
-    real minVal = 1e-10;
-    
-    real cff = 0;   // dummy variable to hold numerators and coefficients
+
     real cff1 = 0;
     real cff2 = 0;
     
@@ -640,8 +648,10 @@ void calcPressure(const real t, real ** buoy)
             // Integrate the pressure
             for (j = 0; j < Nx; j++)
             {
-                // Set the surface pressure to zero
-                P[j][Nz-1] = 0;
+                // Set the pressure in the center of the topmost grid cell.
+                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
+                P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
+                                 + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
                 for (k = Nz-2; k >= 0; k--)
                 {
                     P[j][k] = P[j][k+1] + grav*0.5*(rhos[j][k] + rhos[j][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]);
@@ -679,7 +689,6 @@ void calcPressure(const real t, real ** buoy)
                 {
                     // starts with +1/2 (0) and ends with Nz-3/2 (Nz-2)
                     drz[j][k] = rhos[j][k+1] - rhos[j][k];
-                    dzz[j][k] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
                 }
             }
 
@@ -698,34 +707,20 @@ void calcPressure(const real t, real ** buoy)
                     {
                         hrz[j][k] = 0;
                     }
-
-                    cff1 = dzz[j][k-1]*dzz[j][k];
-                    if (cff > minVal)
-                    {
-                        hzz[j][k] = 2*cff1/(dzz[j][k-1] + drz[j][k]);
-                    }
-                    else
-                    {
-                        hzz[j][k] = 0;
-                    }
                 }
 
                 // Set the boundary conditions
                 hrz[j][0] = 1.5*(rhos[j][1] - rhos[j][0]) - 0.5*hrz[j][1];
-                hzz[j][0] = 1.5*(ZZ_phi[j][1] - ZZ_phi[j][0]) - 0.5*hzz[j][1];
-
                 hrz[j][Nz-1] = 1.5*(rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hrz[j][Nz-2];
-                hzz[j][Nz-1] = 1.5*(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5*hzz[j][Nz-2];
             }
 
 
             // Calculate the pressure at the surface
             for (j = 0; j < Nx; j++)
             {
-                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
+                cff = ZZ_w[j][Nz] - ZZ_phi[j][Nz-1];
                 P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
                                  + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
-                P[j][Nz-1] = 0;
             }
 
 
@@ -750,7 +745,6 @@ void calcPressure(const real t, real ** buoy)
                 for (k = 0; k < Nz; k++)
                 {
                     drx[j][k] = rhos[j+1][k] - rhos[j][k];
-                    dzx[j][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
                 }
             }
 
@@ -768,28 +762,10 @@ void calcPressure(const real t, real ** buoy)
                     {
                         hrx[j][k] = 0;
                     }
-                    cff1 = dzx[j-1][k]*dzx[j][k];
-                    if (cff1 > minVal)
-                    {
-                        hzx[j][k] = 2*cff1/(dzx[j-1][k] + dzx[j][k]);
-                    }
-                    else
-                    {
-                        hzx[j][k] = 0;
-                    }
                 }
 
-//                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
-//                hzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*hzx[1][k];
-//
-//                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
-//                hzx[Nx-1][k] = 1.5*(ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5*hzx[Nx-2][k];
-                // Test extending the boundary only
-                hrx[0][k] = hrx[1][k];
-                hzx[0][k] = hzx[1][k];
-                
-                hrx[Nx-1][k] = hrx[Nx-2][k];
-                hzx[Nx-1][k] = hzx[Nx-2][k];
+                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
+                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
             }
 
 
@@ -827,8 +803,10 @@ void calcPressure(const real t, real ** buoy)
 //            // LINEAR: Integrate the pressure
 //            for (j = 0; j < Nx; j++)
 //            {
-//                // Set the surface pressure to zero
-//                P[j][Nz-1] = 0;
+//                // Set the pressure in the center of the topmost grid cell.
+//                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
+//                P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
+//                                 + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
 //                for (k = Nz-2; k >= 0; k--)
 //                {
 //                    P[j][k] = P[j][k+1] + grav*0.5*(rhos[j][k] + rhos[j][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]);
@@ -845,7 +823,12 @@ void calcPressure(const real t, real ** buoy)
 //                    // Calculate the gradient
 //                    cff = 0.5*grav*(rhos[j-1][k] + rhos[j][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])*_dx
 //                                 - (P[j-1][k] - P[j][k])*_dx;
-//                    fprintf(stderr,"j = %d, k = %d, L = %le, C = %le \n", j, k,cff,BPx[j][k]);
+//                    db_dx_wrk[j][k] = cff;
+//
+//                    // Set the boundary to zero
+//                    db_dx_wrk[0][k] = 0;
+//                    db_dx_wrk[Nx][k] = 0;
+//
 //                }
 //            }
             
@@ -998,15 +981,13 @@ void calcSlopes (     const real        t,
                 // Set the boundary conditions
                 hrz[j][0] = 1.5*(buoy[j][1] - buoy[j][0]) - 0.5*hrz[j][1];
                 hrz[j][Nz-1] = 1.5*(buoy[j][Nz-1] - buoy[j][Nz-2]) - 0.5*hrz[j][Nz-2];
-//                hrz[j][0] = hrz[j][1];
-//                hrz[j][Nz-1] = hrz[j][Nz-2];
             }
 
 
-            // Calculate the buoyancy gradient at the surface
+            // Calculate the component of the integral at the surface
             for (j = 0; j < Nx; j++)
             {
-                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
+                cff = ZZ_w[j][Nz] - ZZ_phi[j][Nz-1];
                 FX[j][Nz-1] = cff*(buoy[j][Nz-1]
                                  + 0.5 * cff * ( buoy[j][Nz-1] - buoy[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
             }
@@ -1014,7 +995,7 @@ void calcSlopes (     const real        t,
 
             // Calculate the vertical component of the gradient
             // At the moment the correction term is causing problems, so we set it to zero.
-            cff2 = 0;
+            cff2 = OneFifth;
             for (j = 0; j < Nx; j++)
             {
                 for (k = Nz-2; k >= 1; k --)
@@ -1076,14 +1057,6 @@ void calcSlopes (     const real        t,
                 }
             }
 
-            // Calculate the area of the square using the shoelace method
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 1; k < Nz; k++)
-                {
-                    dA_psi[j][k] = 0.5*dx*fabs( ZZ_phi[j-1][k-1] + ZZ_phi[j][k-1] - ZZ_phi[j][k] - ZZ_phi[j-1][k]);
-                }
-            }
 
 
             // Calculate the bouyancy gradient
@@ -1120,16 +1093,15 @@ void calcSlopes (     const real        t,
 //
 //            if (t > day*100)
 //            {
-//                for (j = 1; j < Nx; j++)
-//                {
-//                    for (k = 1; k < Nz; k++)
-//                    {
-//                        cff2 = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-//                        cff2 -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-//                        fprintf(stderr,"L: j = %d, k = %d, db_dx = %le \n", j,k,cff2);
-//                        fprintf(stderr,"C: j = %d, k = %d, db_dx = %le \n", j,k,db_dx[j][k]);
-//                    }
-//                }
+                for (j = 1; j < Nx; j++)
+                {
+                    for (k = 1; k < Nz; k++)
+                    {
+                        cff2 = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                        cff2 -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+                        db_dx_wrk[j][k] = cff2;
+                    }
+                }
 //            }
             
             
@@ -3038,6 +3010,19 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     constructOutputName(outdir,OUTN_PSIE,-1,n,outfile);
     if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
     
+    // Debugging
+    if (debug)
+    {
+        // Write iteration data for the file of interest
+        constructOutputName(outdir,OUTN_DBDX_CUBIC,-1,n,outfile);
+        if (!writeOutputFile(outfile,db_dx,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
+        
+        
+        // Write iteration data for the file of interest
+        constructOutputName(outdir,OUTN_DBDX_LINEAR,-1,n,outfile);
+        if (!writeOutputFile(outfile,db_dx_wrk,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
+    }
+    
     return true;
 }
 
@@ -3946,17 +3931,76 @@ int main (int argc, char ** argv)
     }
     
     // Grid areas on the psi-points (with verticies on the phi points)
-    // The area is calculated using the shoelace method.
+    // Calculate the area of the square using the shoelace method
     for (j = 1; j < Nx; j++)
     {
-        xj = (j+0.5)*dx;    // xj at phi points
-        xjp1 = (j+1.5)*dx;  // xjp1 at phi points
-        
         for (k = 1; k < Nz; k++)
         {
-            dA_psi[j][k] = fabs( 0.5 * ( xj*ZZ_phi[j][k] + xjp1*ZZ_phi[j][k-1] + xjp1*ZZ_phi[j-1][k-1] + xj*ZZ_phi[j-1][k] - xjp1*ZZ_phi[j-1][k] - xjp1*ZZ_phi[j][k] - xj*ZZ_phi[j][k-1] - xj*ZZ_phi[j-1][k-1] ) );
-//            fprintf(stderr,"j = %d, k = %d, Area = %le \n",j,k, dA_psi[j][k]);
+            dA_psi[j][k] = 0.5*dx*fabs( ZZ_phi[j-1][k-1] + ZZ_phi[j][k-1] - ZZ_phi[j][k] - ZZ_phi[j-1][k]);
         }
+    }
+    
+    // Vertical Calculation
+    // Compute elementary differences
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz-1; k++)
+        {
+            // starts with +1/2 (0) and ends with Nz-3/2 (Nz-2)
+            dzz[j][k] = ZZ_phi[j][k+1] - ZZ_phi[j][k];
+        }
+    }
+
+    
+    // Calculate the harmonic averages:
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 1; k < Nz-1; k++)
+        {
+            cff = dzz[j][k-1]*dzz[j][k];
+            if (cff > minVal)
+            {
+                hzz[j][k] = 2*cff/(dzz[j][k-1] + dzz[j][k]);
+            }
+            else
+            {
+                hzz[j][k] = 0;
+            }
+        }
+
+        // Set the boundary conditions
+        hzz[j][0] = 1.5*(ZZ_phi[j][1] - ZZ_phi[j][0]) - 0.5*hzz[j][1];
+        hzz[j][Nz-1] = 1.5*(ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2]) - 0.5*hzz[j][Nz-2];
+    }
+    
+    // Horizontal Calculations
+    // Elementary Differences
+    for (j = 0; j < Nx-1; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            dzx[j][k] = ZZ_phi[j+1][k] - ZZ_phi[j][k];
+        }
+    }
+
+    // Calculate the harmonic average:
+    for (k = 0; k < Nz; k++)
+    {
+        for (j = 1; j < Nx-1; j++)
+        {
+            cff = dzx[j-1][k]*dzx[j][k];
+            if (cff > minVal)
+            {
+                hzx[j][k] = 2*cff/(dzx[j-1][k] + dzx[j][k]);
+            }
+            else
+            {
+                hzx[j][k] = 0;
+            }
+        }
+
+        hzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*hzx[1][k];
+        hzx[Nx-1][k] = 1.5*(ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5*hzx[Nx-2][k];
     }
     
     
@@ -4168,7 +4212,7 @@ int main (int argc, char ** argv)
         {
             Nint = calcTracAvg(t,phi_in,idx_nitrate,Nint,true);
         }
-        
+
         
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (timeSteppingScheme)
@@ -4251,6 +4295,7 @@ int main (int argc, char ** argv)
                 break;
             }
         }
+        
         
         
 
@@ -4362,6 +4407,20 @@ int main (int argc, char ** argv)
             // keeping track of the computation's progress
             printf("%e, time = %f \n",res[idx_buoy],t/day);
             fflush(stdout);
+        }
+        
+        
+        // this write the model state after a single timestep, and stops the calculation
+        if (debug == true)
+        {
+            if (!writeModelState(t,n_s,phi_in,outdir))
+            {
+                fprintf(stderr,"Unable to write model state");
+                printUsage();
+                return 0;
+            }
+            
+            targetReached = true;
         }
         
         
