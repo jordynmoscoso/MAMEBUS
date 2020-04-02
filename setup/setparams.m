@@ -186,8 +186,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
  %%%%%%%% IDEALIZED TOPOGRAPHY (GENERAL)
 %   shelfdepth = 250;
   H = 3000;
-%   Htopog = H-shelfdepth;
-%   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+  Htopog = H-shelfdepth;
+  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
 
 
 %%%%%%%%%% No topography %%%%%%%%%%%

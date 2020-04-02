@@ -105,7 +105,7 @@ real dx = 0;
 real _dx = 0;
 real _2dx = 0;
 real dxsq = 0;
-real minVal = 1e-12;      // Minimum values for harmonic averages
+real minVal = 1e-10;      // Minimum values for harmonic averages
 real cff = 0;             // dummy variable to hold numerators and coefficients
 real * sigma_phi = NULL;  // Stretched coordinate grids
 real * sigma_psi = NULL;
@@ -128,7 +128,7 @@ real ** ZZ_w = NULL;
 
 
 // Debugging parameter
-bool debug = false;
+bool debug = true;
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -905,9 +905,6 @@ void calcSlopes (     const real        t,
     
     real OneFifth = 1.0/5.0;
     real OneTwelfth = 1.0/12.0;
-    real minVal = 1e-10;
-    
-    real cff = 0;   // dummy variable to hold numerators and coefficients
     real cff1 = 0;
     real cff2 = 0;
     
