@@ -128,7 +128,7 @@ real ** ZZ_w = NULL;
 
 
 // Debugging parameter
-bool debug = true;
+bool debug = false;
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -524,7 +524,6 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
 
 
 
-// TODO upgrade these to Ferrari et al form
 
 /**
  * surfStructFun
@@ -534,9 +533,9 @@ void calcKdia (const real t, real ** buoy, real ** Kdia_w)
  *
  * z is the current vertical position
  * h_sml is the surface mixed layer thickness
- * _lambda is the reciprocal of the vertical eddy lengthscale at the SML base, and defines the vertical derivative of G at the SML base
+ * _lambda_sml is the reciprocal of the vertical eddy lengthscale at the SML base, and defines the vertical derivative of G at the SML base
  *
- *TO DO: update the code so that it mateches the manuscript.
+ *
  */
 real surfStructFun (real z, real h_sml, real _lambda)
 {
@@ -544,8 +543,9 @@ real surfStructFun (real z, real h_sml, real _lambda)
     
     if (z > -h_sml)
     {
-        G = -z/h_sml;
-        //G = -(1+h_sml*_lambda)*SQUARE(z/h_sml) - (2+h_sml*_lambda)*(z/h_sml);
+//        G = -z/h_sml;
+        G = -(1+h_sml*_lambda)*SQUARE(z/h_sml) - (2+h_sml*_lambda)*(z/h_sml);
+        
     }
     
     return G;
@@ -563,10 +563,10 @@ real surfStructFun (real z, real h_sml, real _lambda)
 real botStructFun (real z, real h_bbl, real h_b, real lambda)
 {
     real G = 1.0;
-    
+
     if (z < h_b + h_bbl)
     {
-        G = (z+h_b)/h_bbl;
+        G = ((z+h_b)/h_bbl)*(2 - ((z+h_b)/h_bbl));
     }
     
     return G;
@@ -2324,7 +2324,8 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
         // Advection/diffusion depends on whether the tracer is the buoyancy variable
         if (i == idx_buoy)
         {
-            is_buoy = true;
+//            is_buoy = true;
+            is_buoy = false; // testing the buoyancy mixing along isopycnals
         }
         else
         {

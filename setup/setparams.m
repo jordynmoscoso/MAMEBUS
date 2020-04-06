@@ -191,7 +191,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 
 
 %%%%%%%%%% No topography %%%%%%%%%%%
-hb = H*ones(size(xx_topog));
+% hb = H*ones(size(xx_topog));
 
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
@@ -563,22 +563,24 @@ hb = H*ones(size(xx_topog));
   Ksml = 1e-1;
   Kbbl = 1e-1;
   HB_psi = repmat(reshape(hb_psi,[Nx+1 1]),[1 Nz+1]);
-  
   %%% Check if sml and bbl overlap and add the profiles and create crude
   %%% mixed layers.
-  kvec = Kdia0*ones(Nz+1,1);
   for ii = 1:Nx+1
       if ZZ_psi(ii,1) > -(Hsml + Hbbl) % Overlapping boundary layers
           H = -ZZ_psi(ii,1);
           for jj = 1:Nz+1
-              Kdia(ii,jj) = Kdia0 + 2*(Ksml * -4*(ZZ_psi(ii,jj)/H).*(ZZ_psi(ii,jj)/H+1));
+%               Kdia(ii,jj) = Kdia0 + 2*(Ksml * -4*(ZZ_psi(ii,jj)/H).*(ZZ_psi(ii,jj)/H+1));
+                Kdia(ii,jj) = Kdia0 + Ksml*(27/4)*(-ZZ_psi(ii,jj)/H).*(1+ZZ_psi(ii,jj)/H).^2 ...
+                       + Kbbl*(27/4)*( ((ZZ_psi(ii,jj) +  hb_psi(ii))/H) .* (1 - ((ZZ_psi(ii,jj) +  hb_psi(ii))/H)).^2 );
           end
       else
           for jj = 1:Nz+1
               if (ZZ_psi(ii,jj) > -Hsml) % Builds profile when sml and bbl don't overlap
-                  Kdia(ii,jj) = Kdia(ii,jj) + (Ksml * -4*(ZZ_psi(ii,jj)/Hsml).*(ZZ_psi(ii,jj)/Hsml+1));
+%                   Kdia(ii,jj) = Kdia(ii,jj) + (Ksml * -4*(ZZ_psi(ii,jj)/Hsml).*(ZZ_psi(ii,jj)/Hsml+1));
+                    Kdia(ii,jj) = Kdia0 + Ksml*(27/4)*(-ZZ_psi(ii,jj)/Hsml).*(1+ZZ_psi(ii,jj)/Hsml).^2;
               elseif (ZZ_psi(ii,jj) < -hb_psi(ii)+Hbbl)
-                  Kdia(ii,jj) = Kdia(ii,jj) + Kbbl * -4*((ZZ_psi(ii,jj)+HB_psi(ii,jj))/Hbbl).*((ZZ_psi(ii,jj)+HB_psi(ii,jj))/Hbbl-1);
+%                   Kdia(ii,jj) = Kdia(ii,jj) + Kbbl * -4*((ZZ_psi(ii,jj)+HB_psi(ii,jj))/Hbbl).*((ZZ_psi(ii,jj)+HB_psi(ii,jj))/Hbbl-1);
+                    Kdia(ii,jj) = Kdia0 + Kbbl*(27/4)*( ((ZZ_psi(ii,jj) +  hb_psi(ii))/Hbbl) .* (1 - ((ZZ_psi(ii,jj) +  hb_psi(ii))/Hbbl)).^2 );
               end
           end
       end
@@ -590,7 +592,10 @@ hb = H*ones(size(xx_topog));
   writeDataFile(fullfile(local_run_dir,KdiaFile),Kdia);
   PARAMS = addParameter(PARAMS,'KdiaFile',KdiaFile,PARM_STR); 
   
-  
+  figure(10)
+  pcolor(XX_psi,ZZ_psi,Kdia)
+  shading interp 
+  colorbar
   
   
   
