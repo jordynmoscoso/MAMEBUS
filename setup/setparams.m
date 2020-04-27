@@ -22,7 +22,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   
 %%% TODO move depth tracer and dye tracer to end of tracer matrix as
 %%% examples of how to prescribe arbitrary tracer inputs
-  plotfigs = false;
+  plotfigs = true;
 %%% If set true, set up this run for the cluster
 %   use_cluster = true;
   use_intel = false;
@@ -52,7 +52,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
   H = 4.3*m1km; %%% Depth, excluding the mixed layer
-  Lx = 400*m1km; %%% Computational domain width
+  Lx = 350*m1km; %%% Computational domain width
   
   %%% Scalar parameter definitions 
 %   tau0 = -1e-1; %%% Northward wind stress (N m^{-2})
@@ -124,8 +124,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   %%% Grids  
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
   Ntracs = Nphys + 1 + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  Nx = 50; %%% Number of latitudinal grid points 
-  Nz = 50; %%% Number of vertical grid points
+  Nx = 64; %%% Number of latitudinal grid points 
+  Nz = 32; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
@@ -151,8 +151,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
       disp('Full depth mixed layer on the shelf')
   end
   
-  Xtopog = 305*m1km;
-  Ltopog = 10*m1km;
+%   Xtopog = 255*m1km;
+%   Ltopog = 10*m1km;
 %   Htopog = H-shelfdepth;  
   
   %%%%% IDEALIZED REGIONAL TOPOGRAPHY
@@ -161,7 +161,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %     hb = hb + 100 - (1000-50)*0.5*(1+tanh((xx_topog-550*m1km)/(Ltopog)));
   
 %   Central California:
-    Xtopog = 290*m1km;
+    Xtopog = 240*m1km;
     Ltopog = 30*m1km;
     shelfdepth = 50;
     H = 4250;
@@ -198,7 +198,6 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   
   % calculate shelf slope:
   hb_slope = (hb_psi(2:end) - hb_psi(1:end-1))./(dx);
-  min(hb_slope)
   
   %%% Generate full sigma-coordinate grids
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
@@ -510,7 +509,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   H(H < 0) = 0;
   Hmax = max(H);
   
-  lambda = 0.5;
+  lambda = 0.5/4;
+  
   
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
@@ -522,6 +522,7 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
   PARAMS = addParameter(PARAMS,'KgmFile',KgmFile,PARM_STR);
   
+  minKgmEast = min(min(Kgm(1,:)))
   
   
   
@@ -591,11 +592,6 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
   KdiaFile = 'Kdia.dat';
   writeDataFile(fullfile(local_run_dir,KdiaFile),Kdia);
   PARAMS = addParameter(PARAMS,'KdiaFile',KdiaFile,PARM_STR); 
-  
-  figure(10)
-  pcolor(XX_psi,ZZ_psi,Kdia)
-  shading interp 
-  colorbar
   
   
   
@@ -727,8 +723,8 @@ function setparams (local_home_dir,run_name,modeltype,outputFreq,endTime,tau0,sh
 %   save('bgc_init.mat','bgc_init')
 %   save('ZZ_tr.mat','ZZ_tr')
 %   save('XX_tr.mat','XX_tr')
-%   save('ZZ_psi.mat','ZZ_psi')
-%   save('XX_psi.mat','XX_psi')
+%   save('ZZ_psi_dia.mat','ZZ_psi')
+%   save('XX_psi_dia.mat','XX_psi')
 %   save('x_psi.mat','xx_psi')
 %     save('topog.mat','hb_psi')
 %     save('buoy_relax.mat','buoy_relax')

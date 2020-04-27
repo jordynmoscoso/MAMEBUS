@@ -1718,13 +1718,13 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     GD = GP - GZ;
     RD = r_remin*D;
     
-    // Sinking isn't really working now, so let's do without it for the time being.
+ 
     if (k == Nz-1) // This is the surface, so there is no flux through the surface.
     {
         fi = sf_flux;
         fo = 0.5*fabs(wsink)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
     }
-    else if (k == 0) // don't calculate this value, this likely won't matter for now.
+    else if (k == 0) // there is no flux out of the domain
     {
         
     }
