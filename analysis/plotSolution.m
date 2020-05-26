@@ -495,8 +495,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
 %     save('hb_psi_hi.mat','hb_psi')
 %     save('x_psi_hi.mat','xx_psi')
     
-    
-    
 
     
 %         title(titlestr)

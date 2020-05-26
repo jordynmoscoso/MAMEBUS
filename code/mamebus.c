@@ -52,6 +52,9 @@ real Hsml = 50.0;
 real Hbbl = 50.0;
 int tlength = 0;
 real r_bbl = 0; // drag coefficient
+real Kdia0 = 1e-5;
+real Ksml = 1e-1;
+real Kbbl = 1e-1;
 
 // Biogeochemical parameters
 uint bgcModel = 0;
@@ -410,6 +413,10 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
             for (k = 1; k < Nz; k ++)
             {
                 psi_m[j][k] = psi_m[j][k-1] - dz_u[j][k-1]*uvel[j][k-1];
+                
+            
+                
+
             }
         }
     }
@@ -772,7 +779,7 @@ void calcPressure(const real t, real ** buoy)
             // Calculate the gradient along the horizontal component of the line integral
             for (k = 0; k < Nz; k++)
             {
-                for (j = 1; j < Nx-1; j++)
+                for (j = 1; j < Nx; j++)
                 {
                     FC[j][k] = 0.5 * ( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
                                       - OneFifth * ( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k]
@@ -795,7 +802,6 @@ void calcPressure(const real t, real ** buoy)
                     BPx[Nx][k] = 0;
 
                     BPx[j][k] = (grav * FC[j][k] - (P[j-1][k] - P[j][k]))*_dx;
-                    
                 }
             }
         
@@ -1635,7 +1641,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real delta_x = 0.25; // width of grazing profile
     real lambda = 1.0/3.0; // zooplankton efficiency
     real mp = 0.02; // mortality
-    real wsink = 25.0/day; // sinking speed
+    real wsink = 10.0/day; // sinking speed
     real lp = 5; // size of phytoplankton
     real lz = 10; // size of zooplankton
     real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
@@ -2533,6 +2539,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         {
             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
             dv_dt[j][k] = -f0*uvel[j][k];
+            
         }
     }
     
@@ -3013,7 +3020,7 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     {
         // Write iteration data for the file of interest
         constructOutputName(outdir,OUTN_DBDX_CUBIC,-1,n,outfile);
-        if (!writeOutputFile(outfile,db_dx,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
+        if (!writeOutputFile(outfile,BPx,Nx+1,Nz)) return false; // cubic buoyancy gradient
         
         
         // Write iteration data for the file of interest
@@ -3999,6 +4006,29 @@ int main (int argc, char ** argv)
 
         hzx[0][k] = 1.5*(ZZ_phi[1][k] - ZZ_phi[0][k]) - 0.5*hzx[1][k];
         hzx[Nx-1][k] = 1.5*(ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5*hzx[Nx-2][k];
+    }
+    
+    // Calculate diapyncal diffusivity file from ksml and kbbl
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            Kdia_psi_ref[j][k] = Kdia0;
+            
+            // Calculate the diapyncal profile in the surface boundary layer
+            if (ZZ_psi[j][k] > -Hsml)
+            {
+                Kdia_psi_ref[j][k] = Kdia0 + Ksml*(27/4)*( (-ZZ_psi[j][k])/Hsml * pow(1 + ZZ_psi[j][k]/Hsml,2) );
+            }
+            
+            // Calculate the diapyncal profile in the bottom boundary layer
+            if (ZZ_psi[j][k] < -hb_psi[j] + Hbbl)
+            {
+                Kdia_psi_ref[j][k] = Kdia0 + Kbbl*(27/4)*(  (ZZ_psi[j][k] + hb_psi[j])/Hbbl * pow(1 - (ZZ_psi[j][k] + hb_psi[j])/Hbbl ,2)  );
+            }
+            
+            fprintf(stderr,"j = %d, k = %d, Kdia = %le \n",j,k,Kdia_psi_ref[j][k]);
+        }
     }
     
     
