@@ -10,18 +10,16 @@
  */
 #include <time.h>
 
-#include "rktvd.h"
 #include "defs.h"
 #include "ab.c"
 
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 41
+#define NPARAMS 43
 
 
 
-// TODO document BGC input parameters
 // TODO document input/output parameters in all functions
 // TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
 // TODO remove depth-averaged component of u after each time step - needs a new function
@@ -83,8 +81,7 @@ real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
 real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
-real * bgc_params = NULL;     // Vector containing biogeochemical parameters, all read in as a vector for
-// storage purposes and to make code adapable for a single nitrate model and NPZ model
+real * bgc_params = NULL;     // Vector containing biogeochemical parameters from bgc_setup
 
 
 // Numerical parameters
@@ -146,7 +143,7 @@ uint advectionScheme = ADVECTION_KT00;
 uint momentumScheme = MOMENTUM_TTTW;
 
 // Pressure scheme
-uint pressureScheme = PRESSURE_LINEAR;
+uint pressureScheme = PRESSURE_CUBIC;
 
 // Output filenames
 static const char OUTN_ZZ_PHI[] = "ZZ_PHI";
@@ -259,22 +256,6 @@ real calcTracAvg (const real t, real *** phi, int var_id, real trac_tot, bool co
     {
         switch (bgcModel)
         {
-            case BGC_NITRATEONLY:
-            {
-                // calculate the domain average of the nitrate in the entire domain
-                for (j = 0; j < Nx; j++)
-                {
-                    for (k = 0; k < Nz; k++)
-                    {
-                        dz = ZZ_w[j][k+1] - ZZ_w[j][k];
-                        trac_tot += phi[idx_nitrate][j][k]*dx*dz;
-                        domain_avg += dx*dz;
-                    }
-                }
-                
-                trac_tot = trac_tot/domain_avg;
-                break;
-            }
             case BGC_NPZD:
             {
                 // This part of the function takes the total concentration of nitrate,
@@ -329,21 +310,6 @@ real calcTracAvg (const real t, real *** phi, int var_id, real trac_tot, bool co
 
 
 
-
-
-/**
- * windInterp
- *
- * TODO I don't like the global variable for tau
- * TODO need to come up with a more general approach to time-variable forcing,
- *
- */
-void windInterp (const real t)
-{
-    
-    
-    
-}
 
 
 
@@ -413,10 +379,6 @@ void calcPsim (const real t, real ** uvel, real ** psi_m)
             for (k = 1; k < Nz; k ++)
             {
                 psi_m[j][k] = psi_m[j][k-1] - dz_u[j][k-1]*uvel[j][k-1];
-                
-            
-                
-
             }
         }
     }
@@ -1508,93 +1470,6 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
 
 
 
-/*
- * single_nitrate
- *
- * Calculates the time tendency of the biogeochemical tracers in a single nitrate model
- * returns the flux out of the grid cell to be used by the next grid cell (vertically) in the model
- */
-real single_nitrate (const real t, const int j, const int k,
-                     real *** phi, real *** dphi_dt,
-                     real N, real T, real umax, real f, real r_flux)
-{
-    // counting
-    int m;
-    
-    // Placeholders and values for the irradiance
-    real IR = 0;
-    real I0 = 0;
-    real qsw = 340;
-    real kw = 0.04;
-    real kc = 0.03;
-    real kpar = 0;
-    real T0 = 20;
-    real r = 0.05;
-    real aa = 0.25*16/106;          // slope of P-I curve in mmol N/W/m^2
-    real theta_chl_N = 3;              // mg C / mol N;
-    real Isurf = qsw;
-    
-    // Variables
-    real remin_frac = 0;
-    real flux = 0;
-    real t_uptake = 0;                       // temperature dependent uptake rate
-    real lk = 0;                             // light saturation constant
-    real l_uptake = 0;                       // light dependent uptake rate
-    real uptake = 0;                         // uptake in each grid box
-    real zstar = 0;                          // scale height from 50 to 200 for remin export (surface to floor) mimics the Martin curve for material export
-    real dz = 0;                             // vertical grid spacing placeholder
-    real zval = fabs(ZZ_phi[j][k]);          // placeholder for depth
-    
-    real remin = 0;
-    real kn = 0.1;
-    
-    kpar = kw; // This is just constant for now.
-    I0 = 0.45*qsw/(kpar*zval)*(1-exp( -kpar*zval ));
-//    l_uptake = I0/sqrt(Isurf*Isurf + I0*I0);
-    l_uptake = 1-exp(-I0/qsw);
-    
-    // Temperature and Irradiance (Sarmiento & Gruber)
-    t_uptake = exp(r*(T-T0));
-
-    
-    // Uptake and Remineralizaiton
-    uptake = umax * (l_uptake * t_uptake) * N*N/(kn + N)*(1-exp(-N));
-    
-    // Scale Height for Remin
-    zstar = 200;
-    dz = ZZ_w[j][k+1] - ZZ_w[j][k];
-    
-    ////////////////
-    ////////////////
-    ////////////////
-    
-    flux = (r_flux + dz * f * uptake)/( 1 + dz/zstar);
-    remin = flux / zstar + (1-f)*uptake;
-    r_flux = flux;             // Move to the next vertical grid cell
-    
-    // if there is material fluxed out of the bottom grid cell, then
-    // instantaneously remineralize within the water column:
-    // this occurs in conserve_nitrate()
-    if (k == 0)
-    {
-        bot_nflux[0][j] = r_flux;
-    }
-    
-    
-    
-    
-    //
-    // Update the value of nitrate
-    //
-    dphi_dt[idx_nitrate][j][k] += remin - uptake;
-    return r_flux;
-    
-    if (isnan(uptake))
-    {
-        printf("Uptake is NaN \n");
-        fflush(stdout);
-    }
-}
 
 
 
@@ -1607,14 +1482,11 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real qsw = 340;         // surface irradiance
     real r = 0.05;          // temperature dependence
     real kw = 0.04;
-    real kc = 0.03;
-    real kpar = 0.04;              // light attenuation
+    real kc = 0.01;
+    real kpar = 0;              // light attenuation
     real I0 = 0;
     real IR = 0;                // irradiance profile in cell
     real Tref = 20;
-    real aa = 0.25;          // slope of P-I curve in mmol N/W/m^2
-    real theta_chl_N = 3;              // mg chl / mol N;
-    real ptot = 0;                     // integrated phytoplankton concentration
     int idx_detritus = idx_nitrate+3;
 
     // place holders for npzd and time tendencies
@@ -1630,10 +1502,8 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real ** dZ_dt = dphi_dt[idx_nitrate+2];
     real ** dD_dt = dphi_dt[idx_nitrate+3];
     
-    // FOR TESTING PURPOSES
-    // all parameters are here now, we can add them other places later
-    
-    real kn = 0; // mmol N/m^3
+    // non-allometric variables
+    real kn = 0.1; // mmol N/m^3
     real umax = 0; // mmol N/day maximum uptake
     real gmax = 0; // maximum grading rate
     real kp = 3; // half saturation for grazing
@@ -1642,8 +1512,13 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real lambda = 1.0/3.0; // zooplankton efficiency
     real mp = 0.02; // mortality
     real wsink = 10.0/day; // sinking speed
-    real lp = 5; // size of phytoplankton
-    real lz = 10; // size of zooplankton
+    real preyopt = 0;
+    
+    // Load in parameters
+    real lp = bgc_params[0]; // size of phytoplankton
+    real lz = bgc_params[1]; // size of zooplankton
+    
+    
     real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
     real Isurf = qsw;
     real dz = 0;
@@ -1666,7 +1541,6 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real MZ = 0;
     real GD = 0;
     real RD = 0;
-    real preyopt = 0;
     real Dsink = 0;
     real sf_flux = 0;
     
@@ -1676,32 +1550,25 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     
     // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
     umax = 2.6*pow(lp,-0.45);
-    real umax_day = umax/day;
-    kn = 0.1;
     gmax = 26*pow(lz,-0.4);
-    real gmax_day = gmax/day;;
+    real umax_day = umax/day;
+    real gmax_day = gmax/day;
     
     // Build temperature and irradiance limitation profiles
-    I0 = Isurf*0.45;
+    I0 = Isurf*0.45; // percent of irradiance available for photosynthesis
     
     for (kk = Nz-1; kk > k; kk--)
     {
         dz = -(ZZ_w[j][kk+1] - ZZ_w[j][kk]);
-        kpar = kw + phi[idx_nitrate+1][j][kk]*kc*theta_chl_N;
+        kpar = kw + phi[idx_nitrate+1][j][kk]*kc;
         
         IR = I0/(1-kpar*dz);
         I0 = IR;
     }
     
-    
-//    llim = 1- exp(-I0/Isurf);
-//    llim = I0/sqrt(Isurf*Isurf + I0*I0);
-//    llim = I0/sqrt(Ik*Ik + I0*I0);
     llim = I0/Isurf;
     tlim = exp(r*(T-Tref));
-//    fprintf(stderr,"j = %d, k = %d, kpar = %le, dz = %le, llim = %le \n",j,kk,kpar, dz,llim);
-    
-//    fprintf(stderr,"ptot = %le, kpar %le , z = %le, j = %d, k = %d \n",ptot,kpar,ZZ_phi[j][k],j,k);
+
     
     // Nitrate
     MM = N/(kn + N);
@@ -1724,7 +1591,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     GD = GP - GZ;
     RD = r_remin*D;
     
- 
+    // Calculate sinking fluxes
     if (k == Nz-1) // This is the surface, so there is no flux through the surface.
     {
         fi = sf_flux;
@@ -1766,55 +1633,6 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
 
 
 
-void ssem (const real t, const int j, const int k, real *** phi, real *** dphi_dt,
-           int NMAX, real N, real T,
-           real * lp, real * lz, real * vmax, real * kn, real * gmax, real * preyopt, real * kp)
-{
-    int l,m;                    // Counters
-    
-    
-    // Parameters for temperature dependent uptake.
-    real R = 0.05;          // Temperature dependence (ward 2012)
-    real tfrac = 0;         // Temperature dependent uptake
-    real irfrac = 0;        // Fraction of light (for light depenendent uptake)
-    real IR = 0;            // Holder to calculate irradiance
-    real I0 = 340;          // Irradiance at the surface
-    real efold = 30;        // efolding depth for irradiance (Sarmeinto & Gruber)
-    real kw = 0.04;         // light attenuation of water
-    real kc = 0.03;         // light attenuation of cholorophyll
-    real K = 0;             // Holder for light attenuation constant
-    
-    // Grazing Parameters and placeholders
-    real delx = 0.25;           // Width of grading profile
-    real graze = 0;
-    real eff = 0.33;             // zooplankton assimilation efficiency.
-    
-    // Detritus parameters
-    real mu = 0.02/day;         // Mortality parameter (Ward)
-    real sinklim = 66.55;       // the esd (mu m) where detritus sinks approx 10m/day
-    real rdl = 0.04/day;        // remin parameter PON remin
-    real rds = 0.1/day;         // DON remin
-    real rsink = 10/day;        // sinking rate 50 m day
-    real remin = 0;             // Detritus remin value
-    
-    // Placeholders for timestepping
-    real dn = 0;            // Nitrate
-    real dp = 0;            // Phytoplankton
-    real dz = 0;            // Zooplankton
-    real dd_large = 0;      // Large detritus (sinking)
-    real dd_small = 0;      // Small detritus (non-sinking)
-    real pbiotot = 0;       // total phytoplankton biomass
-    real zbiotot = 0;       // total zooplankton biomass
-    real P = 0;             // Phytoplankton
-    real Z = 0;             // Zooplankton
-    real DS = 0;            // Small detritus
-    real DL = 0;            // Large detritus
-    
-
-}
-
-
-
 
 
 
@@ -1833,83 +1651,24 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
     int i,j,k; // Physical coutners
     int l,m;   // BGC parameters
     
-    // Single nitrate model holders
-    real r_flux = 0;                         // holder for remin value in the single nitrate model
-    real r_flux_next = 0;                    // placeholder for function output
-    
-    // NPZD model parameter vectors
-    real T = 0;                              // Placeholder for Temperature
-    real N = 0;                              // Placeholder for Nitrate
-    
-    // single nitrate parameters //
-    real umax = 0;
-    real f = 0;
-    
-    // npzd parameters //
 
-    
 
-    
     switch (bgcModel)
     {
         case BGC_NONE:
         {
             break;
         }
-            
-        case BGC_NITRATEONLY:
-        {
-
-            
-            // Parameters
-            umax = bgc_params[0];
-            f = bgc_params[1];
-            
-            for (j = 0; j < Nx; j++)
-            {
-                r_flux = 0;
-                for (k = Nz-1; k >= 0; k--)
-                {
-                    // Temperature and Irradiance
-                    T = phi[idx_buoy][j][k];
-                    N = phi[idx_nitrate][j][k];
-                    
-                    // Calculate the tendency for the single nitrate model
-                    r_flux = single_nitrate(t,j,k,phi,dphi_dt,N,T,umax,f,r_flux);
-                    
-                }
-            }
-            break;
-        }
-            //
-            //
-            // NPZD MODEL STARTS HERE
-            //
-            //
+        // NPZD Model
         case BGC_NPZD:
         {
-            
-            // npzd parameters //
-            
             for (j = 0; j < Nx; j++)
             {
-                r_flux = 0;
                 for (k = Nz-1; k >= 0; k--)
                 {
                     npzd(t,j,k,phi,dphi_dt);
                 }
             }
-            
-            break;
-        }
-            //
-            //
-            // SSEM MODEL STARTS HERE
-            //
-            //
-        case BGC_SSEM: // Size structured Model
-        {
-            
             break;
         }
         default:
@@ -2653,33 +2412,7 @@ void conserve_nitrate(real t, real dt, real *** phi, real Nint)
         {
              break;
         }
-            
-        case BGC_NITRATEONLY:
-        {
-            // In order to conserve the total nitrate in the domain, calculate the amount of
-            // nitrate and compare it to the prevously calculated amount.
-            if (conserv_Ntot)
-            {
-                Ntot_dt = calcTracAvg(t,phi,idx_nitrate,Ntot_dt,true);    // calculate the total nitrate
-                remin_adj = Nint - Ntot_dt;   // adjustment to remineralization
-            }
-            
-            
-            // Caclulate the instantaneous remineralizaiton of nutrients
-            // that flux from the lowest grid cell.
-            for (j = 0; j < Nx; j++)
-            {
-                // Assign nitrate to the grid-boxes based on the proportionality of the nitrate in the column
-                for (k = 0; k < Nz; k++)
-                {
-                    N = phi[idx_nitrate][j][k];
-                    phi[idx_nitrate][j][k] += remin_adj*N/(Ntot_dt);
-                }
-            }
-            
-            
-            break;
-        }
+        
         case BGC_NPZD:
         {
             for (j = 0; j < Nx; j++)
@@ -3160,10 +2893,6 @@ void printUsage (void)
      "                        diffusivities at grid cell corners. All\n"
      "                        elements must be >=0.\n"
      "                        Optional, default is 0 everywhere.\n"
-     "  KdiaFile              File containing an Nx+1 x Nz+1 matrix of diapycnal\n"
-     "                        diffusivities at grid cell corners. All\n"
-     "                        elements must be >= 0.\n"
-     "                        Optional, default is 0 everywhere.\n"
      "  relaxTracerFile       File containing an Ntracers x Nx x Nz array of tracer\n"
      "                        relaxation target values over the whole domain.\n"
      "                        Optional, default is 0 everywhere.\n"
@@ -3279,7 +3008,6 @@ int main (int argc, char ** argv)
     char bgcFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KgmFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KisoFile[MAX_PARAMETER_FILENAME_LENGTH];
-    char KdiaFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTimeFile[MAX_PARAMETER_FILENAME_LENGTH];
     
@@ -3313,13 +3041,16 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"startIdx","%u",&n0,true);
     setParam(params,paramcntr++,"checkConvergence","%d",&checkConvergence,true);
     
-    // Physical constants (6)
+    // Physical constants (9)
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
     setParam(params,paramcntr++,"Hsml","%lf",&Hsml,true);
     setParam(params,paramcntr++,"Hbbl","%lf",&Hbbl,true);
     setParam(params,paramcntr++,"r_bbl","%lf",&r_bbl,true);
+    setParam(params,paramcntr++,"Kdia0","%lf",&Kdia0,true);
+    setParam(params,paramcntr++,"Ksml","%lf",&Ksml,true);
+    setParam(params,paramcntr++,"Kbbl","%lf",&Kbbl,true);
     
     // Sigma-coordinate parameters (3)
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
@@ -3339,7 +3070,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"MZ","%u",&MZ,false);
     setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
     
-    // Input file names (11)
+    // Input file names (10)
     setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,true);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
@@ -3348,7 +3079,6 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"bgcFile","%s",bgcFile,true);
     setParam(params,paramcntr++,"KgmFile","%s",KgmFile,true);
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
-    setParam(params,paramcntr++,"KdiaFile","%s",KdiaFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
     setParam(params,paramcntr++,"relaxTimeFile","%s",relaxTimeFile,true);
     
@@ -3360,7 +3090,6 @@ int main (int argc, char ** argv)
     bgcFile[0] = '\0';
     KgmFile[0] = '\0';
     KisoFile[0] = '\0';
-    KdiaFile[0] = '\0';
     relaxTracerFile[0] = '\0';
     relaxTimeFile[0] = '\0';
     
@@ -3423,7 +3152,6 @@ int main (int argc, char ** argv)
         (strlen(tauFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(KgmFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
-        (strlen(KdiaFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
@@ -3640,7 +3368,6 @@ int main (int argc, char ** argv)
         ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
-        ( (strlen(KdiaFile) > 0)        &&  !readMatrix(KdiaFile,Kdia_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
         ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
     {
@@ -3708,12 +3435,6 @@ int main (int argc, char ** argv)
         memset(*Kiso_psi_ref,0,(Nx*Nz)*sizeof(real));
     }
     
-    // Default Kdia is zero everywhere
-    if (strlen(KdiaFile)==0)
-    {
-        memset(*Kdia_psi_ref,0,(Nx*Nz)*sizeof(real));
-    }
-    
     // Default tracer relaxation target is zero everywhere
     if (strlen(relaxTracerFile)==0)
     {
@@ -3770,7 +3491,7 @@ int main (int argc, char ** argv)
             }
             if (Kdia_psi_ref[j][k] < 0)
             {
-                fprintf(stderr,"KdiaFile may contain only values that are >0.");
+                fprintf(stderr,"Kdia may contain only values that are >0.");
                 printUsage();
                 return 0;
             }
@@ -4026,8 +3747,6 @@ int main (int argc, char ** argv)
             {
                 Kdia_psi_ref[j][k] = Kdia0 + Kbbl*(27/4)*(  (ZZ_psi[j][k] + hb_psi[j])/Hbbl * pow(1 - (ZZ_psi[j][k] + hb_psi[j])/Hbbl ,2)  );
             }
-            
-            fprintf(stderr,"j = %d, k = %d, Kdia = %le \n",j,k,Kdia_psi_ref[j][k]);
         }
     }
     
@@ -4119,46 +3838,6 @@ int main (int argc, char ** argv)
         }
     }
     
-    // Calculates the sinking speed of detritus tapering in the bottom boundary layer.
-    switch (bgcModel)
-    {
-        case BGC_NONE:
-        {
-            // no sinking occurs
-            break;
-        }
-        case BGC_NITRATEONLY:
-        {
-            // no explicit sinking occurs
-            break;
-        }
-        case BGC_NPZD:
-        {
-            wsink = bgc_params[10];
-            // Calculate the profiles of sinking speeds for the entire domain
-            // sinking speeds are calculated at the w points
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nz+1; k++)
-                {
-                    // within the boundary layer, taper the vertical sinking to zero.
-                    if (fabs(ZZ_w[j][k]) > (hb_psi[j] - Hbbl))
-                    {
-                        wsink_wrk[j][k] = wsink - (wsink/Hbbl) * (fabs(ZZ_w[j][k]) - hb_psi[j] + Hbbl);
-                    }
-                    else
-                    {
-                        wsink_wrk[j][k] = wsink;
-                    }
-                    
-                }
-            }
-            break;
-        }
-        default:
-            printf("ERROR: No bgcModel type chosen to indicate sinking speed");
-            break;
-    }
     
     
     
@@ -4245,21 +3924,6 @@ int main (int argc, char ** argv)
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (timeSteppingScheme)
         {
-            case TIMESTEPPING_RKTVD1:
-            {
-                dt = rktvd1(&t,phi_in_V,phi_out_V,cflFrac,Ntot,&tderiv);
-                break;
-            }
-            case TIMESTEPPING_RKTVD2:
-            {
-                dt = rktvd2(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-                break;
-            }
-            case TIMESTEPPING_RKTVD3:
-            {
-                dt = rktvd3(&t,phi_in_V,phi_out_V,phi_buf_V,cflFrac,Ntot,&tderiv);
-                break;
-            }
             case TIMESTEPPING_AB1:
             {
                 dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);

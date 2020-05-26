@@ -76,8 +76,8 @@ function setparams (local_home_dir,run_name)
   theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%% Grids  
-  Nx = 64; %%% Number of latitudinal grid points 
-  Nz = 64; %%% Number of vertical grid points
+  Nx = 32; %%% Number of latitudinal grid points 
+  Nz = 32; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
@@ -166,14 +166,14 @@ function setparams (local_home_dir,run_name)
   Ntracs = Nphys + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
   
   % Get the BGC parameters and initial conditions
-  [bgc_params, bgc_init,nbgc] = bgc_setup(modeltype,MP,MZ,MD,XX_tr,ZZ_tr,Nx,Nz);
+  [bgc_params, bgc_init, nbgc] = bgc_setup(ZZ_tr,Nx,Nz);
   
   % Write the biogeochemistry to file
   bgcFile = 'bgcFile.dat';
   writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
   PARAMS = addParameter(PARAMS,'bgcFile',bgcFile,PARM_STR);
-  PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
   PARAMS = addParameter(PARAMS,'Ntracs',Ntracs,PARM_INT);
+  PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
   
   
   
@@ -355,30 +355,14 @@ function setparams (local_home_dir,run_name)
   %%%%% Diapycnal diffusivity %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%      
 
-  %%% Uniform diffusivity
-  Kdia = Kdia0*ones(Nx+1,Nz+1);  
-  Ksml = 1e-1;
-  Kbbl = 1e-1;
-  
-  %%% TO DO MOVE THIS INTO THE CODE
-  for ii = 1:Nx+1
-      for jj = 1:Nz+1
-          if (ZZ_psi(ii,jj) > -Hsml) 
-                Kdia(ii,jj) = Kdia(ii,jj) + Ksml*(27/4)*(-ZZ_psi(ii,jj)/Hsml).*(1+ZZ_psi(ii,jj)/Hsml).^2;
-          end
-          
-          if (ZZ_psi(ii,jj) < -hb_psi(ii)+Hbbl)
-              
-                Kdia(ii,jj) = Kdia(ii,jj) + Kbbl*(27/4)*( ((ZZ_psi(ii,jj) +  hb_psi(ii))/Hbbl) .* (1 - ((ZZ_psi(ii,jj) +  hb_psi(ii))/Hbbl)).^2 );
-          end
-      end
-  end
-  
-  
+  Kdia0 = 1e-5; % interior diffusivity
+  Ksml = 1e-1;  % SML diffusivity
+  Kbbl = 1e-1;  % BBL diffusivity
+
   %%% Write to file
-  KdiaFile = 'Kdia.dat';
-  writeDataFile(fullfile(local_run_dir,KdiaFile),Kdia);
-  PARAMS = addParameter(PARAMS,'KdiaFile',KdiaFile,PARM_STR); 
+  PARAMS = addParameter(PARAMS,'Kdia0',Kdia0,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'Ksml',Ksml,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'Kbbl',Kbbl,PARM_REALF);
   
   
   
@@ -411,19 +395,10 @@ function setparams (local_home_dir,run_name)
   set(0,'DefaultAxesFontSize',14)
   
   %%% Plot diapynal and isopycnal diffusivities together.
-  % Diapycnal Diffusivities
-  figure(fignum)
-  subplot(1,3,1)
-  pcolor(XX_psi,ZZ_psi,Kdia)
-  title('Diapycnal diffusivity, \kappa_{\nu}')
-  shading interp
-  colorbar
-  ylabel('Depth (m)')
-  xlabel('Distance (km)')
   
   % Isopycnal diffusivity
   figure(fignum);
-  subplot(1,3,2)
+  subplot(1,2,1)
   pcolor(XX_psi,ZZ_psi,Kiso)
   title('Isopycnal Diffusivity, \kappa_{iso}')
   shading interp
@@ -432,7 +407,7 @@ function setparams (local_home_dir,run_name)
   
   % Buoyancy diffusivity
   figure(fignum);
-  subplot(1,3,3)
+  subplot(1,2,2)
   pcolor(XX_psi,ZZ_psi,Kgm)
   title('Gent/McWilliams Diffusivity, \kappa_{gm}')
   shading interp
