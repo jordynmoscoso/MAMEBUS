@@ -16,14 +16,11 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 43
+#define NPARAMS 48
 
 
 
 // TODO document input/output parameters in all functions
-// TODO generalize wind forcing to allow arbitrary time intervals between wind forcing data
-// TODO remove depth-averaged component of u after each time step - needs a new function
-// TODO determine psim from uvel if using TTTW
 // TODO need to add inputs for along-shore tracer gradients and pressure gradients
 // TODO need to add along-slope advection
 
@@ -40,6 +37,7 @@ int Ntot = 0;
 
 // Physical parameters
 real Lx = 0;
+real Ly = 0;
 real Lz = 0;
 real Kconv0 = 10;
 real rho0 = 1025;
@@ -61,7 +59,6 @@ int MZ = 0;
 int MD = 2;  // Always have one small detrital group and one large.
 int MN = 1;  // Always have one Nitrate
 int nbgc = 0;    // Counts number of biogeochemical parameters
-int conserv_Ntot = true;    // forces conservation of nitrate
 real Nint = 0;              // placeholder for the total domain nitrate
 
 // Scaling Constants
@@ -74,6 +71,9 @@ real alpha = 1e-4;                // thermal expansion coefficient
 
 // Parameter arrays
 real *** phi_init = NULL;     // Initial condition
+real *** phi_north = NULL;    // Northern profiles of tracers
+real *** phi_south = NULL;    // Southern profiles of tracers
+real ** phi_flux = NULL;
 real * hb_in = NULL;          // Ocean depth
 real * tau = NULL;            // Surface wind stress
 real ** Kgm_psi_ref = NULL;   // Reference GM diffusivity
@@ -193,9 +193,13 @@ real ** Kiso_u = NULL;        // Isopycnal diffusivity
 real ** Kiso_w = NULL;
 real ** Kdia_w = NULL;        // Diapycnal diffusivity
 real ** BPa = NULL;           // Baroclinic Pressure
-real ** BPx = NULL;           // Baroclinic Pressure gradient
+real ** BPx = NULL;           // Zonal barolinic Pressure gradient
+real ** BPy = NULL;           // Meridional baroclinic pressure gradient
 real ** BBy = NULL;           // Buoyancy
 real ** Nbuoy = NULL;
+real ** rho_north = NULL;     // density at the northern edge of the domain
+real ** rho_south = NULL;     // density at the southen edge of the domain
+real _Ly = 0;
 
 // Pointers for pressure calculation scheme.
 real ** drx = NULL;     // Stores elementary differences
@@ -228,86 +232,6 @@ real ** bot_nflux = NULL;
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
 ////////////////////////////////
-
-
-/**
- * calcDomainAvg
- *
- * Takes the area integral of a tracer in the domain
- * and returns a scalar value
- *
- */
-real calcTracAvg (const real t, real *** phi, int var_id, real trac_tot, bool conserve_all)
-{
-    int i,j,k;
-    real dz = 0;
-    real domain_avg = 0;
-    int inc_id = idx_nitrate;
-    
-    if (var_id < 3)
-    {
-        fprintf(stderr,"ERROR: Cannot calculate average, variable is not a tracer \n");
-        return 0;
-    }
-    
-    
-    // If we are conserving total nitrate, calculate all of the nitrate in the domain
-    if (conserve_all)
-    {
-        switch (bgcModel)
-        {
-            case BGC_NPZD:
-            {
-                // This part of the function takes the total concentration of nitrate,
-                // phytoplankton, zooplankton, and detritus (each has units of mmol N/m^3)
-                // and ensures that the total nitrogen in the entire system is conserved.
-                for (i = idx_nitrate; i < idx_nitrate + MP + MZ + 1; i ++)
-                {
-                    for (j = 0; j < Nx; j++)
-                    {
-                        for (k = 0; k < Nz; k++)
-                        {
-                            dz = ZZ_w[j][k+1] - ZZ_w[j][k];
-                            trac_tot += phi[i][j][k]*dx*dz;
-                            
-                            // only calculate this once
-                            if (i == idx_nitrate)
-                            {
-                                domain_avg += dx*dz;
-                            }
-                        }
-                    }
-                }
-                
-                trac_tot = trac_tot/domain_avg;
-                break;
-            }
-            default:
-                break;
-        }
-        
-    }
-    else // calculate the value of the total tracer in the domain
-    {
-        for (j = 0; j < Nx; j++)
-        {
-            for (k = 0; k < Nz; k++)
-            {
-                dz = ZZ_w[j][k+1] - ZZ_w[j][k];
-                trac_tot += phi[var_id][j][k]*dx*dz;
-                domain_avg += dx*dz;
-            }
-        }
-        
-        trac_tot = trac_tot/domain_avg;
-    }
-
-    
-    return trac_tot;
-}
-
-
-
 
 
 
@@ -608,212 +532,124 @@ void calcPressure(const real t, real ** buoy)
         }
     }
     
+
     
-    // Calculate the pressure gradients //
-    switch(pressureScheme)
+    // Vertical Calculation
+    // Compute elementary differences
+    for (j = 0; j < Nx; j++)
     {
-        case PRESSURE_LINEAR:
+        for (k = 0; k < Nz-1; k++)
         {
-            // Integrate the pressure
-            for (j = 0; j < Nx; j++)
-            {
-                // Set the pressure in the center of the topmost grid cell.
-                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
-                P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
-                                 + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
-                for (k = Nz-2; k >= 0; k--)
-                {
-                    P[j][k] = P[j][k+1] + grav*0.5*(rhos[j][k] + rhos[j][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]);
-                }
-            }
-            
-            
-            // Calculate the gradient
-            for (j = 1; j < Nx; j++) // the pressure on the western wall is zero
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    // Set the boundary to zero
-                    BPx[0][k] = 0;
-                    BPx[Nx][k] = 0;
-                    
-                    // Calculate the gradient
-                    BPx[j][k] = 0.5*grav*(rhos[j-1][k] + rhos[j][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])*_dx
-                                 - (P[j-1][k] - P[j][k])*_dx;
-                }
-            }
-            
-            
-            
-            break;
+            // starts with +1/2 (0) and ends with Nz-3/2 (Nz-2)
+            drz[j][k] = rhos[j][k+1] - rhos[j][k];
         }
-        case PRESSURE_CUBIC: // Calculate the pressure gradient using the Shchepetkin & McWilliams (2003) scheme
-        {
-            
-            // Vertical Calculation
-            // Compute elementary differences
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nz-1; k++)
-                {
-                    // starts with +1/2 (0) and ends with Nz-3/2 (Nz-2)
-                    drz[j][k] = rhos[j][k+1] - rhos[j][k];
-                }
-            }
-
-            
-            // Calculate the harmonic averages:
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 1; k < Nz-1; k++)
-                {
-                    cff = drz[j][k-1]*drz[j][k];
-                    if (cff > minVal)
-                    {
-                        hrz[j][k] = 2*cff/(drz[j][k-1] + drz[j][k]);
-                    }
-                    else
-                    {
-                        hrz[j][k] = 0;
-                    }
-                }
-
-                // Set the boundary conditions
-                hrz[j][0] = 1.5*(rhos[j][1] - rhos[j][0]) - 0.5*hrz[j][1];
-                hrz[j][Nz-1] = 1.5*(rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hrz[j][Nz-2];
-            }
-
-
-            // Calculate the pressure at the surface
-            for (j = 0; j < Nx; j++)
-            {
-                cff = ZZ_w[j][Nz] - ZZ_phi[j][Nz-1];
-                P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
-                                 + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
-            }
-
-
-            // Calculate the pressure by vertically integrating
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = Nz-2; k >= 0; k --)
-                {
-                    P[j][k] = P[j][k+1] + grav * 0.5 * ( (rhos[j][k+1] + rhos[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
-                                - OneFifth * ( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k]
-                                    - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) )
-                                - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k]
-                                    - OneTwelfth* ( hrz[j][k+1] + hrz[j][k] ) ) ) );
-                }
-            }
-
-
-            // Horizontal Calculations
-            // Elementary Differences
-            for (j = 0; j < Nx-1; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    drx[j][k] = rhos[j+1][k] - rhos[j][k];
-                }
-            }
-
-            // Calculate the harmonic average:
-            for (k = 0; k < Nz; k++)
-            {
-                for (j = 1; j < Nx-1; j++)
-                {
-                    cff = drx[j-1][k]*drx[j][k];
-                    if (cff > minVal)
-                    {
-                        hrx[j][k] = 2*cff/(drx[j-1][k] + drx[j][k]);
-                    }
-                    else
-                    {
-                        hrx[j][k] = 0;
-                    }
-                }
-
-                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
-                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
-            }
-
-
-            // Calculate the gradient along the horizontal component of the line integral
-            for (k = 0; k < Nz; k++)
-            {
-                for (j = 1; j < Nx; j++)
-                {
-                    FC[j][k] = 0.5 * ( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
-                                      - OneFifth * ( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k]
-                                                - OneTwelfth * ( hzx[j][k] + hzx[j-1][k] ) )
-                                            - (hzx[j][k] - hzx[j-1][k])*( rhos[j][k] - rhos[j-1][k]
-                                                - OneTwelfth * ( hrx[j][k] - hrx[j-1][k] ) ) ) );
-                }
-            }
-
-
-            // Calculate the pressure gradient
-            // BPx is stored on the u grid points, meaning that FC starts on the 1/2 (between phi_0 and phi_1) points
-            // And the left boundary BPx[0][k] occurs on the left of phi_0 so on the -1/2 grid points.
-            for (j = 1; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k ++)
-                {
-                    // Set the boundary to zero
-                    BPx[0][k] = 0;
-                    BPx[Nx][k] = 0;
-
-                    BPx[j][k] = (grav * FC[j][k] - (P[j-1][k] - P[j][k]))*_dx;
-                }
-            }
-        
-            
-//            // LINEAR: Integrate the pressure
-//            for (j = 0; j < Nx; j++)
-//            {
-//                // Set the pressure in the center of the topmost grid cell.
-//                cff = ZZ_w[j][Nz] - ZZ_phi[j][k];
-//                P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
-//                                 + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
-//                for (k = Nz-2; k >= 0; k--)
-//                {
-//                    P[j][k] = P[j][k+1] + grav*0.5*(rhos[j][k] + rhos[j][k+1])*(ZZ_phi[j][k+1] - ZZ_phi[j][k]);
-//                }
-//            }
-//
-//
-//            // Calculate the gradient
-//            for (j = 1; j < Nx; j++) // the pressure on the western wall is zero
-//            {
-//                for (k = 0; k < Nz; k++)
-//                {
-//
-//                    // Calculate the gradient
-//                    cff = 0.5*grav*(rhos[j-1][k] + rhos[j][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])*_dx
-//                                 - (P[j-1][k] - P[j][k])*_dx;
-//                    db_dx_wrk[j][k] = cff;
-//
-//                    // Set the boundary to zero
-//                    db_dx_wrk[0][k] = 0;
-//                    db_dx_wrk[Nx][k] = 0;
-//
-//                }
-//            }
-            
-            break;
-        }
-        default:
-        {
-            printf("Error: PressureScheme is undefined \n");
-            break;
-        }
-            
     }
+
     
-    
-    
-    
-    
+    // Calculate the harmonic averages:
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 1; k < Nz-1; k++)
+        {
+            cff = drz[j][k-1]*drz[j][k];
+            if (cff > minVal)
+            {
+                hrz[j][k] = 2*cff/(drz[j][k-1] + drz[j][k]);
+            }
+            else
+            {
+                hrz[j][k] = 0;
+            }
+        }
+
+        // Set the boundary conditions
+        hrz[j][0] = 1.5*(rhos[j][1] - rhos[j][0]) - 0.5*hrz[j][1];
+        hrz[j][Nz-1] = 1.5*(rhos[j][Nz-1] - rhos[j][Nz-2]) - 0.5*hrz[j][Nz-2];
+    }
+
+
+    // Calculate the pressure at the surface
+    for (j = 0; j < Nx; j++)
+    {
+        cff = ZZ_w[j][Nz] - ZZ_phi[j][Nz-1];
+        P[j][Nz-1] = grav*cff*( rhos[j][Nz-1]
+                         + 0.5 * cff * ( rhos[j][Nz-1] - rhos[j][Nz-2] )/( ZZ_phi[j][Nz-1] - ZZ_phi[j][Nz-2] ) );
+    }
+
+
+    // Calculate the pressure by vertically integrating
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = Nz-2; k >= 0; k --)
+        {
+            P[j][k] = P[j][k+1] + grav * 0.5 * ( (rhos[j][k+1] + rhos[j][k])*( ZZ_phi[j][k+1] - ZZ_phi[j][k] )
+                        - OneFifth * ( ( hrz[j][k+1] - hrz[j][k] )*( ZZ_phi[j][k+1] - ZZ_phi[j][k]
+                            - OneTwelfth*( hzz[j][k+1] + hzz[j][k] ) )
+                        - ( hzz[j][k+1] - hzz[j][k] )*( rhos[j][k+1] - rhos[j][k]
+                            - OneTwelfth* ( hrz[j][k+1] + hrz[j][k] ) ) ) );
+        }
+    }
+
+
+    // Horizontal Calculations
+    // Elementary Differences
+    for (j = 0; j < Nx-1; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            drx[j][k] = rhos[j+1][k] - rhos[j][k];
+        }
+    }
+
+    // Calculate the harmonic average:
+    for (k = 0; k < Nz; k++)
+    {
+        for (j = 1; j < Nx-1; j++)
+        {
+            cff = drx[j-1][k]*drx[j][k];
+            if (cff > minVal)
+            {
+                hrx[j][k] = 2*cff/(drx[j-1][k] + drx[j][k]);
+            }
+            else
+            {
+                hrx[j][k] = 0;
+            }
+        }
+
+        hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
+        hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
+    }
+
+
+    // Calculate the gradient along the horizontal component of the line integral
+    for (k = 0; k < Nz; k++)
+    {
+        for (j = 1; j < Nx; j++)
+        {
+            FC[j][k] = 0.5 * ( (rhos[j][k] + rhos[j-1][k])*(ZZ_phi[j][k] - ZZ_phi[j-1][k])
+                              - OneFifth * ( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k]
+                                        - OneTwelfth * ( hzx[j][k] + hzx[j-1][k] ) )
+                                    - (hzx[j][k] - hzx[j-1][k])*( rhos[j][k] - rhos[j-1][k]
+                                        - OneTwelfth * ( hrx[j][k] - hrx[j-1][k] ) ) ) );
+        }
+    }
+
+
+    // Calculate the zonal pressure gradient
+    // BPx is stored on the u grid points, meaning that FC starts on the 1/2 (between phi_0 and phi_1) points
+    // And the left boundary BPx[0][k] occurs on the left of phi_0 so on the -1/2 grid points.
+    for (j = 1; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k ++)
+        {
+            // Set the boundary to zero
+            BPx[0][k] = 0;
+            BPx[Nx][k] = 0;
+
+            BPx[j][k] = (grav * FC[j][k] - (P[j-1][k] - P[j][k]))*_dx;
+        }
+    }
     
 
 }
@@ -1054,20 +890,16 @@ void calcSlopes (     const real        t,
                 db_dx[Nx][k] = 0;
             }
             
-//
-//
-//            if (t > day*100)
-//            {
-                for (j = 1; j < Nx; j++)
+
+            for (j = 1; j < Nx; j++)
+            {
+                for (k = 1; k < Nz; k++)
                 {
-                    for (k = 1; k < Nz; k++)
-                    {
-                        cff2 = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-                        cff2 -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
-                        db_dx_wrk[j][k] = cff2;
-                    }
+                    cff2 = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                    cff2 -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+                    db_dx_wrk[j][k] = cff2;
                 }
-//            }
+            }
             
             
             break;
@@ -1463,6 +1295,13 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
             }
         }
         
+        
+        // Calculate the surface fluxes
+        for (j = 0; j < Nx; j++)
+        {
+            dphi_dt[i][j][Nz-1] += _dz_phi[j][Nz-1]*phi_flux[i][j];
+        }
+        
     }
     
 }
@@ -1479,14 +1318,28 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
 {
     int jj,kk;
 
-    real qsw = 340;         // surface irradiance
-    real r = 0.05;          // temperature dependence
-    real kw = 0.04;
-    real kc = 0.01;
+    // Load in parameters (note that this should reflect what is saved to the file in bgc_setup.m)
+    real lp = bgc_params[0]; // size of phytoplankton
+    real lz = bgc_params[1]; // size of zooplankton
+    real qsw = bgc_params[2]; // surface irradiance
+    real kw = bgc_params[3];  // light attenuation of water
+    real kc = bgc_params[4];  // light attenuation of phytoplankton
+    real Tref = bgc_params[5]; // reference temperature
+    real r = bgc_params[6];    // tempeature dependence
+    real umax = bgc_params[7]; // mmol N/day maximum uptake
+    real kn = bgc_params[8];   // half saturation of nitrate
+    real mp = bgc_params[9];   // phytoplankton mortality as a fraction of uptake
+    real gmax = bgc_params[10]; // maximum grazing
+    real lambda = bgc_params[11]; // grazing efficiency
+    real kp = bgc_params[12];     // half saturation of phytoplankton
+    real delta_x = bgc_params[13]; // width of grazing profile
+    real preyopt = bgc_params[14]; // optimal predator prey lengthscale
+    real r_remin = bgc_params[15]/day; // rate of remineralization
+    real wsink = bgc_params[16]/day;  // sinking speed
+    
     real kpar = 0;              // light attenuation
     real I0 = 0;
     real IR = 0;                // irradiance profile in cell
-    real Tref = 20;
     int idx_detritus = idx_nitrate+3;
 
     // place holders for npzd and time tendencies
@@ -1501,23 +1354,6 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real ** dP_dt = dphi_dt[idx_nitrate+1];
     real ** dZ_dt = dphi_dt[idx_nitrate+2];
     real ** dD_dt = dphi_dt[idx_nitrate+3];
-    
-    // non-allometric variables
-    real kn = 0.1; // mmol N/m^3
-    real umax = 0; // mmol N/day maximum uptake
-    real gmax = 0; // maximum grading rate
-    real kp = 3; // half saturation for grazing
-    real r_remin = 0.04/day; // remin rate
-    real delta_x = 0.25; // width of grazing profile
-    real lambda = 1.0/3.0; // zooplankton efficiency
-    real mp = 0.02; // mortality
-    real wsink = 10.0/day; // sinking speed
-    real preyopt = 0;
-    
-    // Load in parameters
-    real lp = bgc_params[0]; // size of phytoplankton
-    real lz = bgc_params[1]; // size of zooplankton
-    
     
     real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
     real Isurf = qsw;
@@ -1549,8 +1385,6 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     
     
     // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
-    umax = 2.6*pow(lp,-0.45);
-    gmax = 26*pow(lz,-0.4);
     real umax_day = umax/day;
     real gmax_day = gmax/day;
     
@@ -1576,8 +1410,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     
     
     // Phytoplankton
-    preyopt = log10(0.65*pow(lz,0.56));
-    theta = (log10(lp) - preyopt)/delta_x;
+    theta = (log10(lp) - log10(preyopt))/delta_x;
     F = exp(-theta*theta);
     G = gmax_day*F/(F*P + kp);
     G = G*(1-exp(-P));
@@ -1690,6 +1523,74 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 
 
 
+/**
+ * tderiv_mom
+ *
+ * Calculates the time tendency of momentum tracers.
+ *
+ */
+
+void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
+{
+    // Looping variables
+    int i, j, k;
+    
+    // Pointers to velocity and buoyancy matrices
+    real ** uvel = NULL;
+    real ** vvel = NULL;
+    real ** buoy = NULL;
+    real ** du_dt = NULL;
+    real ** dv_dt = NULL;
+    
+    // Pointers to velocity and buoyancy matrices
+    uvel = phi[idx_uvel];
+    vvel = phi[idx_vvel];
+    buoy = phi[idx_buoy];
+    du_dt = dphi_dt[idx_uvel];
+    dv_dt = dphi_dt[idx_vvel];
+    
+    
+    
+    // Calculate the tendency due to the coriolis force and add to the pressure term
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
+            dv_dt[j][k] = -f0*uvel[j][k] - BPy[j][k];
+            
+        }
+    }
+    
+    // Add surface/bottom momentum fluxes
+    for (j = 1; j < Nx; j++)
+    {
+        du_dt[j][0] -= r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
+        dv_dt[j][0] -= r_bbl*vvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]);
+        
+        
+        dv_dt[j][Nz-1] += tau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
+        
+    }
+    
+    for (k = 0; k < Nz; k++) // u,v tendencies are zero at the western wall
+    {
+        du_dt[0][k] = 0;
+        dv_dt[0][k] = 0;
+    }
+    
+    
+}
+
+
+
+
+
+
+
+
+
+
 
 /**
  * do_adv_diff
@@ -1699,9 +1600,12 @@ void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
  */
 void do_adv_diff (  const real    t,
                   real **       phi,
+                  real **       phi_north,
+                  real **       phi_south,
                   real **       dphi_dt,
                   bool          is_buoy,
                   real **       u_r,
+                  real **       vvel,
                   real **       w_r,
                   real **       Kiso_u,
                   real **       Kiso_w,
@@ -1714,6 +1618,9 @@ void do_adv_diff (  const real    t,
     // True isopycnal slope, relative to sigma coordinates
     real Siso_true = 0;
     real z;
+    
+    // meridional velocity
+    real v_r = 0; // meridional velocity holder
     
     /////////////////////////////////////////////////////
     ///// Arrays used by the Kurganov-Tadmor scheme /////
@@ -1966,6 +1873,27 @@ void do_adv_diff (  const real    t,
     }
     
     
+    //////////////////////////////////////////////////////////////////////////////////////////
+    ///// Calculate the meridional component of advection /////
+    //////////////////////////////////////////////////////////////////////////////////////////
+    
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            v_r = 0.5*(vvel[j][k] + vvel[j+1][k]);
+            if (v_r < 0)
+            {
+                dphi_dt[j][k] += _Ly*v_r*(phi[j][k] - phi_north[j][k]);
+            }
+            else if (v_r > 0)
+            {
+                dphi_dt[j][k] += _Ly*v_r*(phi[j][k] - phi_south[j][k]);
+            }
+        }
+    }
+    
+    
     /////////////////////////////////////////////
     ////// Calculate time derivative of phi /////
     /////////////////////////////////////////////
@@ -2097,7 +2025,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
             is_buoy = false;
         }
         
-        do_adv_diff(t,phi[i],dphi_dt[i],is_buoy,u_r,w_r,Kiso_u,Kiso_w,Siso_u,Siso_w);
+        do_adv_diff(t,phi[i],phi_north[i],phi_south[i],dphi_dt[i],is_buoy,u_r,vvel,w_r,Kiso_u,Kiso_w,Siso_u,Siso_w);
     }
     
     //////////////////////////////////////
@@ -2262,86 +2190,6 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
 
 
 
-
-/**
- * tderiv_mom
- *
- * Calculates the time tendency of momentum tracers.
- *
- */
-
-void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
-{
-    // Looping variables
-    int i, j, k;
-    
-    // Pointers to velocity and buoyancy matrices
-    real ** uvel = NULL;
-    real ** vvel = NULL;
-    real ** buoy = NULL;
-    real ** du_dt = NULL;
-    real ** dv_dt = NULL;
-    
-    // Pointers to velocity and buoyancy matrices
-    uvel = phi[idx_uvel];
-    vvel = phi[idx_vvel];
-    buoy = phi[idx_buoy];
-    du_dt = dphi_dt[idx_uvel];
-    dv_dt = dphi_dt[idx_vvel];
-    
-    
-    
-    // Calculate the tendency due to the coriolis force and add to the pressure term
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; k < Nz; k++)
-        {
-            du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
-            dv_dt[j][k] = -f0*uvel[j][k];
-            
-        }
-    }
-    
-    // Add surface/bottom momentum fluxes
-    for (j = 1; j < Nx; j++)
-    {
-        du_dt[j][0] -= r_bbl*uvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]); // bottom momentum flux
-        dv_dt[j][0] -= r_bbl*vvel[j][0]/(ZZ_psi[j][1] - ZZ_psi[j][0]);
-        
-        
-        dv_dt[j][Nz-1] += tau[j]/(rho0*(ZZ_psi[j][Nz] - ZZ_psi[j][Nz-1])); // surface momentum flux due to wind forcing
-        
-    }
-    
-    for (k = 0; k < Nz; k++) // u,v tendencies are zero at the western wall
-    {
-        du_dt[0][k] = 0;
-        dv_dt[0][k] = 0;
-    }
-    
-    
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /**
  * tderiv
  *
@@ -2381,70 +2229,6 @@ real tderiv (const real t, const real * data, real * dt_data, const uint numvars
 }
 
 
-
-
-/**
- *
- * conserve_nitrate
- *
- * Enforce that total nitrate is conerved.
- *
- */
-void conserve_nitrate(real t, real dt, real *** phi, real Nint)
-{
-    int i,j,k,d;
-    real remin_adj = 0;
-    real Ntot_dt = 0; // the total nitrate after one time step
-    real Ntot_col = 0;
-    real N = 0;
-    real dz = 0;
-    real ntot = 0;
-    real ptot = 0;
-    real ztot = 0;
-    real dtot = 0;
-    real NN = 0;
-    int idx_detritus = idx_nitrate + MP + MZ + 1;
-    
-    
-    switch (bgcModel)
-    {
-        case BGC_NONE:
-        {
-             break;
-        }
-        
-        case BGC_NPZD:
-        {
-            for (j = 0; j < Nx; j++)
-            {
-                for (k = 0; k < Nz; k++)
-                {
-                    
-                    ntot += phi[idx_nitrate][j][k];
-                    ptot += phi[idx_nitrate+1][j][k];
-                    ztot += phi[idx_nitrate+2][j][k];
-                    dtot += phi[idx_nitrate+3][j][k];
-                    
-                    NN += (ntot + ptot + ztot+ dtot);
-                }
-            }
-            
-            
-//            fprintf(stderr,"N: %le, P: %le, Z: %le, D: %le, total: %le \n",ntot,ptot,ztot,dtot,NN);
-            
-            
-            break;
-            
-        }
-        default:
-        {
-            printf("Error: MODELTYPE is undefined");
-            break;
-        }
-    }
-            
-    
-}
 
 
 
@@ -2879,6 +2663,15 @@ void printUsage (void)
      "  initFile              File containing an Ntracs x Nx x Nz array of initial\n"
      "                        tracer values over the whole domain.\n"
      "                        Optional, default is 0 everywhere.\n"
+     "  northTracerFile       File containing an Ntracs x Nx x Nz array of initial\n"
+     "                        tracer values over the northern edge of the domain.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  southTracerFile       File containing an Ntracs x Nx x Nz array of initial\n"
+     "                        tracer values over the southern edge of the domain.\n"
+     "                        Optional, default is 0 everywhere.\n"
+     "  fluxFile              File containing an Ntracs x Nx array of tracer values\n"
+     "                        across the surface of the domain.\n"
+     "                        Optional, default is 0 everywhere.\n"
      "  topogFile             File containing an Nx+1 x 1 array of ocean depths\n"
      "                        at grid cell corners. All elements must be > 0.\n"
      "                        Optional, default is Lz everywhere.\n"
@@ -3003,6 +2796,9 @@ int main (int argc, char ** argv)
     // Filename holders for input parameter arrays
     char targetResFile[MAX_PARAMETER_FILENAME_LENGTH];
     char initFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char northTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char southTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char fluxFile[MAX_PARAMETER_FILENAME_LENGTH];
     char topogFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tauFile[MAX_PARAMETER_FILENAME_LENGTH];
     char bgcFile[MAX_PARAMETER_FILENAME_LENGTH];
@@ -3030,6 +2826,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Nx","%u",&Nx,false);
     setParam(params,paramcntr++,"Nz","%u",&Nz,false);
     setParam(params,paramcntr++,"Lx","%lf",&Lx,false);
+    setParam(params,paramcntr++,"Ly","%lf",&Ly,false);
     setParam(params,paramcntr++,"Lz","%lf",&Lz,false);
     
     // Time stepping/output parameters (7)
@@ -3070,9 +2867,12 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"MZ","%u",&MZ,false);
     setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
     
-    // Input file names (10)
+    // Input file names (12)
     setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,true);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
+    setParam(params,paramcntr++,"northTracerFile","%s",northTracerFile,false);
+    setParam(params,paramcntr++,"southTracerFile","%s",southTracerFile,false);
+    setParam(params,paramcntr++,"fluxFile","%s",fluxFile,false);
     setParam(params,paramcntr++,"topogFile","%s",topogFile,true);
     setParam(params,paramcntr++,"tlength","%u",&tlength,false);
     setParam(params,paramcntr++,"tauFile","%s",tauFile,true);
@@ -3085,6 +2885,9 @@ int main (int argc, char ** argv)
     // Default file name parameters - zero-length strings
     targetResFile[0] = '\0';
     initFile[0] = '\0';
+    northTracerFile[0] = '\0';
+    southTracerFile[0] = '\0';
+    fluxFile[0] = '\0';
     topogFile[0] = '\0';
     tauFile[0] = '\0';
     bgcFile[0] = '\0';
@@ -3148,6 +2951,9 @@ int main (int argc, char ** argv)
         (h_c <= 0.0) ||
         (strlen(targetResFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(initFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(northTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(southTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(fluxFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(topogFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(tauFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(KgmFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
@@ -3254,8 +3060,11 @@ int main (int argc, char ** argv)
     VECALLOC(res,Ntracs);
     VECALLOC(targetRes,Ntracs);
     MATALLOC3(phi_init,Ntracs,Nx,Nz);
+    MATALLOC3(phi_north,Ntracs,Nx,Nz);
+    MATALLOC3(phi_south,Ntracs,Nx,Nz);
+    MATALLOC(phi_flux,Ntracs,Nx);
     VECALLOC(hb_in,Nx+2);
-    VECALLOC(tau,Nx+1);  // REMOVED STAU
+    VECALLOC(tau,Nx+1);
     VECALLOC(bgc_params,nbgc);
     
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
@@ -3320,6 +3129,7 @@ int main (int argc, char ** argv)
     MATALLOC(Kdia_w,Nx,Nz+1);
     MATALLOC(BPa,Nx,Nz+1);
     MATALLOC(BPx,Nx+1,Nz);
+    MATALLOC(BPy,Nx+1,Nz);
     MATALLOC(BBy,Nx,Nz);
     MATALLOC(Nbuoy,Nx,Nz);
     
@@ -3369,6 +3179,9 @@ int main (int argc, char ** argv)
         ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
         ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
         ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(northTracerFile) > 0) &&  !readMatrix3(northTracerFile,phi_north,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(southTracerFile) > 0) &&  !readMatrix3(southTracerFile,phi_south,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(fluxFile) > 0)        &&  !readMatrix(fluxFile,phi_flux,Ntracs,Nx,stderr) )  ||
         ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
     {
         printUsage();
@@ -3408,7 +3221,25 @@ int main (int argc, char ** argv)
         memset(*(*phi_init),0,(Ntot)*sizeof(real));
     }
     
-    // Default ocean depth is zero everywhere
+    // Default initial condition is zero tracer everywhere
+    if (!restart && strlen(northTracerFile)==0)
+    {
+        memset(*(*phi_north),0,(Ntot)*sizeof(real));
+    }
+    
+    // Default initial condition is zero tracer everywhere
+    if (!restart && strlen(southTracerFile)==0)
+    {
+        memset(*(*phi_south),0,(Ntot)*sizeof(real));
+    }
+    
+    // Default initial condition is zero flux at the surface
+    if (!restart && strlen(fluxFile)==0)
+    {
+        memset(*phi_flux,0,(Ntracs*Nx)*sizeof(real));
+    }
+    
+    // Default ocean depth is constant everywhere
     if (strlen(topogFile)==0)
     {
         for (j = 0; j < Nx+2; j ++)
@@ -3729,6 +3560,92 @@ int main (int argc, char ** argv)
         hzx[Nx-1][k] = 1.5*(ZZ_phi[Nx-1][k] - ZZ_phi[Nx-2][k]) - 0.5*hzx[Nx-2][k];
     }
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    // Calculate the meridional pressure gradients
+    if (Ly < 0 || Ly == 0)
+    {
+        _Ly = 0; // check to see if the domain is infinite or undefined
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 0; k < Nz-1; k++)
+            {
+                BPy[j][k] = 0;
+            }
+        }
+    }
+    else
+    {
+//        _Ly = 1/Ly;
+        _Ly = 0; // set the gradients to zero since they haven't been extensively tested
+        
+        // Calculate the density gradient of the northern and southern
+        // edges of the domin
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = 0; k < Nz; k++)
+            {
+                rho_north[j][k] = (1-alpha*(phi_north[idx_buoy][j][k] - tref));
+                rho_south[j][k] = (1-alpha*(phi_south[idx_buoy][j][k] - tref));
+            }
+        }
+        
+        
+        // Calculate the pressure by vertically integrating
+        for (j = 0; j < Nx; j++)
+        {
+            BPy[j][Nz-1] = 0; // We'll set the value of this in the next for loop.
+            for (k = Nz-2; k >= 0; k --)
+            {
+                BPy[j][k] += BPy[j][k+1] + _Ly*(grav/rho0)*( 0.5*(rho_north[j][k+1] + rho_north[j][k])  - 0.5*(rho_south[j][k+1] + rho_south[j][k]) )*(ZZ_u[j][k+1] - ZZ_u[j][k]);
+            }
+        }
+        
+        // Calculate the pressure at the (Nz-1)-th grid point
+        for (j = 0; j < Nx; j++)
+        {
+            cff = ZZ_psi[j][Nz] - ZZ_u[j][Nz-1];
+            BPy[j][Nz-1] = _Ly*grav*cff*( rho_north[j][Nz-1]
+                                     + 0.5 * cff * ( rho_north[j][Nz-1] - rho_north[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] )
+                                     -  (rho_south[j][Nz-1]
+                                     + 0.5 * cff * ( rho_south[j][Nz-1] - rho_south[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] ) )  );
+        }
+        
+        
+        // Set the boundaries to zero
+        for (k = 0; k < Nz; k++)
+        {
+            BPy[0] = 0;
+            BPy[Nx] = 0;
+        }
+        
+            
+        
+    }
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     // Calculate diapyncal diffusivity file from ksml and kbbl
     for (j = 0; j < Nx; j++)
     {
@@ -3914,11 +3831,6 @@ int main (int argc, char ** argv)
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
     {
-        // Step 0: If we enforce a total tracer concentration to be conserved, then calculate the total tracer in the domain
-        if (conserv_Ntot)
-        {
-            Nint = calcTracAvg(t,phi_in,idx_nitrate,Nint,true);
-        }
 
         
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations

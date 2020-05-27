@@ -308,47 +308,14 @@ function setparams (local_home_dir,run_name)
   %%%%% Meridional Profiles of Tracers %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
+  %%% AT THE MOMENT THIS HAS
+  
   %%% Northern Profiles
   phi_north = zeros(Ntracs,Nx,Nz);
   
-%   buoy_north = buoy_init;
-%   phi_north(IDX_BUOY,:,:) = buoy_north;
-  
-  % Store the files
-  northTracerFile = 'northTracer.dat';
-  writeDataFile(fullfile(local_run_dir,northTracerFile),phi_north);
-  PARAMS = addParameter(PARAMS,'northTracerFile',northTracerFile,PARM_STR);
   
   %%% Southern Profiles
   phi_south = zeros(Ntracs,Nx,Nz);
-  
-%   buoy_south = buoy_init;
-%   phi_south(IDX_BUOY,:,:) = buoy_south;
-  
-  % Store the files
-  southTracerFile = 'southTracer.dat';
-  writeDataFile(fullfile(local_run_dir,southTracerFile),phi_south);
-  PARAMS = addParameter(PARAMS,'southTracerFile',southTracerFile,PARM_STR);
-  
-  %%% Length of domain
-  Ly = -1; % negative values indicate an infinite domain
-  PARAMS = addParameter(PARAMS,'Ly',Ly,PARM_REALF);
-  
-  
-  
-  
-  
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  %%%%% Profiles of Surface Fluxes %%%%%
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  
-  % surface fluxes must have units of (units of [c] m/s)
-  phi_flux = zeros(Ntracs,Nx);
-  
-  fluxFile = 'fluxFile.dat';
-  writeDataFile(fullfile(local_run_dir,fluxFile),phi_flux);
-  PARAMS = addParameter(PARAMS,'fluxFile',fluxFile,PARM_STR);
-  
   
   
   
@@ -462,13 +429,6 @@ function setparams (local_home_dir,run_name)
   [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
   clabel(C,h)
   title('Initial Buoyancy')
-  colorbar
-  
-  
-  % Initial buoyancy
-  figure(fignum);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
-  title('Initial phytoplankton with grid')
   colorbar
 
   end
