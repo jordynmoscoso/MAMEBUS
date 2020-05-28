@@ -19,12 +19,6 @@
 #define NPARAMS 48
 
 
-
-// TODO document input/output parameters in all functions
-// TODO need to add inputs for along-shore tracer gradients and pressure gradients
-// TODO need to add along-slope advection
-
-
 //////////////////////////////////
 ///// BEGIN GLOBAL VARIABLES /////
 //////////////////////////////////
@@ -239,7 +233,7 @@ real ** bot_nflux = NULL;
 
 
 
-// TODO ened to add surface bottom BLs
+
 
 
 /**
@@ -667,7 +661,7 @@ void calcPressure(const real t, real ** buoy)
 
 
 
-// TODO need to handle the case in which -Hsml < -h_b+Hbbl, i.e. in which BLs overlap
+
 
 /**
  *
@@ -869,7 +863,6 @@ void calcSlopes (     const real        t,
                     if (k == Nz-1)
                     {
                         // The Shchepetkin/McWilliams 2003 paper says to do this but it seems to be causing an error. So we'll use the linear calculation for the surface.
-//                        db_dx[j][k] = -(FC[j][k] + FX[j-1][k] - FX[j][k])*cff;
                         db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                         db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
                     }
@@ -935,8 +928,6 @@ void calcSlopes (     const real        t,
         {
             // Buoyancy gradient at BBL top
             db_dz_bbl = db_dz[j][k_bbl[j]]*wn_bbl[j] + db_dz[j][k_bbl[j]-1]*wp_bbl[j];
-            
-            // TODO
             lambda_bbl = 0;
         }
         
@@ -947,7 +938,6 @@ void calcSlopes (     const real        t,
             
             if (use_sml && (z > -Hsml))
             {
-                // TODO calculate lambda
                 G_sml = surfStructFun(z,Hsml,_lambda_sml);
                 Sgm_psi[j][k] = - G_sml * db_dx[j][k] / db_dz_sml;
             }
@@ -961,9 +951,6 @@ void calcSlopes (     const real        t,
                 // Calculate slope on psi-gridpoints
                 Sgm_psi[j][k] = - db_dx[j][k] / db_dz[j][k];
             }
-            
-            //////// FIX THIS
-                // TODO replace with exponential taper - see Griffies (2004)
                 // Cox slope-limiting.
                 if (limSlopes)
                 {
@@ -1061,7 +1048,6 @@ void calcSlopes (     const real        t,
 
 
 
-/// TODO allow selection of different scheme for prescribing Kgm
 
 /**
  *
@@ -1967,13 +1953,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real n_max = 0;
     real wsink = 0;
     
-    // TODO remove: testing purposes
+    // Slope calculations
     real siso = 0;
     real sgm = 0;
     real z = 0;
     real sink_dz = 0;
     real sink_dz_max = 0;
-    
     real umax = 0;
     real wmax = 0;
     real uval = 0;
