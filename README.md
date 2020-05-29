@@ -29,4 +29,4 @@ This specific command plots the temperature tracer (2) and averages the solution
 
 
 
-With any questions, please contact Jordyn Moscoso: jmoscoso@atmos.ucla.edu
+Please contact Jordyn Moscoso: jmoscoso@atmos.ucla.edu with any questions
