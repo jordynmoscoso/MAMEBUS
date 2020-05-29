@@ -18,7 +18,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
 
     %%% Load convenience functions
     addpath ../utils;
-    addpath ./redblue
     
     fs = 22; % control the size of the font here.
     fsplt = fs;
@@ -277,14 +276,8 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
             title(titlestr,'interpreter','latex')
         end
-        
-        
-        % Use a divergent colorscheme if we are looking at positive or
-        % negative values
-        if (var_id == 0 || var_id == 1)
-            colormap redblue;
-        end
     else
+        cmap = cmocean('balance');
         psi_r_lim = avgVals;
         limval = 1.5;
         psi_r_lim = min(psi_r_lim,limval);
@@ -292,7 +285,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
         pcolor(XX_psi,ZZ_psi,psi_r_lim)
         shading interp
         c = colorbar; 
-        colormap redblue;
+        colormap(cmap);
         c.TickLabelInterpreter = 'latex';
         set(gca,'TickLabelInterpreter','latex')
         set(gca,'FontSize',fsplt)

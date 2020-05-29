@@ -14,8 +14,8 @@
 %%%
 function setparams (local_home_dir,run_name)  
   %%% Convenience scripts used in this function
-  addpath ../utils;
- model_code_dir = '~/Desktop/MAMEBUS/code';
+  addpath ../utils; % cmocean.m should be downloaded here
+  model_code_dir = '~/Desktop/MAMEBUS/code';
  
   %%% Load globally-defined constants
   paramTypes;
