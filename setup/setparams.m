@@ -15,7 +15,8 @@
 function setparams (local_home_dir,run_name)  
   %%% Convenience scripts used in this function
   addpath ../utils;
-  
+ model_code_dir = '~/Desktop/MAMEBUS/code';
+ 
   %%% Load globally-defined constants
   paramTypes;
   
@@ -29,12 +30,13 @@ function setparams (local_home_dir,run_name)
   plotfigs = true;
   
   %%% If set true, set up this run for the cluster
+  %%% This may need tuning for individual systems
   use_cluster = false;
   use_intel = false;
   use_pbs = use_cluster;
-  cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
-  uname = 'jmoscoso';
-  cluster_addr = 'caolila.atmos.ucla.edu';
+  cluster_home_dir = 'CLUSTER_DIRECTORY';
+  uname = 'USERNAME';
+  cluster_addr = 'CLUSTER_ADDRESS';
   
   %%% Run directory
   run_name = strtrim(run_name);  
@@ -437,12 +439,14 @@ function setparams (local_home_dir,run_name)
   set(0,'DefaultAxesFontSize',14)
   
   %%% Plot diapynal and isopycnal diffusivities together.
+  difmap = cmocean('deep');
   
   % Isopycnal diffusivity
   figure(fignum);
   subplot(1,2,1)
   pcolor(XX_psi,ZZ_psi,Kiso)
   title('Isopycnal Diffusivity, \kappa_{iso}')
+  colormap(difmap)
   shading interp
   colorbar
   xlabel('Distance (km)')
@@ -452,23 +456,28 @@ function setparams (local_home_dir,run_name)
   subplot(1,2,2)
   pcolor(XX_psi,ZZ_psi,Kgm)
   title('Gent/McWilliams Diffusivity, \kappa_{gm}')
+  colormap(difmap)
   shading interp
   colorbar
   xlabel('Distance (km)')
   fignum = fignum+1;
   
   % Initial buoyancy
+  bmap = cmocean('thermal');
   figure(fignum);
   [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
   clabel(C,h)
+  colormap(bmap)
   title('Initial Buoyancy')
   colorbar
   
   
-  % Initial buoyancy
+  % Initial phytoplankton concentration
+  pmap = cmocean('speed');
   figure(fignum);
   pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
   title('Initial phytoplankton with grid')
+  colormap(pmap)
   colorbar
 
   end
