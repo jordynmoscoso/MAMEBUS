@@ -47,7 +47,6 @@ function createRunScript (  local_home_dir, ...
     error(['Could not open ',sfname]);
   end
 
-
   %%% Copy code files over
   if (~copyfile(strtrim(model_code_dir),local_run_dir))
     error(['Could not copy code files to ',local_run_dir]);
