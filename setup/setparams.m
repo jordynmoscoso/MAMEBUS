@@ -15,16 +15,13 @@
 function setparams (local_home_dir,run_name)  
   %%% Convenience scripts used in this function
   addpath ../utils; % cmocean.m should be downloaded here
-  model_code_dir = '~/Desktop/MAMEBUS/code';
+  model_code_dir = '../code';
  
   %%% Load globally-defined constants
   paramTypes;
   
   % User defined choices:
-  modeltype = BGC_NPZD; % BGC_NONE (physical model only) or BGC_NPZD (NPZD model)
-  if (modeltype > 1)
-    modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
-  end
+  modeltype = BGC_NONE;
   
   %%% Plot the setup figures
   plotfigs = true;
@@ -143,39 +140,16 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Hsml',Hsml,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
   PARAMS = addParameter(PARAMS,'r_bbl',r_bbl,PARM_REALF);
-  
-  
-  
-  %%%%%%%%%%%%%%%%%%%%%
-  %%%%% BGC Model %%%%%
-  %%%%%%%%%%%%%%%%%%%%%
-  
-  if modeltype
-      MP = 1; MZ = 1; MD = 1; MN = 1;
-      Nbgc = MP + MZ + MD + MN;
-  else
-      MP = 0; MZ = 0; MD = 0;
-      Nbgc = 0;
-  end
-  
-  PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
   PARAMS = addParameter(PARAMS,'pressureScheme',PRESSURE_CUBIC,PARM_INT);
-  PARAMS = addParameter(PARAMS,'MP',MP,PARM_INT);
-  PARAMS = addParameter(PARAMS,'MZ',MZ,PARM_INT);
   
+   
   % Calculate the number of tracers
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
-  Ntracs = Nphys + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
-  
-  % Get the BGC parameters and initial conditions
-  [bgc_params, bgc_init, nbgc] = bgc_setup(ZZ_tr,Nx,Nz);
-  
-  % Write the biogeochemistry to file
-  bgcFile = 'bgcFile.dat';
-  writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
-  PARAMS = addParameter(PARAMS,'bgcFile',bgcFile,PARM_STR);
+  Ntracs = Nphys;
+  PARAMS = addParameter(PARAMS,'nbgc',0,PARM_INT);  
+  PARAMS = addParameter(PARAMS,'MP',0,PARM_INT);
+  PARAMS = addParameter(PARAMS,'MZ',0,PARM_INT);
   PARAMS = addParameter(PARAMS,'Ntracs',Ntracs,PARM_INT);
-  PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
   
   
   
@@ -203,15 +177,7 @@ function setparams (local_home_dir,run_name)
   phi_init(IDX_UVEL,:,:) = reshape(uvel_init,[1 Nx Nz]);
   phi_init(IDX_VVEL,:,:) = reshape(vvel_init,[1 Nx Nz]);
   phi_init(IDX_BUOY,:,:) = reshape(buoy_init,[1 Nx Nz]);  
-  
-  if (modeltype == 1)
-      phi_init(Nphys+1:Nphys+Nbgc,:,:) = reshape(bgc_init,[Nbgc Nx Nz]);
-  end
-  
-
-  Nphys
-  Nbgc
-  Ntracs
+   
   %%% Write to data file
   initFile = 'initFile.dat';  
   writeDataFile(fullfile(local_run_dir,initFile),phi_init);
@@ -470,16 +436,6 @@ function setparams (local_home_dir,run_name)
   colormap(bmap)
   title('Initial Buoyancy')
   colorbar
-  
-  
-  % Initial phytoplankton concentration
-  pmap = cmocean('speed');
-  figure(fignum);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
-  title('Initial phytoplankton with grid')
-  colormap(pmap)
-  colorbar
-
   end
   
 end
