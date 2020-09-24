@@ -62,7 +62,7 @@ function setparams (local_home_dir,run_name)
   H = 3000; %%% Depth of domain including mixed layers
   
   %%% Scalar parameter definitions 
-  tau0 = -0.025e-1; %%% Northward wind stress (N m^{-2})
+  tau0 = -0.025; %%% Northward wind stress (N m^{-2})
   shelfdepth = 50; %%% Depth of shelf on western boundary
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
@@ -78,8 +78,8 @@ function setparams (local_home_dir,run_name)
   theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%% Grids  
-  Nx = 32; %%% Number of latitudinal grid points 
-  Nz = 32; %%% Number of vertical grid points
+  Nx = 64; %%% Number of latitudinal grid points
+  Nz = 64; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  

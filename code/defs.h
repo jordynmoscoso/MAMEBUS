@@ -1,4 +1,4 @@
-// Header file for defs.c
+i// Header file for defs.c
 #ifndef _DEFS_H_
 #define _DEFS_H_
 
