@@ -50,22 +50,21 @@ function setparams (local_home_dir,run_name)
   t1year = 365*t1day; %%% Seconds in 1 year
   endTime = 30*t1year;
   restart = false;
-  startIdx = 15;
-  outputFreq = 1*t1day;
+  startIdx = 0;
+  outputFreq = 10*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
-  Lx = 400*m1km; %%% Computational domain width
-  H = 3000; %%% Depth of domain including mixed layers
+  Lx = 1000*m1km; %%% Computational domain width
+  H = 2500; %%% Depth of domain including mixed layers
   
   %%% Scalar parameter definitions 
-  tau0 = -0.025e-1; %%% Northward wind stress (N m^{-2})
-  shelfdepth = 50; %%% Depth of shelf on western boundary
+  tau0 = 0.05;%-0.025e-1; %%% Northward wind stress (N m^{-2})
+  shelfdepth = 300; %%% Depth of shelf on western boundary
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
-  Kgm0 = 1200; %%% Reference GM diffusivity
-  Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
-  Hsml = 40; %%% Surface mixed layer thickness
+  Kgm0 = 1000; %%% Reference GM diffusivity  
+  Hsml = 100; %%% Surface mixed layer thickness
   Hbbl = 40; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
 
@@ -75,7 +74,7 @@ function setparams (local_home_dir,run_name)
   theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%% Grids  
-  Nx = 32; %%% Number of latitudinal grid points 
+  Nx = 96; %%% Number of latitudinal grid points 
   Nz = 32; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
@@ -92,11 +91,11 @@ function setparams (local_home_dir,run_name)
   end
 
   %%% Define the topography
-  Xtopog = 290*m1km;
-  Ltopog = 30*m1km;
-  shelfdepth = 50;
+  Xtopog_w = 150*m1km;
+  Xtopog_e = 850*m1km;
+  Ltopog = 25*m1km;
   Htopog = H-shelfdepth;
-  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
+  hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog_e)/(Ltopog))) - Htopog*0.5*(1-tanh((xx_topog-Xtopog_w)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
   hb_tr = hb(2:end-1);
   
@@ -167,10 +166,10 @@ function setparams (local_home_dir,run_name)
   vvel_init = zeros(Nx,Nz);
   
   %%% Initial temperature
-  Hexp = 150; 
-  Tmax = 22 - 5*XX_tr/Lx;
-  Tmin = 4;
-  buoy_init = Tmin + (Tmax-Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));  
+  Hexp = 500; 
+  Tmax = 10;
+  Tmin = 0;
+  buoy_init = Tmin + (Tmin + (Tmax-Tmin)*(XX_tr/Lx) - Tmin).*(exp(ZZ_tr/Hexp+1)-exp(-H/Hexp+1))./(exp(1)-exp(-H/Hexp+1));  
   
   
   %%% Store physical tracers in 3D matrix
@@ -208,7 +207,10 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   %%% Create the profile of wind stress
-  tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/4)) );
+%   tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/4)) );
+  tau = tau0*ones(size(xx_psi));
+  figure(10)
+  plot(xx_psi,tau);
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -226,27 +228,23 @@ function setparams (local_home_dir,run_name)
   %%%%% Tracer relaxation concentrations and timescales %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
-  %%% Buoyancy relaxation parameters
-  L_relax = 50*m1km;  
-  T_relax_max = 30*t1day; %%% Fastest relaxation time
 
   %%% Relax to initial buoyancy at the western boundary
   uvel_relax = -ones(size(uvel_init));
   vvel_relax = -ones(size(vvel_init));
   T_relax_veloc = -ones(Nx,Nz);
   
-  buoy_relax = buoy_init;
-  T_relax_buoy = -ones(Nx,Nz);
-  T_relax_buoy(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
-  T_relax_buoy(XX_tr>=L_relax) = -1;
 
   
   %%% Add relaxation to an atmospheric temperature profile
-  buoy_surf_max = 22;
-  buoy_surf_min = 18;
-  buoy_surf = buoy_surf_max + (buoy_surf_min-buoy_surf_max)*xx_tr/Lx;
-  buoy_relax((xx_tr>=L_relax),Nz) = buoy_surf((xx_tr>=L_relax)); 
-  T_relax_buoy((xx_tr>=L_relax),Nz) = 1*t1day; 
+  buoy_surf_max = Tmax;
+  buoy_surf_min = Tmin;
+  buoy_surf = buoy_surf_min + (buoy_surf_max-buoy_surf_min)*xx_tr/Lx;
+  buoy_relax = repmat(reshape(buoy_surf,[Nx 1]),[1 Nz]); 
+  figure(100);   
+  plot(xx_tr,buoy_relax(:,Nz));
+  T_relax_buoy = -ones(Nx,Nz);
+  T_relax_buoy(:,Nz) = 30*t1day; 
   
  
   %%% Store tracer relaxation data in 3D matrices
@@ -328,16 +326,17 @@ function setparams (local_home_dir,run_name)
   
   %%% Initalize the profile
   Kgm = Kgm0*ones(Nx+1,Nz+1);
-  H_int = hb_psi - (Hbbl + Hsml); 
-  H_int(H_int < 0) = 0;
-  Hmax = max(H_int);
-  
-  lambda = 0.25; % tuning parameter for KGM diffusivity
-  for jj = 1:Nx+1
-      for kk = 1:Nz+1 
-        Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
-      end
-  end
+%   H_int = hb_psi - (Hbbl + Hsml); 
+%   H_int(H_int < 0) = 0;
+%   Hmax = max(H_int);
+%   
+%   lambda = 0.25; % tuning parameter for KGM diffusivity
+%   for jj = 1:Nx+1
+%       for kk = 1:Nz+1 
+%         Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
+% %         Kgm(jj,kk) = Kgm(jj,kk)*exp(ZZ_psi(jj,kk)/(lambda*Hmax));
+%       end
+%   end
   
   KgmFile = 'Kgm.dat';
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
@@ -350,7 +349,7 @@ function setparams (local_home_dir,run_name)
   %%%%% Isopycnal diffusivity %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
-  Kiso = 2*Kgm;
+  Kiso = 0*Kgm;
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
@@ -431,7 +430,7 @@ function setparams (local_home_dir,run_name)
   % Initial buoyancy
   bmap = cmocean('thermal');
   figure(fignum);
-  [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
+  [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:1:10);
   clabel(C,h)
   colormap(bmap)
   title('Initial Buoyancy')

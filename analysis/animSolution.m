@@ -14,290 +14,273 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
+function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
+                            mov_on,mov_name)
+ 
+  %%% Load convenience functions
+  addpath ../utils;
+  addpath ./redblue
 
-    %%% Load convenience functions
-    addpath ../utils;
-    
-    fs = 22; % control the size of the font here.
-    fsplt = fs;
+  
+  %%%%%%%%%%%%%%%%%%%%%
+  %%%%% VARIABLES %%%%%
+  %%%%%%%%%%%%%%%%%%%%% 
 
-    %%%%%%%%%%%%%%%%%%%%%
-    %%%%% VARIABLES %%%%%
-    %%%%%%%%%%%%%%%%%%%%% 
+  %%% Parameter and data file names
+  run_name = strtrim(run_name);
+  dirpath = fullfile(local_home_dir,run_name);
+  params_file = fullfile(dirpath,[run_name,'_in']);  
 
-    %%% Parameter and data file names
-    run_name = strtrim(run_name);
-    dirpath = fullfile(local_home_dir,run_name);
-    params_file = fullfile(dirpath,[run_name,'_in']);  
-    
-    [dt_s dt_s_found] = readparam(params_file,'monitorFrequency','%f');
-    [modeltype modeltype_found] = readparam(params_file,'bgcModel','%u');
-    
-    %%% Plotting grid
-    [Nx Nx_found] = readparam(params_file,'Nx','%u');
-    [Nz Nz_found] = readparam(params_file,'Nz','%u');
-    [Lx Lx_found] = readparam(params_file,'Lx','%lf');
-    [H H_found] = readparam(params_file,'Lz','%lf');
-    if ((~Nx_found) || (~Nz_found) || (~Lx_found) || (~H_found))
+  %%% Plotting grid
+  [Nx Nx_found] = readparam(params_file,'Nx','%u');
+  [Nz Nz_found] = readparam(params_file,'Nz','%u');
+  [Lx Lx_found] = readparam(params_file,'Lx','%lf');
+  [H H_found] = readparam(params_file,'Lz','%lf');
+  if ((~Nx_found) || (~Nz_found) || (~Lx_found) || (~H_found))
     error('Could not read grid parameters');
-    end    
+  end    
+  
+  %%% Read grid parameters
+  [h_c h_c_found] = readparam(params_file,'h_c','%le');
+  [theta_s theta_s_found] = readparam(params_file,'theta_s','%lf');
+  [theta_b theta_b_found] = readparam(params_file,'theta_b','%lf');
+  
+  %%% Read bottom topography
+  hb = readDataFile (params_file,dirpath,'topogFile',Nx+2,1,H*ones(Nx+2,1));
+  hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
+  hb_tr = hb(2:end-1); %%% Remove "ghost" points
+  
+  %%% Parameters related to number of iterations
+  [dt_s dt_s_found] = readparam(params_file,'monitorFrequency','%lf');
+  [startTime startTime_found] = readparam(params_file,'startTime','%lf');
+  [endTime endTime_found] = readparam(params_file,'endTime','%lf'); 
+  [restart restart_found] = readparam(params_file,'restart','%d');
+  [n0 n0_found] = readparam(params_file,'startIdx','%u');
 
-    dx = Lx/Nx;
-    %%% Read grid parameters
-    [h_c h_c_found] = readparam(params_file,'h_c','%le');
-    [theta_s theta_s_found] = readparam(params_file,'theta_s','%lf');
-    [theta_b theta_b_found] = readparam(params_file,'theta_b','%lf');
-
-    %%% Read bottom topography
-    hb = readDataFile (params_file,dirpath,'topogFile',Nx+2,1,H*ones(Nx+2,1));
-    hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
-    hb_tr = hb(2:end-1); %%% Remove "ghost" points
-
-    %%% Parameters related to number of iterations
-    
-    [startTime startTime_found] = readparam(params_file,'startTime','%lf');
-    [endTime endTime_found] = readparam(params_file,'endTime','%lf'); 
-    [restart restart_found] = readparam(params_file,'restart','%d');
-    [n0 n0_found] = readparam(params_file,'startIdx','%u');
-
-    %%% Default is that we're not picking up from a previous simulation
-    if (~restart_found)
+  %%% Default is that we're not picking up from a previous simulation
+  if (~restart_found)
     restart = false;
-    end
+  end
 
-    %%% Default is that we pickup from the first output file
-    if ((~restart) || (~n0_found))
+  %%% Default is that we pickup from the first output file
+  if (~restart || ~n0_found)
     n0 = 0;
-    end
-
-    %%% If the start time isn't specified then it may be specified implicitly
-    %%% by the pickup file
-    if (~startTime_found)
+  end
+  
+  %%% If the start time isn't specified then it may be specified implicitly
+  %%% by the pickup file
+  if (~startTime_found)
     if (restart && dt_s_found)
       startTime = n0*dt_s;
     else
       startTime = 0;
     end
-    end
+  end
+  
+  %%% For convenience
+  t1year = 365*86400; %%% Seconds in one year
+  t1day = 86400;
+  
+  %%% If user is plotting nitrate, indicate what to plot
+%   if (var_id == 2 && plot_trac)
+%     prompt = 'Please indicate display \n 0 for Primary Productivity (default) \n 1 for Nitrate Concentration \n';
+%     ncase = input(prompt);
+%     %%% Check for valid input, if not choose default
+%     if (isempty(ncase) || ncase < 0 || ncase > 1)
+%         ncase = 0;
+%     end
+    Nstore = [];
+    tsave = [];
+%   end
 
-    %%% For convenience
-    t1year = 365*86400; %%% Seconds in one year
-
-    dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
-    xx_psi = 0:dx:Lx;
-
-    %%% Generate full sigma-coordinate grids
-    [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
+ncase = 1; 
+  
+  %%% Load grids from model output
+%   dx = (Lx/Nx);
+%   dz = (H/Nz);
+%   [xx_phi zz_phi XX_tr ZZ_tr] = createmesh(0.5*dx,Lx-0.5*dx,Nx,-H+0.5*dz,-0.5*dz,Nz);  
+%   [xx_psi zz_psi XX_psi ZZ_psi] = createmesh(0,Lx+dx,Nx+1,-H,0,Nz+1);  
+%   fid = fopen(fullfile(dirpath,['ZZ_PHI.dat']),'r');
+%   if (fid == -1)
+%     error(['Could not open ',paramFile]);
+%   end
+%   ZZ_tr = fscanf(fid,'%f',[Nx Nz]);
+%   fclose(fid);
+%   fid = fopen(fullfile(dirpath,['ZZ_PSI.dat']),'r');
+%   if (fid == -1)
+%     error(['Could not open ',paramFile]);
+%   end
+%   ZZ_psi = fscanf(fid,'%f',[Nx Nz]);
+%   fclose(fid);  
+    
+  %%% Generate full sigma-coordinate grids
+  [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
                         = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi);
+  
+  %%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%% PLOTTING LOOP %%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%
+  surf_layer = 75;
+  sl_ind = find(ZZ_tr > - surf_layer);
+  denom = size(sl_ind);
+  
+  if (var_id ~= 0 && var_id ~= 1)
+     n_var = var_id; 
+  end
+  
+  %%% Max number of output files is the number of whole time steps that can
+  %%% fit into tmax, plus one initial save, plus one final save
+  Noutput = floor(endTime/dt_s) + 2;
+  
+  %%% Make a movie of the data - allocate a movie array large enough to
+  %%% hold the largest possible number of frames
+  nfig = 107;
+  figure(nfig);
+  clf;
+  axes('FontSize',18);
+  M = moviein(Noutput);  
+  
+  %%% Tracks whether we should still read data
+  stillReading = true;
+  counter = 1;
+  n = n0;
+  
+  % Determines whether or not to make a movie and writes a new file to
+  % store the data.
+  if mov_on
+      vidObj = VideoWriter(mov_name);
+      vidObj.FrameRate = 10;
+      open(vidObj)
+  end
+  
+  %%% At each time iteration...
+  while (stillReading)
+      
+    %%% Get the time value 
+    t = startTime + (n-n0)*dt_s;
+    
+    %%% If plot_trac==true, load the tracer specified by trac_num and plot
+    %%% it
+    if (plot_trac)    
 
-    
-    %%% Upload the names of the files in order to pick out the max N value
-    A = dir(dirpath);
-    M = size(A);
-    M = floor(max(M)/6); % there are six output variables saved
-                         % so this cuts down on the for loop.
-    lastVal = 0;
-    for ii = 1:M
-        temp = A(ii).name;
-        temp = strsplit(temp,'=');
-        if max(size(temp) > 1)
-            temp2 = char(temp(2));
-            compVal = strsplit(temp2,'.');
-            compVal = str2num(compVal{1});
-
-            if compVal > lastVal
-                lastVal = compVal;
-            end
-        end
-    end
-    
-    %%% Pick out the last N value in the saved files. 
-    outputFrac = dt_s/t1year;
-    yearLength = 1/outputFrac; % Count the number of N values in one year.
-    
-    LL = yearLength*avgTime;
-    avgStart = round(lastVal - LL); % Calculate where we start the average.
-    
-    
-    if avgStart < 1
-        avgStart = 0;
-    end
-    
-    
-    if (plot_trac)
-        if (var_id == 0)
-            title_name = 'Zonal Velocity';
-        elseif (var_id == 1)
-            title_name = 'Meridional Velocity';
-        elseif (var_id == 2)
-            title_name = 'Temperature ($^o$C)';
-        else
-            % title names
-            switch (modeltype)
-                case 0
-                    title_name = 'Depth Tracer';
-                case 1 % npzd
-                    if (var_id == 3)
-                        title_name = 'Nitrate (mmol/m$^3$)';
-                    elseif (var_id == 4)
-                        title_name = 'Phytoplankton (mg Chl/m$^3$)';
-                    elseif (var_id == 5)
-                        title_name = 'Zooplankton (mmol N/m$^3$)';
-                    elseif (var_id == 6)
-                        title_name = 'Detritus (mmol N/m$^3$)';
-                    else
-                        title_name = 'Depth Tracer';
-                    end
-                otherwise
-                    disp('No Modeltype Found')
-            end
-        end
-    else
-        if (var_id == 0)
-            title_name = 'Residual Streamfunction';
-        elseif (var_id == 1)
-            title_name = 'Mean Streamfunction';
-        else 
-            title_name = 'Eddy Streamfunction';
-        end
-    end
-        
-            
-    
-    
-    disp(['Start time is ' num2str(avgStart*dt_s/t1year) ' yrs']);
-    disp(['End time is ' num2str(lastVal*dt_s/t1year) ' yrs']);
-    
-    %%% Create a placeholder for avgVals
-    if (plot_trac)
-        avgVals = zeros(Nx,Nz);
-    else
-        avgVals = zeros(Nx+1,Nz+1);
-    end
-    
-    
-    %%% Averaging loop
-    ndt = lastVal - avgStart + 1; % add one to account for Matlab Indexing
-    for n = avgStart:lastVal
-        if (plot_trac)
-            data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
-            phi = readOutputFile(data_file,Nx,Nz);
-        else
-            %%% Load different streamfunctions      
-            switch (var_id)
-                case 0 %%% Residual streamfunction
-                    data_file = fullfile(dirpath,['PSIR_n=',num2str(n),'.dat']);
-                case 1 %%% Mean streamfunction
-                    data_file = fullfile(dirpath,['PSIM_n=',num2str(n),'.dat']);
-                case 2 %%% Eddy streamfunction
-                    data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
-            end
-            
-          %%% Get the psi values on the gridpoints
-          phi = readOutputFile (data_file,Nx+1,Nz+1);
-        end
-        
-
-        avgVals = avgVals + phi;
-    end
-    avgVals = avgVals/ndt;
-    
-    
-    Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-    Ncline = 250; % Approximate guess of the depth of the nutracline
-    Ninit(:,:,1) = -Nmax*tanh(ZZ_tr./Ncline);
-
-    
-    
-    %%% Plot the average values %%%
-    timelengthstr = lastVal*dt_s/t1year - avgStart*dt_s/t1year;
-    titlestr = title_name;
-    figure
-    if (plot_trac)
-        if (var_id == 0 || var_id == 1)
-            cmap = cmocean('balance');
-            pcolor(XX_tr,ZZ_tr,avgVals)
+      %%% Data file name
+      data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
+      phi = readOutputFile(data_file,Nx,Nz);    
+      
+      %%% Plot the tracer     
+      switch (var_id)
+        case 0 %%% u-velocity
+          cmap = cmocean('balance');
+          pcolor(XX_tr,ZZ_tr,phi)
 %             shading interp
-            h = colorbar; 
-            colormap(cmap)
-            h.TickLabelInterpreter = 'latex';
-            maxspeed = 0.01;
-            minval = max(max(max(avgVals)),maxspeed);
-            minval = abs(min(min(min(avgVals)),-minval));
-            caxis([-minval minval]);
-            title(titlestr,'interpreter','latex')
-            shading interp
-        else % plot tracers 
-            % chose the appropriate colormap and contour vector
-            if (var_id == 2)
-                cmap = cmocean('thermal');
-                cvec = 0:2:18;
-                clr = 'w';
-            elseif (var_id == 3) % nitrogen
-                cmap = cmocean('matter');
-                cvec = [1 6.5 12.1 17.6 23.1];
-                clr = 'w';
-            elseif (var_id == 4) % phytoplankton
-                cmap = cmocean('speed');
-                cvec = [0.2 0.4 0.9 1.8];
-                clr = 'k';
-            elseif (var_id == 5) % zooplankton
-                cmap = cmocean('amp');
-                cvec = 5;
-                clr = 'w';
-            elseif (var_id == 6) % detritus
-                cmap = cmocean('turbid');
-                cvec = 5;
-                clr = 'k';
-            else
-                disp('Not explicitly chosen yet')
-                return
-            end
+          h = colorbar; 
+          colormap(cmap)
+          h.TickLabelInterpreter = 'latex';
+          maxspeed = 0.01;          
+          caxis([-maxspeed maxspeed]);
+          shading interp
+        case 1 %%% v-velocity
+          cmap = cmocean('balance');
+          pcolor(XX_tr,ZZ_tr,phi)
+%             shading interp
+          h = colorbar; 
+          colormap(cmap)
+          h.TickLabelInterpreter = 'latex';
+          maxspeed = 0.3;
+          caxis([-maxspeed maxspeed]);
+          shading interp
+        case 2 %%% Buoyancy (temperature)
+          size(XX_tr)
+          size(phi)
+%           [C h] = contourf(XX_tr/1000,ZZ_tr,phi,0:0.5:10);
+          pcolor(XX_tr/1000,ZZ_tr,phi);
+          shading interp
+          set(gca, 'CLim', [0, 10]);
+            colormap(cmocean('thermal',20));
+          h=colorbar;
+          title('Potential temp. (^oC)');          
+%       caxis([0 20]);
+%       axis([0 1 -1 0]);
+
+      end
+%       clabel(C,h,'Color','w');  
+%       set(h,'ShowText','on'); 
+%       pcolor(XX_phi,ZZ_phi,phi);
+            
+    
+      set(h,'FontSize',18);
+      
+
+
+    %%% If plot_trac==false, plot the streamfunction
+    else    
+    
+      %%% Load different streamfunctions      
+      switch (var_id)
+        case 0 %%% Residual streamfunction
+          data_file = fullfile(dirpath,['PSIR_n=',num2str(n),'.dat']);
+        case 1 %%% Mean streamfunction
+          data_file = fullfile(dirpath,['PSIM_n=',num2str(n),'.dat']);
+        case 2 %%% Eddy streamfunction
+          data_file = fullfile(dirpath,['PSIE_n=',num2str(n),'.dat']);
+      end
                 
-            pcolor(XX_tr,ZZ_tr,avgVals);
-            hold on
-            [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,clr);
-            clabel(C,h,'Color',clr)
-            hold off
-            shading interp
-            c = colorbar; 
-            colormap(cmap);
-            c.TickLabelInterpreter = 'latex';
-            set(gca,'TickLabelInterpreter','latex')
-            set(gca,'FontSize',fsplt)
-            ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
-            xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
-%             set(gcf,'Position',[100 100 724 654])
-            xticks(0:50e3:400e3)
-            xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
-            yticks(-180:20:0)
-            yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
-            axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
-            title(titlestr,'interpreter','latex')
-        end
-    else
-        cmap = cmocean('balance');
-        psi_r_lim = avgVals;
-        limval = 1.5;
-        psi_r_lim = min(psi_r_lim,limval);
-        psi_r_lim = max(psi_r_lim,-limval);
-        pcolor(XX_psi,ZZ_psi,psi_r_lim)
-        shading interp
-        c = colorbar; 
-        colormap(cmap);
-        c.TickLabelInterpreter = 'latex';
-        set(gca,'TickLabelInterpreter','latex')
-        set(gca,'FontSize',fsplt)
-        ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
-        xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
-        xticks(0:50e3:400e3)
-        xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
-        title(titlestr,'interpreter','latex')
-        caxis([-limval limval])
+      %%% Get the psi values on the gridpoints
+      psi = readOutputFile (data_file,Nx+1,Nz+1);       
+
+      %%% Plot the streamfunction
+      psi_r_lim = psi;
+      limval = 2;
+      psi_r_lim = min(psi_r_lim,limval);
+      psi_r_lim = max(psi_r_lim,-limval);
+%       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
+      figure(1)
+      pcolor(XX_psi,ZZ_psi,psi_r_lim);
+      shading interp;     
+      colormap redblue;
+      h=colorbar;        
+      caxis([-limval limval]);
+      set(h,'FontSize',18);
+
     end
-   
-        hold on
-        plot(xx_psi,-hb_psi,'k')
-        hold off
+      
+    
+    %%% Store the image in the movie buffer  
+    xlabel('x (km)');    
+    ylabel('z (km)','Rotation',0);        
+    axis tight;
+    set(gca,'XTick',(0:Lx/5:Lx)/1000);
+    set(gca,'YTick',-H:H/5:0);
+%     title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
+    
+    nextframe = getframe(gcf);    
+    M(counter) = nextframe; 
+    
+    
+    % Stores the frame to the video file.
+    if mov_on
+        writeVideo(vidObj,nextframe);
+        
+    end
+    
+    counter = counter+1;   
+    n = n + 1;
+        
+  end    
+  
+  if (var_id ~= 0 && var_id ~= 1 && plot_trac)
+      titlestr = ['Final time = ', num2str(t/t1year), ' yr'];
+      
+      figure(nfig+1)
+      size(tsave)
+      size(Nstore)
+      plot(tsave/t1year,Nstore)
+      xlabel(titlestr)
+  end
+  
+  % Close the movie writer
+  if mov_on
+      close(vidObj);
+  end
+  
 end
