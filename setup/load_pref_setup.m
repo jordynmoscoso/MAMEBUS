@@ -12,10 +12,12 @@
 %%% the run files will be written. N.B. a directory called 'run_name' will
 %%% be created within local_home_dir to house the files.
 %%%
-function setparams (local_home_dir,run_name)  
+function load_pref_setup (local_home_dir,run_name)  
   %%% Convenience scripts used in this function
   addpath ../utils; % cmocean.m should be downloaded here
   model_code_dir = '~/Desktop/MAMEBUS/code';
+  model_ref_dir = '~/Desktop/MAMEBUS_Data/resolution-tests/test64c';
+  nfin = 7300;
  
   %%% Load globally-defined constants
   paramTypes;
@@ -51,7 +53,7 @@ function setparams (local_home_dir,run_name)
   %%% Time parameters
   t1day = 86400; %%% Seconds in 1 day
   t1year = 365*t1day; %%% Seconds in 1 year
-  endTime = 20*t1year;
+  endTime = 5*t1year;
   restart = false;
   startIdx = 15;
   outputFreq = 1*t1day;
@@ -170,6 +172,17 @@ function setparams (local_home_dir,run_name)
   % Get the BGC parameters and initial conditions
   [bgc_params, bgc_init, nbgc] = bgc_setup(ZZ_tr,Nx,Nz);
   
+  % keep track of tracer values
+  % 3 - Nitrate
+  % 4 - Phyto
+  % 5 - Zoo 
+  % 6 - Detritus
+  
+  bgc_init(:,:,1) = readOutputFile(fullfile(model_ref_dir,['TRAC3_n=',num2str(nfin),'.dat']),Nx,Nz);
+  bgc_init(:,:,2) = readOutputFile(fullfile(model_ref_dir,['TRAC4_n=',num2str(nfin),'.dat']),Nx,Nz);
+  bgc_init(:,:,3) = readOutputFile(fullfile(model_ref_dir,['TRAC5_n=',num2str(nfin),'.dat']),Nx,Nz);
+  bgc_init(:,:,4) = readOutputFile(fullfile(model_ref_dir,['TRAC6_n=',num2str(nfin),'.dat']),Nx,Nz);
+  
   % Write the biogeochemistry to file
   bgcFile = 'bgcFile.dat';
   writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
@@ -189,8 +202,8 @@ function setparams (local_home_dir,run_name)
   phi_init = zeros(Ntracs,Nx,Nz);
   
   %%% Initial velocities
-  uvel_init = zeros(Nx,Nz);
-  vvel_init = zeros(Nx,Nz);
+%   uvel_init = zeros(Nx,Nz);
+%   vvel_init = zeros(Nx,Nz);
   
   %%% Initial temperature
   Hexp = 150; 
@@ -200,6 +213,9 @@ function setparams (local_home_dir,run_name)
   
   
   %%% Store physical tracers in 3D matrix
+  uvel_init = readOutputFile(fullfile(model_ref_dir,['TRAC0_n=',num2str(nfin),'.dat']),Nx,Nz);
+  vvel_init = readOutputFile(fullfile(model_ref_dir,['TRAC1_n=',num2str(nfin),'.dat']),Nx,Nz);
+  buoy_init = readOutputFile(fullfile(model_ref_dir,['TRAC2_n=',num2str(nfin),'.dat']),Nx,Nz);
   phi_init(IDX_UVEL,:,:) = reshape(uvel_init,[1 Nx Nz]);
   phi_init(IDX_VVEL,:,:) = reshape(vvel_init,[1 Nx Nz]);
   phi_init(IDX_BUOY,:,:) = reshape(buoy_init,[1 Nx Nz]);  
@@ -314,8 +330,7 @@ function setparams (local_home_dir,run_name)
   phi_north = zeros(Ntracs,Nx,Nz);
   
   buoy_north = buoy_init;
-%   phi_north(IDX_BUOY,:,:) = buoy_north - ones(Nx,Nz);
-  phi_north(IDX_BUOY,:,:) = zeros(Nx,Nz);
+  phi_north(IDX_BUOY,:,:) = buoy_north - ones(Nx,Nz);
   
   % Store the files
   northTracerFile = 'northTracer.dat';
@@ -326,8 +341,7 @@ function setparams (local_home_dir,run_name)
   phi_south = zeros(Ntracs,Nx,Nz);
   
   buoy_south = buoy_init;
-%   phi_south(IDX_BUOY,:,:) = buoy_south + ones(Nx,Nz);
-  phi_south(IDX_BUOY,:,:) = ones(Nx,Nz);
+  phi_south(IDX_BUOY,:,:) = buoy_south + ones(Nx,Nz);
   
   % Store the files
   southTracerFile = 'southTracer.dat';
@@ -335,8 +349,9 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'southTracerFile',southTracerFile,PARM_STR);
   
   %%% Length of domain
-  Ly = 1000*m1km; % negative values indicate an infinite domain
+  Ly = 100*m1km; % negative values indicate an infinite domain
   PARAMS = addParameter(PARAMS,'Ly',Ly,PARM_REALF);
+  
   
   
   
@@ -436,8 +451,6 @@ function setparams (local_home_dir,run_name)
   
   % Wind Stress Profile
   
-
-  
   if(plotfigs)
   
   set(0,'DefaultAxesFontSize',14)
@@ -468,7 +481,7 @@ function setparams (local_home_dir,run_name)
   
   % Initial buoyancy
   bmap = cmocean('thermal');
-  figure(fignum);
+  figure(fignum); fignum = fignum + 1;
   [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
   clabel(C,h)
   colormap(bmap)
@@ -477,15 +490,20 @@ function setparams (local_home_dir,run_name)
   
   
   % Initial phytoplankton concentration
-  pmap = cmocean('speed');
-  figure(fignum);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
-  title('Initial phytoplankton with grid')
-  colormap(pmap)
-  colorbar
-
+  if modeltype == 1
+      pmap = cmocean('speed');
+      figure(fignum);
+      pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
+      title('Initial phytoplankton with grid')
+      colormap(pmap)
+      colorbar
+  else
+      pmap = cmocean('thermal');
+      figure(fignum);
+      pcolor(XX_tr,ZZ_tr,buoy_init);
+      title('Initial buoyancy with grid')
+      colormap(pmap)
+      colorbar
   end
-  
-  license('inuse')
   
 end
