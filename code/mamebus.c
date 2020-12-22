@@ -28,7 +28,7 @@ int Ntracs = 0;
 int Nx = 0;
 int Nz = 0;
 int Ntot = 0;
-int anothertestvar = 0;
+int testvar = 1;
 
 // Physical parameters
 real Lx = 0;
