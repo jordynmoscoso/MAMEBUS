@@ -1342,8 +1342,8 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real kp = bgc_params[12];     // half saturation of phytoplankton
     real delta_x = bgc_params[13]; // width of grazing profile
     real preyopt = bgc_params[14]; // optimal predator prey lengthscale
-    real r_remin = bgc_params[15]/day; // rate of remineralization
-    real wsink = bgc_params[16]/day;  // sinking speed
+    real r_remin = bgc_params[15]; // rate of remineralization
+    real wsink = bgc_params[16];  // sinking speed
     
     real kpar = 0;              // light attenuation
     real I0 = 0;
@@ -1364,7 +1364,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real ** dD_dt = dphi_dt[idx_nitrate+3];
     
     real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
-    real Isurf = qsw;
+    real Isurf = qsw*0.45;
     real dz = 0;
     
     //NPZD Holders
@@ -1395,24 +1395,31 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
     real umax_day = umax/day;
     real gmax_day = gmax/day;
+    real w_day = wsink/day;
+    real r_day = r_remin/day;
     
-    
+    kc = 0;
     
     // Build temperature and irradiance limitation profiles
-    I0 = Isurf*0.45; // percent of irradiance available for photosynthesis
+    I0 = Isurf; // percent of irradiance available for photosynthesis
     
-    for (kk = Nz-1; kk > k; kk--)
+    for (kk = Nz-2; kk > k; kk--) // assume full irradiance in the topmost grid cell
     {
         dz = -(ZZ_w[j][kk+1] - ZZ_w[j][kk]);
         kpar = kw + phi[idx_nitrate+1][j][kk]*kc;
         
-        IR = I0/(1-kpar*dz);
+        IR = I0/(1-(kpar*dz));
         I0 = IR;
+        
+        
     }
     
+    
+//    llim = I0/sqrt( Isurf*Isurf + I0*I0 );
     llim = I0/Isurf;
     tlim = exp(r*(T-Tref));
 
+//    fprintf(stderr,"K = %d, Z =  %f, I0 = %f \n",k,ZZ_w[j][k],llim);
     
     // Nitrate
     MM = N/(kn + N);
@@ -1432,13 +1439,13 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     
     // Detritus (no sinking yet)
     GD = GP - GZ;
-    RD = r_remin*D;
+    RD = r_day*D;
     
     // Calculate sinking fluxes
     if (k == Nz-1) // This is the surface, so there is no flux through the surface.
     {
         fi = sf_flux;
-        fo = 0.5*fabs(wsink)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+        fo = 0.5*fabs(w_day)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
     }
     else if (k == 0) // there is no flux out of the domain
     {
@@ -1446,11 +1453,12 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     }
     else
     {
-        fi = 0.5*wsink*(phi[idx_detritus][j][k+1] + phi[idx_detritus][j][k]);
-        fo = 0.5*fabs(wsink)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+        fi = 0.5*w_day*(phi[idx_detritus][j][k+1] + phi[idx_detritus][j][k]);
+        fo = 0.5*fabs(w_day)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
     }
     
     Dsink = (fi-fo)*_dz_phi[j][k];
+//    Dsink = 0;
 
     
     // Mortality terms
