@@ -34,9 +34,9 @@ function setparams (local_home_dir,run_name)
   use_cluster = false;
   use_intel = false;
   use_pbs = use_cluster;
-  cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
-  uname = 'jmoscoso';
-  cluster_addr = 'caolila.atmos.ucla.edu';
+  cluster_home_dir = 'CLUSTER_DIRECTORY';
+  uname = 'USERNAME';
+  cluster_addr = 'CLUSTER-ADDRESS';
   
   %%% Run directory
   run_name = strtrim(run_name);  
@@ -324,10 +324,6 @@ function setparams (local_home_dir,run_name)
   %%% Northern Profiles
   phi_north = zeros(Ntracs,Nx,Nz);
   
-  buoy_north = buoy_init;
-%   phi_north(IDX_BUOY,:,:) = buoy_north - ones(Nx,Nz);
-  phi_north(IDX_BUOY,:,:) = zeros(Nx,Nz);
-  
   % Store the files
   northTracerFile = 'northTracer.dat';
   writeDataFile(fullfile(local_run_dir,northTracerFile),phi_north);
@@ -335,10 +331,6 @@ function setparams (local_home_dir,run_name)
   
   %%% Southern Profiles
   phi_south = zeros(Ntracs,Nx,Nz);
-  
-  buoy_south = buoy_init;
-%   phi_south(IDX_BUOY,:,:) = buoy_south + ones(Nx,Nz);
-  phi_south(IDX_BUOY,:,:) = ones(Nx,Nz);
   
   % Store the files
   southTracerFile = 'southTracer.dat';
