@@ -54,7 +54,7 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 0.01*t1day;
+  outputFreq = 1*t1day;
 % outputFreq = t1year/12;
     
   %%% Domain dimensions
@@ -69,14 +69,14 @@ function setparams (local_home_dir,run_name)
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
-  Hsml = 100; %%% Surface mixed layer thickness
-  Hbbl = 100; %%% Bottom boundary layer thickness
+  Hsml = 50; %%% Surface mixed layer thickness
+  Hbbl = 40; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
 
   %%% Grid parameters
   h_c = 250; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
-  theta_s = 0; %%% Sigma coordinate surface stretching parameter (must be in [0,10])
-  theta_b = 2; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
+  theta_s = 9; %%% Sigma coordinate surface stretching parameter (must be in [0,10])
+  theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%% Grids  
   Nx = 32; %%% Number of latitudinal grid points

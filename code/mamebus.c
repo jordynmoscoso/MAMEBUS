@@ -1555,10 +1555,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     calcPressure(t,buoy);
     
-    //real nu_h = 10;
-    //real nu_v = 0.1;
-    real nu_h = 0;
-    real nu_v = 0;
+    real nu_h = 10;
+    real nu_v = 0.1;
+    //real nu_h = 0;
+    //real nu_v = 0;
     
     // Calculate the tendency due to the coriolis force and add to the pressure term
     for (j = 0; j < Nx; j++)
