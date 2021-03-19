@@ -122,7 +122,7 @@ real ** ZZ_w = NULL;
 
 
 // Debugging parameter
-bool debug = true;
+bool debug = false;
 
 // Name of the program (for error messages)
 char * progname = NULL;
