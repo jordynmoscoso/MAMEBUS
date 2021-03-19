@@ -54,8 +54,8 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-%   outputFreq = 1*t1day;
-outputFreq = t1year/12;
+  outputFreq = 1*t1day;
+% outputFreq = t1year/12;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -365,16 +365,17 @@ outputFreq = t1year/12;
   
   %%% Initalize the profile
   Kgm = Kgm0*ones(Nx+1,Nz+1);
-  H_int = hb_psi - (Hbbl + Hsml); 
-  H_int(H_int < 0) = 0;
-  Hmax = max(H_int);
-  
-  lambda = 0.25; % tuning parameter for KGM diffusivity
-  for jj = 1:Nx+1
-      for kk = 1:Nz+1 
-        Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
-      end
-  end
+%   H_int = hb_psi - (Hbbl + Hsml); 
+%   H_int(H_int < 0) = 0;
+%   Hmax = max(H_int);
+%   
+%   lambda = 0.25; % tuning parameter for KGM diffusivity
+%   for jj = 1:Nx+1
+%       for kk = 1:Nz+1 
+%         Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
+% %         Kgm(jj,kk) = Kgm(jj,kk)*exp(ZZ_psi(jj,kk)/(lambda*Hmax));
+%       end
+%   end
   
   KgmFile = 'Kgm.dat';
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
@@ -387,7 +388,7 @@ outputFreq = t1year/12;
   %%%%% Isopycnal diffusivity %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
-  Kiso = 2*Kgm;
+  Kiso = 0*Kgm;
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);

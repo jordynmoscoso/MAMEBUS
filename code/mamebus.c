@@ -1068,7 +1068,7 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
     
     
     
-    // Current implementation just keeps Kgm constant
+    // Loop over model grid and compute Kgm
     for (j = 0; j < Nx+1; j ++)
     {
         // Integrate buoyancy gradients and compute slope parameter
@@ -1089,8 +1089,8 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
         
         for (k = 0; k < Nz+1; k ++)
         {
-            //Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
-          Kgm_psi[j][k] = Kgm_psi_ref[j][k];
+            Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
+            //Kgm_psi[j][k] = Kgm_psi_ref[j][k]; // Constant Kgm
             //Kgm_psi[j][k] = fmax(Kgm_psi[j][k],Kmin);
         }
     }
