@@ -122,7 +122,7 @@ real ** ZZ_w = NULL;
 
 
 // Debugging parameter
-bool debug = true;
+bool debug = false;
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -1089,7 +1089,8 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
         
         for (k = 0; k < Nz+1; k ++)
         {
-            Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
+            //Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
+          Kgm_psi[j][k] = Kgm_psi_ref[j][k];
             //Kgm_psi[j][k] = fmax(Kgm_psi[j][k],Kmin);
         }
     }
@@ -1554,8 +1555,10 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     calcPressure(t,buoy);
     
-    real nu_h = 10;
-    real nu_v = 0.1;
+    //real nu_h = 10;
+    //real nu_v = 0.1;
+    real nu_h = 0;
+    real nu_v = 0;
     
     // Calculate the tendency due to the coriolis force and add to the pressure term
     for (j = 0; j < Nx; j++)
@@ -3884,7 +3887,6 @@ int main (int argc, char ** argv)
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
     {
-
 
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (timeSteppingScheme)
