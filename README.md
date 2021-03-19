@@ -2,7 +2,7 @@
 Meridionally-Averaged Model of Eastern Boundary Upwelling Systems
 
 For details pertaining to MAMEBUS, please refer to:
-Moscoso, J.E, Stewart, A.L., Bianchi D., and McWilliams, J.C. A Meridionally Averaged Model of Eatern Boundary Upwelling Systems (MAMEBUSv1.0). Submitted to Geoscientific Model Development. 
+Moscoso, J. E., Stewart, A. L., Bianchi, D., and McWilliams, J. C.: The Meridionally Averaged Model of Eastern Boundary Upwelling Systems (MAMEBUSv1.0), Geosci. Model Dev., 14, 763–794, https://doi.org/10.5194/gmd-14-763-2021, 2021.
 
 Note:
 The setup and analysis code uses cmocean for visualization, and assumes that 

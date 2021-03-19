@@ -11,7 +11,7 @@
 #include <time.h>
 
 #include "defs.h"
-#include "ab.c"
+#include "ab.h"
 
 
 
@@ -122,7 +122,7 @@ real ** ZZ_w = NULL;
 
 
 // Debugging parameter
-bool debug = false;
+bool debug = true;
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -221,6 +221,7 @@ real ** db_dx = NULL;
 real ** db_dz = NULL;
 real ** db_dx_wrk = NULL;
 real ** db_dz_wrk = NULL;
+real ** db_dx_lin = NULL;
 real ** bot_nflux = NULL;
 
 ////////////////////////////////
@@ -706,9 +707,6 @@ void calcSlopes (     const real        t,
     real cff1 = 0;
     real cff2 = 0;
     
-    // Calculate the pressure gradient so that we can calculate the buoyancy gradient from the pressure using the hydrostatic relationship
-    calcPressure(t,buoy);
-    
 #pragma parallel
 
     switch(pressureScheme)
@@ -738,8 +736,8 @@ void calcSlopes (     const real        t,
                 for (k = 1; k < Nz; k ++)
                 {
                     db_dz[j][k] = 0.5 * ( (buoy[j][k]-buoy[j][k-1])*_dz_w[j][k] + (buoy[j-1][k]-buoy[j-1][k-1])*_dz_w[j-1][k] );
-                    db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
-                    db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
+                    db_dx_lin[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
+                    db_dx_lin[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
 //                    fprintf(stderr,"j = %d, k = %d, db_dx = %le, db_dz = %le \n",j,k,db_dx[j][k],db_dz[j][k]);
                 }
             }
@@ -1556,7 +1554,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     
     calcPressure(t,buoy);
     
-    
     real nu_h = 10;
     real nu_v = 0.1;
     
@@ -1613,6 +1610,63 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         }
     
     }
+
+    // Calculate the pressure gradient so that we can calculate the buoyancy gradient from the pressure using the hydrostatic relationship
+    calcPressure(t,buoy);
+    
+    
+    // Calculate the tendency due to the coriolis force and add to the pressure term
+    real nu_h = 10;
+    real nu_v = 0.1;
+
+     
+
+     // Calculate the tendency due to the coriolis force and add to the pressure term
+
+     for (j = 1; j < Nx; j++)
+     {
+         for (k = 0; k < Nz; k++)
+         {
+             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
+             dv_dt[j][k] = -f0*uvel[j][k] - BPy[j][k];
+
+//             if (j == 0)
+//             {
+//                 du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dx;
+//                 dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dx;
+//             }
+//             else if (j == Nx)
+//             {
+//                 du_dt[j][k] += nu_h*(uvel[j-1][k]-uvel[j][k])/dxsq;
+//                 dv_dt[j][k] += nu_h*(vvel[j-1][k]-vvel[j][k])/dxsq;
+//             }
+//             else
+//             {
+//                 du_dt[j][k] += nu_h*(uvel[j+1][k]-2*uvel[j][k]+uvel[j-1][k])/dxsq;
+//                 dv_dt[j][k] += nu_h*(vvel[j+1][k]-2*vvel[j][k]+uvel[j-1][k])/dxsq;
+//             }
+//
+//             if (k == 0)
+//             {
+//                 du_dt[j][k] += nu_v*(uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+//                 dv_dt[j][k] += nu_v*(vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+//             }
+//             else if (k == Nz)
+//             {
+//                 du_dt[j][k] += nu_v*(uvel[j][k-1]-uvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+//                 dv_dt[j][k] += nu_v*(vvel[j][k-1]-vvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+//             }
+//             else
+//             {
+//                 du_dt[j][k] += nu_v* SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz) // Scale with grid
+//                                *((uvel[j][k+1]-uvel[j][k])/(ZZ_u[j][k+1]-ZZ_u[j][k]) + (uvel[j][k-1]-uvel[j][k])/(ZZ_u[j][k]-ZZ_u[j][k-1]))/(ZZ_psi[j][k+1]-ZZ_psi[j][k]);
+//
+//                 dv_dt[j][k] += nu_v*SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz) // Scale with grid
+//                             * ((vvel[j][k+1]-vvel[j][k])/(ZZ_u[j][k+1]-ZZ_u[j][k]) + (vvel[j][k-1]-vvel[j][k])/(ZZ_u[j][k]-ZZ_u[j][k-1]))/(ZZ_psi[j][k+1]-ZZ_psi[j][k]);
+//             }
+         }
+     }
+>>>>>>> master
     
     // Add surface/bottom momentum fluxes
     for (j = 1; j < Nx; j++)
@@ -1929,21 +1983,21 @@ void do_adv_diff (  const real    t,
     ///// Calculate the meridional component of advection /////
     //////////////////////////////////////////////////////////////////////////////////////////
     
-    for (j = 0; j < Nx; j++)
-    {
-        for (k = 0; k < Nz; k++)
-        {
-            v_r = 0.5*(vvel[j][k] + vvel[j+1][k]);
-            if (v_r < 0)
-            {
-                dphi_dt[j][k] += _Ly*v_r*(phi[j][k] - phi_north[j][k]);
-            }
-            else if (v_r > 0)
-            {
-                dphi_dt[j][k] += _Ly*v_r*(phi[j][k] - phi_south[j][k]);
-            }
-        }
-    }
+//    for (j = 0; j < Nx; j++)
+//    {
+//        for (k = 0; k < Nz; k++)
+//        {
+//            v_r = 0.5*(vvel[j][k] + vvel[j+1][k]);
+//            if (v_r < 0)
+//            {
+//                dphi_dt[j][k] += _Ly*v_r*(phi[j][k] - phi_north[j][k]);
+//            }
+//            else if (v_r > 0)
+//            {
+//                dphi_dt[j][k] += _Ly*v_r*(phi[j][k] - phi_south[j][k]);
+//            }
+//        }
+//    }
     
     
     /////////////////////////////////////////////
@@ -2588,12 +2642,12 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     {
         // Write iteration data for the file of interest
         constructOutputName(outdir,OUTN_DBDX_CUBIC,-1,n,outfile);
-        if (!writeOutputFile(outfile,BPx,Nx+1,Nz)) return false; // cubic buoyancy gradient
+        if (!writeOutputFile(outfile,db_dx,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
         
         
         // Write iteration data for the file of interest
         constructOutputName(outdir,OUTN_DBDX_LINEAR,-1,n,outfile);
-        if (!writeOutputFile(outfile,db_dx_wrk,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
+        if (!writeOutputFile(outfile,db_dx_lin,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
     }
     
     return true;
@@ -3180,7 +3234,7 @@ int main (int argc, char ** argv)
     MATALLOC(Kdia_w,Nx,Nz+1);
     MATALLOC(BPa,Nx,Nz+1);
     MATALLOC(BPx,Nx+1,Nz);
-    MATALLOC(BPy,Nx+1,Nz);
+    MATALLOC(BPy,Nx,Nz);
     MATALLOC(BBy,Nx,Nz);
     MATALLOC(Nbuoy,Nx,Nz);
     
@@ -3197,6 +3251,8 @@ int main (int argc, char ** argv)
     MATALLOC(P,Nx,Nz);
     MATALLOC(FX,Nx,Nz+1);
     MATALLOC(FC,Nx+1,Nz);
+    MATALLOC(rho_north,Nx,Nz);
+    MATALLOC(rho_south,Nx,Nz);
     
     
     // Boundary layer work arrays
@@ -3208,6 +3264,7 @@ int main (int argc, char ** argv)
     VECALLOC(wp_bbl,Nx+1);
     MATALLOC(db_dx,Nx+1,Nz+1);
     MATALLOC(db_dz,Nx+1,Nz+1);
+    MATALLOC(db_dx_lin,Nx+1,Nz+1);
     MATALLOC(db_dx_wrk,Nx+1,Nz+1);
     MATALLOC(db_dz_wrk,Nx+1,Nz+1);
     MATALLOC(bot_nflux,max_det,Nx);
@@ -3638,7 +3695,7 @@ int main (int argc, char ** argv)
     else
     {
 //        _Ly = 1/Ly;
-        _Ly = 0; // set the gradients to zero since they haven't been extensively tested
+        _Ly = 1/Ly; // set the gradients to zero since they haven't been extensively tested
         
         // Calculate the density gradient of the northern and southern
         // edges of the domin
@@ -3646,19 +3703,10 @@ int main (int argc, char ** argv)
         {
             for (k = 0; k < Nz; k++)
             {
-                rho_north[j][k] = (1-alpha*(phi_north[idx_buoy][j][k] - tref));
-                rho_south[j][k] = (1-alpha*(phi_south[idx_buoy][j][k] - tref));
-            }
-        }
-        
-        
-        // Calculate the pressure by vertically integrating
-        for (j = 0; j < Nx; j++)
-        {
-            BPy[j][Nz-1] = 0; // We'll set the value of this in the next for loop.
-            for (k = Nz-2; k >= 0; k --)
-            {
-                BPy[j][k] += BPy[j][k+1] + _Ly*(grav/rho0)*( 0.5*(rho_north[j][k+1] + rho_north[j][k])  - 0.5*(rho_south[j][k+1] + rho_south[j][k]) )*(ZZ_u[j][k+1] - ZZ_u[j][k]);
+//                rho_north[j][k] = (1-alpha*(phi_north[idx_buoy][j][k] - tref));
+//                rho_south[j][k] = (1-alpha*(phi_south[idx_buoy][j][k] - tref));
+                rho_north[j][k] = (1-alpha*(-tref));
+                rho_south[j][k] = (1-alpha*(1 - tref));
             }
         }
         
@@ -3666,21 +3714,29 @@ int main (int argc, char ** argv)
         for (j = 0; j < Nx; j++)
         {
             cff = ZZ_psi[j][Nz] - ZZ_u[j][Nz-1];
-            BPy[j][Nz-1] = _Ly*grav*cff*( rho_north[j][Nz-1]
-                                     + 0.5 * cff * ( rho_north[j][Nz-1] - rho_north[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] )
-                                     -  (rho_south[j][Nz-1]
-                                     + 0.5 * cff * ( rho_south[j][Nz-1] - rho_south[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] ) )  );
+//            BPy[j][Nz-1] = _Ly*grav*cff*( rho_north[j][Nz-1]
+//                                     + 0.5 * cff * ( rho_north[j][Nz-1] - rho_north[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] )
+//                                     -  (rho_south[j][Nz-1]
+//                                     + 0.5 * cff * ( rho_south[j][Nz-1] - rho_south[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] ) )  );
+//            BPy[j][Nz-1] = _Ly*(1/rho0)*(rho_north[j][Nz-1] - rho_south[j][Nz-1]);
+            BPy[j][Nz-1] = 1e-6;
+        }
+
+        // Calculate the pressure by vertically integrating
+        for (j = 0; j < Nx; j++)
+        {
+            for (k = Nz-1; k >= 0; k --)
+            {
+//                BPy[j][k] += BPy[j][k+1] + _Ly*(grav/rho0)*( 0.5*(rho_north[j][k+1] + rho_north[j][k])  - 0.5*(rho_south[j][k+1] + rho_south[j][k]) )*(ZZ_u[j][k+1] - ZZ_u[j][k]);
+                BPy[j][k] = 1e-6;
+            }
         }
         
-        
-        // Set the boundaries to zero
         for (k = 0; k < Nz; k++)
         {
-            BPy[0] = 0;
-            BPy[Nx] = 0;
+            BPy[0][k] = 0; // set the pressure gradient on the western wall to zero
         }
         
-            
         
     }
         
@@ -3717,7 +3773,6 @@ int main (int argc, char ** argv)
             }
         }
     }
-    
     
     
     // Write model grid to output files for post-simulation analysis
@@ -3805,7 +3860,7 @@ int main (int argc, char ** argv)
             }
         }
     }
-    
+
     
     
     
@@ -3837,6 +3892,7 @@ int main (int argc, char ** argv)
         }
     }
     
+    
     // Initialize convergence residuals
     if (checkConvergence)
     {
@@ -3864,6 +3920,7 @@ int main (int argc, char ** argv)
         fflush(tfile);
     }
     
+    
     //////////////////////////////////
     ///// END INITIAL CONDITIONS /////
     //////////////////////////////////
@@ -3875,6 +3932,8 @@ int main (int argc, char ** argv)
     ///// BEGIN TIME INTEGRATION LOOP /////
     ///////////////////////////////////////
     
+    clock_t tic = clock();
+    
     fprintf(stderr,"There are %d tracers in this model \n",Ntracs);
     
     
@@ -3883,7 +3942,7 @@ int main (int argc, char ** argv)
     while (!targetReached && (t < tmax))
     {
 
-        
+
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (timeSteppingScheme)
         {
@@ -3897,9 +3956,11 @@ int main (int argc, char ** argv)
                 // calculate the first few timesteps with lower order schemes
                 if (nIters == 0)
                 {
+                    
                     dt = ab1(&t,phi_in_V,phi_out_V,dt_vars,cflFrac,Ntot,&tderiv);
                     // Save h1 for the next time step.
                     h1 = dt;
+                    
                     
                     // copy over data for the next timestep
                     memcpy(dt_vars_1,dt_vars,Ntot*sizeof(real));
@@ -4092,7 +4153,8 @@ int main (int argc, char ** argv)
     ////////////////////////////////
     
     
-    
+    clock_t toc = clock();
+    fprintf(stderr,"Elapsed: %f seconds \n", (double)(toc-tic)/CLOCKS_PER_SEC);
     
     
     /////////////////////////
