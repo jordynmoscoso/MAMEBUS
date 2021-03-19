@@ -15,7 +15,7 @@
 function setparams (local_home_dir,run_name)  
   %%% Convenience scripts used in this function
   addpath ../utils; % cmocean.m should be downloaded here
-  model_code_dir = '~/Desktop/MAMEBUS/code';
+  model_code_dir = '../code';
  
   %%% Load globally-defined constants
   paramTypes;
@@ -54,7 +54,8 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1*t1day;
+%   outputFreq = 1*t1day;
+outputFreq = t1year/12;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -78,7 +79,7 @@ function setparams (local_home_dir,run_name)
   theta_b = 2; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%% Grids  
-  Nx = 64; %%% Number of latitudinal grid points
+  Nx = 32; %%% Number of latitudinal grid points
   Nz = Nx; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
