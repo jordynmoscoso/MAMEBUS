@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 48
+#define NPARAMS 50
 
 
 //////////////////////////////////
@@ -45,6 +45,8 @@ real r_bbl = 0; // drag coefficient
 real Kdia0 = 1e-5;
 real Ksml = 1e-1;
 real Kbbl = 1e-1;
+real nu_h = 0;
+real nu_v = 0;
 
 // Biogeochemical parameters
 uint bgcModel = 0;
@@ -1061,17 +1063,39 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
     real ld = 0;
     real n_col = 0;
     real cff = 0;
-    
+    real db_dz_zint = 0, db_dx_zint = 0, srho_zavg = 0, delta = 0, Kfac = 0; // Eddy parameterization parameters
+    real alpha_K = 0.05; // Kappa tuning parameter
+    real Kmin = 100; // Minimum GM diffusivity
 #pragma parallel
     
     
     
-    // Current implementation just keeps Kgm constant
+    // Loop over model grid and compute Kgm
     for (j = 0; j < Nx+1; j ++)
     {
+        /*
+        // Integrate buoyancy gradients and compute slope parameter
+        db_dz_zint = 0;
+        db_dx_zint = 0;
+        for (k = 1; k < Nz; k ++)
+        {
+            db_dx_zint = db_dx_zint + db_dx[j][k]*(ZZ_u[j][k]-ZZ_u[j][k-1]);
+            db_dz_zint = db_dz_zint + db_dz[j][k]*(ZZ_u[j][k]-ZZ_u[j][k-1]);
+        }
+        srho_zavg = - db_dx_zint / db_dz_zint;
+        delta = sb_psi[j]/srho_zavg;
+        
+        //alpha_K = 0.05;
+        //Kfac = (1 + 0.5*sqrt( SQUARE(1-fabs(delta)) + 4*SQUARE(alpha)*SQUARE(fabs(delta)) )
+        //          - 0.5*sqrt( SQUARE(1+fabs(delta)) + 4*SQUARE(alpha)*SQUARE(fabs(delta)) ) );
+        Kfac = (2.5/1000) * ( fabs(delta) + 1/(0.05*(fabs(delta)+0.05)) );
+        */
+        
         for (k = 0; k < Nz+1; k ++)
         {
-            Kgm_psi[j][k] = Kgm_psi_ref[j][k];
+            //Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
+            Kgm_psi[j][k] = Kgm_psi_ref[j][k]; // Constant Kgm
+            //Kgm_psi[j][k] = fmax(Kgm_psi[j][k],Kmin);
         }
     }
     
@@ -1533,62 +1557,61 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     du_dt = dphi_dt[idx_uvel];
     dv_dt = dphi_dt[idx_vvel];
     
-    
-    // Calculate the pressure gradient so that we can calculate the buoyancy gradient from the pressure using the hydrostatic relationship
     calcPressure(t,buoy);
     
-    
     // Calculate the tendency due to the coriolis force and add to the pressure term
-    real nu_h = 10;
-    real nu_v = 0.1;
-
-     
-
-     // Calculate the tendency due to the coriolis force and add to the pressure term
-
-     for (j = 1; j < Nx; j++)
-     {
-         for (k = 0; k < Nz; k++)
-         {
-             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
-             dv_dt[j][k] = -f0*uvel[j][k] - BPy[j][k];
-
-//             if (j == 0)
-//             {
-//                 du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dx;
-//                 dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dx;
-//             }
-//             else if (j == Nx)
-//             {
-//                 du_dt[j][k] += nu_h*(uvel[j-1][k]-uvel[j][k])/dxsq;
-//                 dv_dt[j][k] += nu_h*(vvel[j-1][k]-vvel[j][k])/dxsq;
-//             }
-//             else
-//             {
-//                 du_dt[j][k] += nu_h*(uvel[j+1][k]-2*uvel[j][k]+uvel[j-1][k])/dxsq;
-//                 dv_dt[j][k] += nu_h*(vvel[j+1][k]-2*vvel[j][k]+uvel[j-1][k])/dxsq;
-//             }
-//
-//             if (k == 0)
-//             {
-//                 du_dt[j][k] += nu_v*(uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-//                 dv_dt[j][k] += nu_v*(vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-//             }
-//             else if (k == Nz)
-//             {
-//                 du_dt[j][k] += nu_v*(uvel[j][k-1]-uvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-//                 dv_dt[j][k] += nu_v*(vvel[j][k-1]-vvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-//             }
-//             else
-//             {
-//                 du_dt[j][k] += nu_v* SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz) // Scale with grid
-//                                *((uvel[j][k+1]-uvel[j][k])/(ZZ_u[j][k+1]-ZZ_u[j][k]) + (uvel[j][k-1]-uvel[j][k])/(ZZ_u[j][k]-ZZ_u[j][k-1]))/(ZZ_psi[j][k+1]-ZZ_psi[j][k]);
-//
-//                 dv_dt[j][k] += nu_v*SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz) // Scale with grid
-//                             * ((vvel[j][k+1]-vvel[j][k])/(ZZ_u[j][k+1]-ZZ_u[j][k]) + (vvel[j][k-1]-vvel[j][k])/(ZZ_u[j][k]-ZZ_u[j][k-1]))/(ZZ_psi[j][k+1]-ZZ_psi[j][k]);
-//             }
-         }
-     }
+    for (j = 0; j < Nx; j++)
+    {
+        for (k = 0; k < Nz; k++)
+        {
+            du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
+            dv_dt[j][k] = -f0*uvel[j][k] - BPy[j][k];
+            
+            if (j == 0)
+            {
+                du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dx;
+                dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dx;
+            }
+            else if (j == Nx)
+            {
+                du_dt[j][k] += nu_h*(uvel[j-1][k]-uvel[j][k])/dxsq;
+                dv_dt[j][k] += nu_h*(vvel[j-1][k]-vvel[j][k])/dxsq;
+            }
+            else
+            {
+                du_dt[j][k] += nu_h*(uvel[j+1][k]-2*uvel[j][k]+uvel[j-1][k])/dxsq;
+                dv_dt[j][k] += nu_h*(vvel[j+1][k]-2*vvel[j][k]+uvel[j-1][k])/dxsq;
+            }
+            
+            if (k == 0)
+            {
+                du_dt[j][k] += nu_v*(uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+                dv_dt[j][k] += nu_v*(vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+            }
+            else if (k == Nz)
+            {
+                du_dt[j][k] += nu_v*(uvel[j][k-1]-uvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+                dv_dt[j][k] += nu_v*(vvel[j][k-1]-vvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+            }
+            else
+            {
+                du_dt[j][k] += nu_v
+                            * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz) // Scale with grid
+                            * (
+                                    (uvel[j][k+1]-uvel[j][k])/(ZZ_u[j][k+1]-ZZ_u[j][k]) + (uvel[j][k-1]-uvel[j][k])/(ZZ_u[j][k]-ZZ_u[j][k-1])
+                               )
+                              / (ZZ_psi[j][k+1]-ZZ_psi[j][k]);
+                dv_dt[j][k] += nu_v
+                            * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz) // Scale with grid
+                            * (
+                                    (vvel[j][k+1]-vvel[j][k])/(ZZ_u[j][k+1]-ZZ_u[j][k]) + (vvel[j][k-1]-vvel[j][k])/(ZZ_u[j][k]-ZZ_u[j][k-1])
+                               )
+                                / (ZZ_psi[j][k+1]-ZZ_psi[j][k]);
+            }
+            
+        }
+    
+    }
     
     // Add surface/bottom momentum fluxes
     for (j = 1; j < Nx; j++)
@@ -2016,15 +2039,15 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     vvel = phi[idx_vvel];
     buoy = phi[idx_buoy];
     
+    // Calculate isopycnal slopes
+    calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
+    
     // Calculate Gent-McWilliams diffusivity Kgm
     calcKgm(t,buoy,Kgm_psi,Kgm_u,Kgm_w);
     
     // Calculate isopycnal diffusivity Kiso
     calcKiso(t,buoy,Kiso_u,Kiso_w);
-    
-    // Calculate isopycnal slopes
-    calcSlopes(t,buoy,Sgm_psi,Siso_u,Siso_w);
-    
+        
     // Calculate mean and eddy components of overturning streamfunction
     calcPsim(t,uvel,psi_m);
     calcPsie(t,buoy,Kgm_psi,Sgm_psi,psi_e);
@@ -2659,6 +2682,14 @@ void printUsage (void)
      "  Hbbl                  Depth of the bottom boundary layer. Must be >=0.\n"
      "                        If equal to 0 then no BBL is imposed\n"
      "  r_bbl                 Drag coefficient in the bottom boundary layer \n"
+     "  Ksml                  Max vertical diffusivity in surface mixed layer.\n"
+     "                        Optional, default is 0.1 m^2/s, must be > 0.\n"
+     "  Kbbl                  Max vertical diffusivity in bottom boundary layer.\n"
+     "                        Optional, default is 0.1 m^2/s, must be > 0.\n"
+     "  nu_h                  Horizontal (iso-sigma) viscosity. Default is 0.\n"
+     "  nu_v                  Vertial viscosity. Actual viscosity is scaled with\n"
+     "                        local vertical grid spacing. Specified value is applied\n"
+     "                        to grid cells of thickness H/Lz. Default is 0.\n"
      "  \n"
      "  h_c                   Depth parameter controlling the range of depths over\n"
      "                        which the vertical coordinate the coordinate is\n"
@@ -2865,7 +2896,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"startIdx","%u",&n0,true);
     setParam(params,paramcntr++,"checkConvergence","%d",&checkConvergence,true);
     
-    // Physical constants (9)
+    // Physical constants (11)
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
@@ -2875,6 +2906,8 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Kdia0","%lf",&Kdia0,true);
     setParam(params,paramcntr++,"Ksml","%lf",&Ksml,true);
     setParam(params,paramcntr++,"Kbbl","%lf",&Kbbl,true);
+    setParam(params,paramcntr++,"nu_h","%lf",&nu_h,true);
+    setParam(params,paramcntr++,"nu_v","%lf",&nu_v,true);
     
     // Sigma-coordinate parameters (3)
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);
@@ -3863,7 +3896,6 @@ int main (int argc, char ** argv)
     // the target and the current time does not exceed the max time
     while (!targetReached && (t < tmax))
     {
-
 
         // Step 1: Perform a single numerical time-step for all physically explicit terms in the equations
         switch (timeSteppingScheme)
