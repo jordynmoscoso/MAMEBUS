@@ -68,7 +68,7 @@ function setparams (local_home_dir,run_name)
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
-  Kiso0 = 1000; %%% Reference isopycnal
+  Kiso0 = 2*Kgm0; %%% Reference isopycnal
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
   Hsml = 50; %%% Surface mixed layer thickness
   Hbbl = 40; %%% Bottom boundary layer thickness
@@ -215,9 +215,14 @@ function setparams (local_home_dir,run_name)
   phi_init(IDX_BUOY,:,:) = reshape(buoy_init,[1 Nx Nz]);  
   
   if (modeltype == 1)
-      phi_init(Nphys+1:Nphys+Nbgc,:,:) = reshape(bgc_init,[Nbgc Nx Nz]);
+      IDX_NIT = IDX_BUOY+1;
+      phi_init(IDX_NIT,:,:) = reshape(bgc_init(:,:,1), [1 Nx Nz]);
+      phi_init(IDX_NIT+1,:,:) = reshape(bgc_init(:,:,2), [1 Nx Nz]);
+      phi_init(IDX_NIT+2,:,:) = reshape(bgc_init(:,:,3), [1 Nx Nz]);
+      phi_init(IDX_NIT+3,:,:) = reshape(bgc_init(:,:,4), [1 Nx Nz]);
   end
   
+  size(phi_init)
 
   Nphys
   Nbgc
@@ -494,7 +499,7 @@ function setparams (local_home_dir,run_name)
   cmap = cmocean('matter');
   figure(fignum);
   A = subplot(1,2,1);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1));
+  pcolor(XX_tr,ZZ_tr,squeeze(phi_init(4,:,:)));
   title('Initial nitrate concentration')
   shading interp
   colormap(A, cmap)
@@ -502,7 +507,7 @@ function setparams (local_home_dir,run_name)
   colorbar
   
   B = subplot(1,2,2);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
+  pcolor(XX_tr,ZZ_tr,squeeze(phi_init(5,:,:)));
   title('Initial phytoplankton with grid')
   colormap(B,pmap)
   axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])

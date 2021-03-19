@@ -18,7 +18,7 @@ lz = 10;
 qsw = 340; % W/m^2
 kw = 0.04; % light attenuation of water
 kc = 0.01; % light attenuation of phytoplankton (nitrogen units)
-Tref = 20; % deg C
+Tref = 10; % deg C
 r = 0.05;  % temperature dependence
 
 % phytoplankton parameters
@@ -42,7 +42,7 @@ preyopt = ap*lz^bp; %optimal predator prey length
 
 % detrital parameters
 r_remin = 0.04; % 1/d
-wsink = 10; % m/d
+wsink = 0; % m/d
 
 
 %%% save all parameters
@@ -55,11 +55,12 @@ nbgc = length(params);
 
 
 %%% Create initial conditions
-Pcline = 200;
+Pcline = 75;
 Pmax = 0.1; % mmol/m3
 Dmax = 0;
 
 euph_init = Pmax*(tanh(ZZ_tr/Pcline))+0.1;
+% euph_init = 0.1*ones(Nx,Nz);
 
 %%% Initial nitrate profile (Hyperbolic)
 Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
@@ -67,6 +68,7 @@ Ncline = 80; % Approximate guess of the depth of the nutracline
 
 
 bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr/Ncline);
+% bgc_init(:,:,1) = Nmax*ones(Nx,Nz);
 bgc_init(:,:,2) = euph_init;
 bgc_init(:,:,3) = 0.1*euph_init;
 bgc_init(:,:,4) = Dmax*zeros(Nx,Nz);
