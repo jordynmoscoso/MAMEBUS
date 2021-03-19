@@ -52,7 +52,7 @@ real nu_v = 0;
 uint bgcModel = 0;
 int MP = 0;
 int MZ = 0;
-int MD = 2;  // Always have one small detrital group and one large.
+int MD = 1;  // Always have one small detrital group and one large.
 int MN = 1;  // Always have one Nitrate
 int nbgc = 0;    // Counts number of biogeochemical parameters
 real Nint = 0;              // placeholder for the total domain nitrate
@@ -1395,6 +1395,8 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
     real umax_day = umax/day;
     real gmax_day = gmax/day;
+    
+    
     
     // Build temperature and irradiance limitation profiles
     I0 = Isurf*0.45; // percent of irradiance available for photosynthesis

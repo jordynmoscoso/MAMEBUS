@@ -21,7 +21,7 @@ function setparams (local_home_dir,run_name)
   paramTypes;
   
   % User defined choices:
-  modeltype = BGC_NONE; % BGC_NONE (physical model only) or BGC_NPZD (NPZD model)
+  modeltype = BGC_NPZD; % BGC_NONE (physical model only) or BGC_NPZD (NPZD model)
   if (modeltype > 1)
     modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
   end
@@ -54,8 +54,7 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 10*t1day;
-% outputFreq = t1year/12;
+  outputFreq = 1*t1day;
     
   %%% Domain dimensions
   m1km = 1000; %%% Meters in 1 km    
@@ -69,7 +68,7 @@ function setparams (local_home_dir,run_name)
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
-  Kiso0 = 1000; %%% Reference GM diffusivity
+  Kiso0 = 1000; %%% Reference isopycnal
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
   Hsml = 50; %%% Surface mixed layer thickness
   Hbbl = 40; %%% Bottom boundary layer thickness
@@ -492,14 +491,23 @@ function setparams (local_home_dir,run_name)
   
   % Initial phytoplankton concentration
   pmap = cmocean('speed');
+  cmap = cmocean('matter');
   figure(fignum);
+  A = subplot(1,2,1);
+  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1));
+  title('Initial nitrate concentration')
+  shading interp
+  colormap(A, cmap)
+  axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
+  colorbar
+  
+  B = subplot(1,2,2);
   pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
   title('Initial phytoplankton with grid')
-  colormap(pmap)
+  colormap(B,pmap)
+  axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
   colorbar
 
   end
-  
-  license('inuse')
   
 end
