@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 48
+#define NPARAMS 50
 
 
 //////////////////////////////////
@@ -45,6 +45,8 @@ real r_bbl = 0; // drag coefficient
 real Kdia0 = 1e-5;
 real Ksml = 1e-1;
 real Kbbl = 1e-1;
+real nu_h = 0;
+real nu_v = 0;
 
 // Biogeochemical parameters
 uint bgcModel = 0;
@@ -1071,6 +1073,7 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
     // Loop over model grid and compute Kgm
     for (j = 0; j < Nx+1; j ++)
     {
+        /*
         // Integrate buoyancy gradients and compute slope parameter
         db_dz_zint = 0;
         db_dx_zint = 0;
@@ -1086,11 +1089,12 @@ void calcKgm (const real t, real ** buoy, real ** Kgm_psi, real ** Kgm_u, real *
         //Kfac = (1 + 0.5*sqrt( SQUARE(1-fabs(delta)) + 4*SQUARE(alpha)*SQUARE(fabs(delta)) )
         //          - 0.5*sqrt( SQUARE(1+fabs(delta)) + 4*SQUARE(alpha)*SQUARE(fabs(delta)) ) );
         Kfac = (2.5/1000) * ( fabs(delta) + 1/(0.05*(fabs(delta)+0.05)) );
+        */
         
         for (k = 0; k < Nz+1; k ++)
         {
-            Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
-            //Kgm_psi[j][k] = Kgm_psi_ref[j][k]; // Constant Kgm
+            //Kgm_psi[j][k] = Kgm_psi_ref[j][k]*Kfac;
+            Kgm_psi[j][k] = Kgm_psi_ref[j][k]; // Constant Kgm
             //Kgm_psi[j][k] = fmax(Kgm_psi[j][k],Kmin);
         }
     }
@@ -1554,11 +1558,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     dv_dt = dphi_dt[idx_vvel];
     
     calcPressure(t,buoy);
-    
-    real nu_h = 10;
-    real nu_v = 0.1;
-    //real nu_h = 0;
-    //real nu_v = 0;
     
     // Calculate the tendency due to the coriolis force and add to the pressure term
     for (j = 0; j < Nx; j++)
@@ -2683,6 +2682,14 @@ void printUsage (void)
      "  Hbbl                  Depth of the bottom boundary layer. Must be >=0.\n"
      "                        If equal to 0 then no BBL is imposed\n"
      "  r_bbl                 Drag coefficient in the bottom boundary layer \n"
+     "  Ksml                  Max vertical diffusivity in surface mixed layer.\n"
+     "                        Optional, default is 0.1 m^2/s, must be > 0.\n"
+     "  Kbbl                  Max vertical diffusivity in bottom boundary layer.\n"
+     "                        Optional, default is 0.1 m^2/s, must be > 0.\n"
+     "  nu_h                  Horizontal (iso-sigma) viscosity. Default is 0.\n"
+     "  nu_v                  Vertial viscosity. Actual viscosity is scaled with\n"
+     "                        local vertical grid spacing. Specified value is applied\n"
+     "                        to grid cells of thickness H/Lz. Default is 0.\n"
      "  \n"
      "  h_c                   Depth parameter controlling the range of depths over\n"
      "                        which the vertical coordinate the coordinate is\n"
@@ -2889,7 +2896,7 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"startIdx","%u",&n0,true);
     setParam(params,paramcntr++,"checkConvergence","%d",&checkConvergence,true);
     
-    // Physical constants (9)
+    // Physical constants (11)
     setParam(params,paramcntr++,"rho0","%lf",&rho0,true);
     setParam(params,paramcntr++,"f0","%lf",&f0,true);
     setParam(params,paramcntr++,"Kconv","%lf",&Kconv0,true);
@@ -2899,6 +2906,8 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"Kdia0","%lf",&Kdia0,true);
     setParam(params,paramcntr++,"Ksml","%lf",&Ksml,true);
     setParam(params,paramcntr++,"Kbbl","%lf",&Kbbl,true);
+    setParam(params,paramcntr++,"nu_h","%lf",&nu_h,true);
+    setParam(params,paramcntr++,"nu_v","%lf",&nu_v,true);
     
     // Sigma-coordinate parameters (3)
     setParam(params,paramcntr++,"h_c","%le",&h_c,true);

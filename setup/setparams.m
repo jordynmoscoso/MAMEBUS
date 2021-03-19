@@ -54,7 +54,7 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1*t1day;
+  outputFreq = 10*t1day;
 % outputFreq = t1year/12;
     
   %%% Domain dimensions
@@ -64,10 +64,12 @@ function setparams (local_home_dir,run_name)
   
   %%% Scalar parameter definitions 
   tau0 = -0.025; %%% Northward wind stress (N m^{-2})
+%   tau0 = 0;
   shelfdepth = 50; %%% Depth of shelf on western boundary
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
+  Kiso0 = 1000; %%% Reference GM diffusivity
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
   Hsml = 50; %%% Surface mixed layer thickness
   Hbbl = 40; %%% Bottom boundary layer thickness
@@ -86,6 +88,12 @@ function setparams (local_home_dir,run_name)
   xx_tr = dx/2:dx:Lx-dx/2; %%% Tracer latitudinal grid point locations  
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
 
+  %%% Viscosities (empirically determined from a reference simulation)
+  nu_h = 10*dx/10000;
+  nu_v = 0.1*(H/Nz)/100;
+  
+  
+  
   %%% For plotting figures of setup
   fignum = 1;
 
@@ -131,7 +139,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);  
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
   PARAMS = addParameter(PARAMS,'Lz',H,PARM_REALF);  
-  PARAMS = addParameter(PARAMS,'cflFrac',0.25,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'cflFrac',0.5,PARM_REALF);
   PARAMS = addParameter(PARAMS,'endTime',endTime,PARM_REALF);
   PARAMS = addParameter(PARAMS,'monitorFrequency',outputFreq,PARM_REALF);
   PARAMS = addParameter(PARAMS,'restart',restart,PARM_INT);
@@ -144,6 +152,8 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'Hsml',Hsml,PARM_REALF);    
   PARAMS = addParameter(PARAMS,'Hbbl',Hbbl,PARM_REALF);
   PARAMS = addParameter(PARAMS,'r_bbl',r_bbl,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'nu_h',nu_h,PARM_REALF);
+  PARAMS = addParameter(PARAMS,'nu_v',nu_v,PARM_REALF);
   
   
   
@@ -365,17 +375,16 @@ function setparams (local_home_dir,run_name)
   
   %%% Initalize the profile
   Kgm = Kgm0*ones(Nx+1,Nz+1);
-%   H_int = hb_psi - (Hbbl + Hsml); 
-%   H_int(H_int < 0) = 0;
-%   Hmax = max(H_int);
-%   
-%   lambda = 0.25; % tuning parameter for KGM diffusivity
-%   for jj = 1:Nx+1
-%       for kk = 1:Nz+1 
-%         Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
-% %         Kgm(jj,kk) = Kgm(jj,kk)*exp(ZZ_psi(jj,kk)/(lambda*Hmax));
-%       end
-%   end
+  H_int = hb_psi - (Hbbl + Hsml); 
+  H_int(H_int < 0) = 0;
+  Hmax = max(H_int);
+  
+  lambda = 0.25; % tuning parameter for KGM diffusivity
+  for jj = 1:Nx+1
+      for kk = 1:Nz+1 
+        Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
+      end
+  end
   
   KgmFile = 'Kgm.dat';
   writeDataFile(fullfile(local_run_dir,KgmFile),Kgm);
@@ -388,7 +397,18 @@ function setparams (local_home_dir,run_name)
   %%%%% Isopycnal diffusivity %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
-  Kiso = 0*Kgm;
+  H_int = hb_psi - (Hbbl + Hsml); 
+  H_int(H_int < 0) = 0;
+  Hmax = max(H_int);
+  
+  Kiso = Kiso0*ones(Nx+1,Nz+1);
+  lambda = 0.25; % tuning parameter for Kiso diffusivity
+  for jj = 1:Nx+1
+      for kk = 1:Nz+1 
+        Kiso(jj,kk) = Kiso(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
+      end
+  end
+%   Kiso = 0*Kgm;
   KisoFile = 'Kiso.dat';
   writeDataFile(fullfile(local_run_dir,KisoFile),Kiso);
   PARAMS = addParameter(PARAMS,'KisoFile',KisoFile,PARM_STR);
