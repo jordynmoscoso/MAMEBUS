@@ -3658,10 +3658,8 @@ int main (int argc, char ** argv)
         {
             for (k = 0; k < Nz; k++)
             {
-//                rho_north[j][k] = (1-alpha*(phi_north[idx_buoy][j][k] - tref));
-//                rho_south[j][k] = (1-alpha*(phi_south[idx_buoy][j][k] - tref));
-                rho_north[j][k] = (1-alpha*(-tref));
-                rho_south[j][k] = (1-alpha*(1 - tref));
+                rho_north[j][k] = (1-alpha*(phi_north[idx_buoy][j][k] - tref));
+                rho_south[j][k] = (1-alpha*(phi_south[idx_buoy][j][k] - tref));
             }
         }
         
@@ -3669,12 +3667,11 @@ int main (int argc, char ** argv)
         for (j = 0; j < Nx; j++)
         {
             cff = ZZ_psi[j][Nz] - ZZ_u[j][Nz-1];
-//            BPy[j][Nz-1] = _Ly*grav*cff*( rho_north[j][Nz-1]
-//                                     + 0.5 * cff * ( rho_north[j][Nz-1] - rho_north[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] )
-//                                     -  (rho_south[j][Nz-1]
-//                                     + 0.5 * cff * ( rho_south[j][Nz-1] - rho_south[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] ) )  );
-//            BPy[j][Nz-1] = _Ly*(1/rho0)*(rho_north[j][Nz-1] - rho_south[j][Nz-1]);
-            BPy[j][Nz-1] = 1e-6;
+            BPy[j][Nz-1] = _Ly*grav*cff*( rho_north[j][Nz-1]
+                                     + 0.5 * cff * ( rho_north[j][Nz-1] - rho_north[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] )
+                                     -  (rho_south[j][Nz-1]
+                                     + 0.5 * cff * ( rho_south[j][Nz-1] - rho_south[j][Nz-2] )/( ZZ_u[j][Nz-1] - ZZ_u[j][Nz-2] ) )  );
+            BPy[j][Nz-1] = _Ly*(1/rho0)*(rho_north[j][Nz-1] - rho_south[j][Nz-1]);
         }
 
         // Calculate the pressure by vertically integrating
@@ -3682,8 +3679,7 @@ int main (int argc, char ** argv)
         {
             for (k = Nz-1; k >= 0; k --)
             {
-//                BPy[j][k] += BPy[j][k+1] + _Ly*(grav/rho0)*( 0.5*(rho_north[j][k+1] + rho_north[j][k])  - 0.5*(rho_south[j][k+1] + rho_south[j][k]) )*(ZZ_u[j][k+1] - ZZ_u[j][k]);
-                BPy[j][k] = 1e-6;
+               BPy[j][k] += BPy[j][k+1] + _Ly*(grav/rho0)*( 0.5*(rho_north[j][k+1] + rho_north[j][k])  - 0.5*(rho_south[j][k+1] + rho_south[j][k]) )*(ZZ_u[j][k+1] - ZZ_u[j][k]);
             }
         }
         

@@ -338,7 +338,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'southTracerFile',southTracerFile,PARM_STR);
   
   %%% Length of domain
-  Ly = 1000*m1km; % negative values indicate an infinite domain
+  Ly = -1*m1km; % negative values indicate an infinite domain
   PARAMS = addParameter(PARAMS,'Ly',Ly,PARM_REALF);
   
   
