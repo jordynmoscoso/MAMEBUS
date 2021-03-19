@@ -54,7 +54,7 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1*t1day;
+  outputFreq = 0.01*t1day;
 % outputFreq = t1year/12;
     
   %%% Domain dimensions
