@@ -151,6 +151,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
                     end
                 otherwise
                     disp('No Modeltype Found')
+                    title_name = 'Phytoplankton (mg Chl/m$^3$)';
             end
         end
     else
@@ -252,7 +253,9 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
                 clr = 'k';
             else
                 disp('Not explicitly chosen yet')
-                return
+                cmap = cmocean('speed');
+                cvec = [0.2 0.4 0.9 1.8];
+                clr = 'k';
             end
                 
             pcolor(XX_tr,ZZ_tr,avgVals);

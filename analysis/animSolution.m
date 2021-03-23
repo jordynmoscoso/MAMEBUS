@@ -19,7 +19,6 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
  
   %%% Load convenience functions
   addpath ../utils;
-  addpath ./redblue
 
   
   %%%%%%%%%%%%%%%%%%%%%
@@ -202,6 +201,16 @@ ncase = 1;
 %       caxis([0 20]);
 %       axis([0 1 -1 0]);
 
+          otherwise 
+%           [C h] = contourf(XX_tr/1000,ZZ_tr,phi,0:0.5:10);
+          pcolor(XX_tr/1000,ZZ_tr,phi);
+          shading interp
+%           set(gca, 'CLim', [0, 1]);
+            colormap(cmocean('speed',20));
+          h=colorbar;
+          title(['BGC, t=', num2str(t/t1year)]);          
+%       caxis([0 20]);
+          axis([min(min(XX_tr/1000)) max(max(XX_tr/1000)) -300 0]);
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
@@ -248,7 +257,6 @@ ncase = 1;
     %%% Store the image in the movie buffer  
     xlabel('x (km)');    
     ylabel('z (km)','Rotation',0);        
-    axis tight;
     set(gca,'XTick',(0:Lx/5:Lx)/1000);
     set(gca,'YTick',-H:H/5:0);
 %     title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           

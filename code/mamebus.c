@@ -16,7 +16,7 @@
 
 
 // Total number of input parameters - must match the number of parameters defined in main()
-#define NPARAMS 50
+#define NPARAMS 54
 
 
 //////////////////////////////////
@@ -52,9 +52,11 @@ real nu_v = 0;
 uint bgcModel = 0;
 int MP = 0;
 int MZ = 0;
-int MD = 1;  // Always have one small detrital group and one large.
-int MN = 1;  // Always have one Nitrate
-int nbgc = 0;    // Counts number of biogeochemical parameters
+int MD = 1;                 // Always have one small detrital group.
+int MN = 1;                 // Always have one nutrient
+int npbgc = 0;              // Counts number of biogeochemical parameters
+int nallo = 0;              // Value for allometric rates
+int idxAllo = 0;            // Number of allometric rates
 real Nint = 0;              // placeholder for the total domain nitrate
 
 // Scaling Constants
@@ -77,8 +79,14 @@ real ** Kiso_psi_ref = NULL;  // Reference isopycnal diffusivity
 real ** Kdia_psi_ref = NULL;  // Reference diapycnal diffusivity
 real *** phi_relax = NULL;    // Tracer relaxation values
 real *** T_relax = NULL;      // Tracer relaxation time scale
-real * bgc_params = NULL;     // Vector containing biogeochemical parameters from bgc_setup
 
+// BGC parameter arrays
+real ** bgcRates = NULL;
+real ** theta_p = NULL;       // predator-prey interaction for Z on P grazing
+real ** theta_z = NULL;       // predator-prey interaction for Z on Z grazing
+real * bgc_params = NULL;     // Vector containing biogeochemical parameters from bgc_setup
+real * lpvec = NULL;
+real * lzvec = NULL;
 
 // Numerical parameters
 real KT00_sigma = 1;         // Kurganov-Tadmor minmod-limiting parameter
@@ -125,6 +133,7 @@ real ** ZZ_w = NULL;
 
 // Debugging parameter
 bool debug = false;
+bool nanfound = false;
 
 // Name of the program (for error messages)
 char * progname = NULL;
@@ -225,6 +234,20 @@ real ** db_dx_wrk = NULL;
 real ** db_dz_wrk = NULL;
 real ** db_dx_lin = NULL;
 real ** bot_nflux = NULL;
+
+
+// work arrays for phytoplankton and zooplankton time tendencies
+real ** HZZ = NULL;                      // heterotrophic grazing matrix between prey zooplankton and predator zooplankton
+real ** GPZ = NULL;                      // grazing matrix between phytoplankton and zooplankton
+real * GPvec = NULL;                     // loss of biomass from phytoplankton due to grazing
+real * GZvec = NULL;                     // growth of biomass to zooplankton from grazing
+real * PTvec = NULL;                     // total phytoplankton avaialble to zooplankton vector
+real * ZTvec = NULL;                     // total zooplankton avaiable to predator zooplankton
+real * UPvec = NULL;                     // uptake vector
+real * HMvec = NULL;                     // loss due to heterotrophic grazing
+real * HPvec = NULL;                     // growth due to heterotrophic grazing
+real * MPvec = NULL;                     // mortality of phytoplankton
+real * MZvec = NULL;                     // mortality of zooplankton
 
 ////////////////////////////////
 ///// END GLOBAL VARIABLES /////
@@ -1325,156 +1348,457 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
 
 {
     int jj,kk;
-
-    // Load in parameters (note that this should reflect what is saved to the file in bgc_setup.m)
-    real lp = bgc_params[0]; // size of phytoplankton
-    real lz = bgc_params[1]; // size of zooplankton
-    real qsw = bgc_params[2]; // surface irradiance
-    real kw = bgc_params[3];  // light attenuation of water
-    real kc = bgc_params[4];  // light attenuation of phytoplankton
-    real Tref = bgc_params[5]; // reference temperature
-    real r = bgc_params[6];    // tempeature dependence
-    real umax = bgc_params[7]; // mmol N/day maximum uptake
-    real kn = bgc_params[8];   // half saturation of nitrate
-    real mp = bgc_params[9];   // phytoplankton mortality as a fraction of uptake
-    real gmax = bgc_params[10]; // maximum grazing
-    real lambda = bgc_params[11]; // grazing efficiency
-    real kp = bgc_params[12];     // half saturation of phytoplankton
-    real delta_x = bgc_params[13]; // width of grazing profile
-    real preyopt = bgc_params[14]; // optimal predator prey lengthscale
-    real r_remin = bgc_params[15]; // rate of remineralization
-    real wsink = bgc_params[16];  // sinking speed
+    int ip,iz,pz;
     
-    real kpar = 0;              // light attenuation
-    real I0 = 0;
-    real IR = 0;                // irradiance profile in cell
-    int idx_detritus = idx_nitrate+3;
-
-    // place holders for npzd and time tendencies
-    real N = phi[idx_nitrate][j][k];
-    real P = phi[idx_nitrate+1][j][k];
-    real Z = phi[idx_nitrate+2][j][k];
-    real D = phi[idx_nitrate+3][j][k];
-    real T = phi[idx_buoy][j][k];
-
-    // pointers to time tendencies
-    real ** dN_dt = dphi_dt[idx_nitrate];
-    real ** dP_dt = dphi_dt[idx_nitrate+1];
-    real ** dZ_dt = dphi_dt[idx_nitrate+2];
-    real ** dD_dt = dphi_dt[idx_nitrate+3];
+    // TO DO
+    // SIZE DIFFUSION
     
-    real zval = fabs(ZZ_phi[j][k]); // placeholder for depth
+    
+    // load in the biogeochemical variables
+    real qsw = bgc_params[0];          // maximum surface irradiance
+    real kw = bgc_params[1];           // light attunation of water
+    real kc = bgc_params[2];           // light attunation of phytoplankton
+    real tref = bgc_params[3];         // reference temperature for temp-dependent uptake
+    real tr = bgc_params[4];           // coefficient of temperature limitaiton function
+    real mpfrac = bgc_params[5];       // mortality of phytoplankton
+    real pdia = bgc_params[6];         // size diffusion parameter
+    real eff = bgc_params[7];          // efficiency of Z on P grazing
+    real seff = bgc_params[8];         // efficiency of Z on Z grazing
+    real kp = bgc_params[9];           // nutrient saturation parameter for grazing
+    real dxg = bgc_params[10];         // grazing profile witdh
+    
+    // The following are in units of 1/day
+    real mztwo = bgc_params[11];       // density dependent zooplankton grazing
+    real rmax = bgc_params[12];        // remineralization rate
+    real wsink = bgc_params[13];       // sinking speed of detritus
+    int idxUptake = bgc_params[14];    // index for uptake in bgcRates vector
+    int idxSat = bgc_params[15];       // index for phytoplankton nutrient saturation in bgcRates vector
+    int idxGrazing = bgc_params[16];   // index for grazing in bgcRates vector
+    int idxPredPrey = bgc_params[17];  // index for predator prey length ratio in bgcRates vector
+    
+    // calculate the indexes for phytoplankton
+    int idx_phyto = idx_nitrate+1;
+    int idx_zoo = idx_nitrate+MP+1;
+    int idx_detritus = idx_nitrate+MP+MZ+1;
+    
+    // placeholders for the physical variables
+    real I0 = qsw*0.45;
+    real IR = 0;
     real Isurf = qsw*0.45;
+    real ifrac = 0;                     // fraction of light dependent uptake
+    real tfrac = 0;                     // fraction of temperature dependent uptake in the cell
+    real kpar = 0;
+    real T = phi[idx_buoy][j][k];       // temperatre in the cell
     real dz = 0;
     
-    //NPZD Holders
-    real MM = 0;
+    // placeholders for the biogeochemcial variables
+    real N = phi[idx_nitrate][j][k];
+    real P = 0;
+    real ZO = 0;
+    real D = phi[idx_detritus][j][k];
+    real ptot = 0;
+    real ztot = 0;
+    real umax = 0;
+    real gmax = 0;
+    real kn = 0;
     real uptake = 0;
+    real remin = 0;
+    real pf = 0;
+    real zf = 0;
+    real phf = 0;
+    real zhf = 0;
+    real gmess = 0;
+    real hmess = 0;
+    real pmort = 0;
+    real zmort = 0;
+    real tol = 1e-10;
+
     
-    real tlim = 0;
-    real llim = 0;
-    real Ik = 0;
-    
-    real theta = 0;
-    real F = 0;
-    real G = 0;
-    real MP = 0;
-    real GP = 0;
-    real GZ = 0;
-    real mu2 = 0;
-    real MZ = 0;
-    real GD = 0;
-    real RD = 0;
-    real Dsink = 0;
-    real sf_flux = 0;
-    
-    real fi = 0;
-    real fo = 0;
-    
-    
-    // Calculate the maximum uptake rate based on the phytplankton and zooplankton sizes
-    real umax_day = umax/day;
-    real gmax_day = gmax/day;
-    real w_day = wsink/day;
-    real r_day = r_remin/day;
-    
-    kc = 0;
-    
-    // Build temperature and irradiance limitation profiles
-    I0 = Isurf; // percent of irradiance available for photosynthesis
-    
-    for (kk = Nz-2; kk > k; kk--) // assume full irradiance in the topmost grid cell
+    // calculate the light in the kth cell
+    for (kk = Nz-1; kk >= k; kk --) // integrate from the top down
     {
-        dz = -(ZZ_w[j][kk+1] - ZZ_w[j][kk]);
-        kpar = kw + phi[idx_nitrate+1][j][kk]*kc;
+        ptot = 0;
+        // sum the total phytoplankton in the cell
+        for (ip = 0; ip < MP; ip ++)
+        {
+//            ptot += phi[idx_phyto+ip][j][k];
+//            ptot = 0;
+        }
         
-        IR = I0/(1-(kpar*dz));
+        // calculate the coefficient of light attenuation
+        dz = ZZ_w[j][kk+1] - ZZ_w[j][kk];
+        kpar = kw + ptot*kc;
+        IR = I0/(1 + (dz*kpar) ); // integrate vertically
         I0 = IR;
-        
-        
+    }
+    
+    // temperature and light dependence
+    tfrac = exp(tr*(T - tref));
+    ifrac = I0/(sqrt( pow(I0,2) + pow(Isurf,2) ) );
+    
+    
+    
+    
+    /*
+     /
+     / START OF THE BIOGEOCHEMCIAL MODEL EQUATIONS
+     /
+     */
+    
+    //
+    // Build the effect of grazing on phytoplankton by zooplankton
+    //
+    
+    // Total phytoplankton available to each zooplankton size class
+    for (iz = 0; iz < MZ; iz++)
+    {
+        pf = 0;
+        for (ip = 0; ip < MP; ip++)
+        {
+            pf += theta_p[ip][iz]*phi[idx_phyto+ip][j][k];
+        }
+        PTvec[iz] = pf;
     }
     
     
-//    llim = I0/sqrt( Isurf*Isurf + I0*I0 );
-    llim = I0/Isurf;
-    tlim = exp(r*(T-Tref));
+    // Calculate grazing for phytoplankton
+    for (iz = 0; iz < MZ; iz++)
+    {
+        gmax = bgcRates[iz][idxGrazing]/day;
+        ZO = phi[idx_zoo+iz][j][k];
+        for (ip = 0; ip < MP; ip++)
+        {
+            P = phi[idx_phyto+ip][j][k];
+            if (P < tol || ZO < tol)
+            {
+                GPZ[ip][iz] = 0;
+            }
+            else
+            {
+                GPZ[ip][iz] = gmax*theta_p[ip][iz]*P*ZO*(1-exp(-(PTvec[iz])))/(kp + PTvec[iz]);
+            }
+        }
+    }
+    
+    // Calculate the vector that will be used to update time tendencies for phytoplankton grazing
+    for (ip = 0; ip < MP; ip++)
+    {
+        pf = 0;
+        for (iz = 0; iz < MZ; iz++)
+        {
+            pf += GPZ[ip][iz];
+        }
+        GPvec[ip] = pf;
+    }
+    
+    gmess = 0;
+    // Calculate the vector that will be used to update time tendencies for zooplankton grazing
+    for (iz = 0; iz < MZ; iz++)
+    {
+        zf = 0;
+        for (ip = 0; ip < MP; ip++)
+        {
+            zf += GPZ[ip][iz];
+        }
+        GZvec[iz] = zf;
+        gmess += zf;
+    }
+    
 
-//    fprintf(stderr,"K = %d, Z =  %f, I0 = %f \n",k,ZZ_w[j][k],llim);
-    
-    // Nitrate
-    MM = N/(kn + N);
-    uptake = umax_day*llim*tlim*MM*P;
-    
-    
-    // Phytoplankton
-    theta = (log10(lp) - log10(preyopt))/delta_x;
-    F = exp(-theta*theta);
-    G = gmax_day*F/(F*P + kp);
-    G = G*(1-exp(-P));
-    GP = G*Z*P;
-    
-    
-    // Zooplankton
-    GZ = lambda*GP;
-    
-    // Detritus (no sinking yet)
-    GD = GP - GZ;
-    RD = r_day*D;
-    
-    // Calculate sinking fluxes
-    if (k == Nz-1) // This is the surface, so there is no flux through the surface.
+    real adz = 0;
+    for (iz = 0; iz < MZ; iz++)
     {
-        fi = sf_flux;
-        fo = 0.5*fabs(w_day)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+        adz += GZvec[iz];
     }
-    else if (k == 0) // there is no flux out of the domain
+    
+    real adp = 0;
+    for (ip = 0; ip < MP; ip++)
     {
+        adp += GPvec[ip];
+    }
+    
+    
+    
+    
+    
+    
+    //
+    // Calculate the time tendencies due to heterotrophic grazing
+    //
+    
+    // Total prey zooplankton available to each zooplankton size class
+    for (ip = 0; ip < MP; ip++)
+    {
+        zhf = 0;
+        for (iz = 0; iz < MZ; iz++)
+        {
+            ZO = phi[idx_zoo+iz][j][k];
+            zhf += theta_z[ip][iz]*ZO;
+        }
+        ZTvec[ip] = zhf;
+    }
+    
+    
+    // Calculate the heterotrophic grazing
+    for (iz = 0; iz < MZ; iz++) // predator
+    {
+        gmax = bgcRates[iz][idxGrazing]/day;
+        ZO = phi[idx_zoo+iz][j][k];
+        for (pz = 0; pz < MZ; pz++) // prey
+        {
+            P = phi[idx_zoo+pz][j][k]; // use P for prey
+            HZZ[pz][iz] = gmax*theta_z[pz][iz]*P*ZO*(1-exp(-ZTvec[iz]))/(kp + ZTvec[iz]);
+        }
+    }
+    
+    
+    // Calculate the tendencies of zooplankton grazing on prey zooplankton
+    for (pz = 0; pz < MZ; pz++)
+    {
+        phf = 0;
+        for (iz = 0; iz < MZ; iz++)
+        {
+            phf += HZZ[pz][iz];
+        }
+        HMvec[pz] = phf;
+    }
+    
+    hmess = 0;
+    // Calculate the vector that will be used to update time tendencies for zooplankton
+    // for heterotrophic grazing
+    for (iz = 0; iz < MZ; iz++)
+    {
+        zhf = 0;
+        for (pz = 0; pz < MZ; pz++)
+        {
+            zhf += HZZ[pz][iz];
+        }
+        HPvec[iz] = zhf;
+        hmess += zhf;  // total grazing
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    //
+    // Calculate the nutrient uptake and mortality by phytoplankton
+    //
+    
+    for (ip = 0; ip < MP; ip++)
+    {
+        umax = bgcRates[ip][idxUptake]/day;
+        kn = bgcRates[ip][idxSat];
+        UPvec[ip] = ifrac*tfrac*phi[idx_phyto+ip][j][k]*N*(1-exp(-N))/(N + kn);
+        MPvec[ip] = umax*mpfrac*phi[idx_phyto+ip][j][k];
         
     }
-    else
+    
+    
+    uptake = 0;
+    pmort = 0;
+    for (ip = 0; ip < MP; ip++)
     {
-        fi = 0.5*w_day*(phi[idx_detritus][j][k+1] + phi[idx_detritus][j][k]);
-        fo = 0.5*fabs(w_day)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+        uptake += UPvec[ip];
+        pmort += MPvec[ip];
     }
     
-    Dsink = (fi-fo)*_dz_phi[j][k];
-//    Dsink = 0;
-
     
-    // Mortality terms
-    MP = mp*umax_day*P;
     
-    mu2 = lambda*gmax*gmax/(4*umax*kp);
-    mu2 = mu2/day;
-    MZ = mu2*Z*Z;
     
-    dN_dt[j][k] += -uptake + RD;
-    dP_dt[j][k] += uptake - GP - MP;
-    dZ_dt[j][k] += GZ - MZ;
-    dD_dt[j][k] += MP + MZ + GD - RD + Dsink;
+    
+    //
+    // Calculate the effect of remineralization
+    //
+    remin = (rmax/day)*D;  // rmax updated to units of seconds
+    
+    
+    
+    //
+    // Calculate mortality of zooplankton
+    //
+    for (iz = 0; iz < MZ; iz++)
+    {
+        MZvec[iz] = (mztwo/day)*pow(phi[idx_zoo+iz][j][k],2);
+    }
+    
+    zmort = 0;
+    for (iz = 0; iz < MZ; iz++)
+    {
+        zmort += MZvec[iz];
+    }
+    
+    
+    
+    
+    
+    //
+    // Update the time tendencies for all of the biogeochemical parameters
+    //
+    
+//    real upp = 0;
+//    real gpp = 0;
+//    real mpt = 0;
+//    real gzz = 0;
+//    real hmt = 0;
+//    real hpt = 0;
+//    real mzz = 0;
+//
+//
+    // nutrient
+    dphi_dt[idx_nitrate][j][k] += remin - uptake;
+    
+    // phytoplankton
+    for (ip = 0; ip < MP; ip++)
+    {
+        dphi_dt[idx_phyto+ip][j][k] += UPvec[ip] - GPvec[ip] - MPvec[ip];
+    }
+    
+//    for (ip = 0; ip < MP; ip++)
+//    {
+//        upp += UPvec[ip];
+//        gpp += GPvec[ip];
+//        mpt += MPvec[ip];
+//    }
+    
+    // zooplankton
+    for (iz = 0; iz < MZ; iz++)
+    {
+        dphi_dt[idx_zoo+iz][j][k] += eff*GZvec[iz] - HMvec[iz] + seff*HPvec[iz] - MZvec[iz];
+//        gzz += eff*GZvec[iz];
+//        hmz += HMvec[iz];
+//        hpz += + seff*HPvec[iz];
+//        mzz += MZvec[iz];
+    }
+    
+//    for (iz = 0; iz < MZ; iz++)
+//    {
+//        gzz += GZvec[iz];
+//        hmt += HMvec[iz];
+//        hpt += HPvec[iz];
+//        mzz += MZvec[iz];
+//    }
+    
+    // detritus
+    dphi_dt[idx_detritus][j][k] += (1-eff)*gmess + (1-seff)*hmess - remin + pmort + zmort;
+    
+    
+    // check to see if everything is conserved
+//    fprintf(stderr,"uptake total: %.3e -- N = %.3e, P = %.3e \n",upp-uptake,uptake,upp);
+//    real gpr =(eff*gzz)+((1-eff)*gmess) - gpp;
+//    real hpr = (seff*hpt)+((1-seff)*hmess)-hmt;
+//    fprintf(stderr,"grazing total: %.3e -- P = %.3e, Z = %.3e, D = %.3e \n",gpr,-gpp,(eff*gzz),((1-eff)*gmess));
+//    fprintf(stderr,"mixotrophy total: %.3e -- ZM = %.3e, ZP = %.3e, D = %.3e \n",hpr,-hmt,(seff*hpt),((1-seff)*hmess));
+////    fprintf(stderr,"mortality total: %.1e -- P = %.10e, Z = %.3e, D = %.3e \n",(pmort-mpt)+(zmort-mzz),pmort-mpt,zmort-mzz,mztwo/day);
+//    fprintf(stderr," \n");
+//    fprintf(stderr," \n");
+//    fprintf(stderr," \n");
+    
+//    debug = true;
+    
+//    // Print to check
+//    for (ip = 0; ip < MP; ip++)
+//    {
+////        for (iz = 0; iz < MZ; iz++)
+////        {
+//        umax = bgcRates[ip][idxUptake]/day;
+//        kn = bgcRates[ip][idxSat];
+//            fprintf(stderr,"ind = %d, mort = %.3e, mort = %.3e, umax = %.3e, kn = %.3e \n",ip,MZvec[ip],MPvec[ip],umax,remin);
+//            fflush(stderr);
+//            debug = true;
+////        }
+//
+//    }
     
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * doSizeDiffusion
+ *
+ * Calculates the size diffusion for phytoplankton and zooplankton
+ *
+ */
+void doSizeDiffusion(const real t, const int j, const int k, real *** phi, real *** dphi_dt)
+{
+//    int ip, iz;
+//    real pdia = bgc_params[6];         // size diffusion parameter
+//    real dxp = 0;                      // Difference in size for plus one
+//    real dxm = 0;                      // Difference in size for minus one
+//    real dp = 0;                       // Coefficient for plus one
+//    real dc = 0;                       // Coefficient for center
+//    real dm = 0;                       // Coefficient for minus one
+//    real PP = 0;                       // P plus one
+//    real PC = 0;                       // P center
+//    real PM = 0;                       // P minuns one
+//
+//    // calculate the indexes for phytoplankton
+//    int idx_phyto = idx_nitrate+1;
+//    int idx_zoo = idx_nitrate+MP+1;
+//    int idx_detritus = idx_nitrate+MP+MZ+1;
+//
+//
+//    // Calculate the effect of size diffusion
+//    for (ip = 0; ip < MP; ip++)
+//    {
+//        if (ip == 0) // boundary conditions
+//        {
+//            PP = phi[idx_phyto+ip+1][j][k];
+//            dphi_dt[idx_phyto+ip][j][k] += PP;
+//        }
+//        else if (ip == MP-1)
+//        {
+//            PM = phi[idx_phyto+ip-1][j][k];
+//            dphi_dt[idx_phyto+ip][j][k] += PM;
+//        }
+//        else
+//        {
+//            PP = phi[idx_phyto+ip+1][j][k];
+//            PC = phi[idx_phyto+ip][j][k];
+//            PM = phi[idx_phyto+ip-1][j][k];
+//
+//            // calculate the distances in size space for size diffusion
+//            dxp = log10(lpvec[ip+1]) - log10(lpvec[ip]);
+//            dxm = log10(lpvec[ip]) - log10(lpvec[ip-1]);
+//
+//            dm = pdia/(pow(dxm,2));
+//            dc = -pdia*( 1/(dxp+dxm) + 1/(pow(dxm,2)) );
+//            dp = pdia/(dxp*dxm);
+//
+//            dphi_dt[idx_phyto+ip][j][k] += (dp*PP + dc*PC + dm*PM);
+//        }
+//    }
+//
+//
+//
+    
+    
+    
+}
+
+
+
+
 
 
 
@@ -1500,34 +1824,31 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
 void tderiv_bgc (const real t, real *** phi, real *** dphi_dt)
 {
     int i,j,k; // Physical coutners
-    int l,m;   // BGC parameters
     
 
-
-    switch (bgcModel)
+    if (bgcModel == BGC_NONE) // only need to check if there is no bgc
     {
-        case BGC_NONE:
+        
+    }
+    else if (bgcModel == BGC_NPZD)  // both bgc models use the same base model equations
+    {
+        for (j = 0; j < Nx; j++)
         {
-            break;
-        }
-        // NPZD Model
-        case BGC_NPZD:
-        {
-            for (j = 0; j < Nx; j++)
+            for (k = Nz-1; k >= 0; k--)
             {
-                for (k = Nz-1; k >= 0; k--)
-                {
-                    npzd(t,j,k,phi,dphi_dt);
-                }
+                npzd(t,j,k,phi,dphi_dt);        // calculate the npzd model
             }
-            break;
         }
-        default:
+    }
+    else
+    {
+        for (j = 0; j < Nx; j++)
         {
-            printf("Error: MODELTYPE is undefined");
-            break;
+            for (k = Nz-1; k >= 0; k--)
+            {
+                npzd(t,j,k,phi,dphi_dt);        // calculate ROEM
+            }
         }
-            
     }
     
 }
@@ -2016,6 +2337,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real cfl_z = 0;;
     real cfl_igw = 0;
     real cfl_sink = 0;
+    real cfl_bgc = 10;
     real u_max = 0;
     real w_dz = 0;
     real w_dz_max = 0;
@@ -2213,19 +2535,13 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
 
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
-    cfl_phys = fmin(fmin(cfl_sink,cfl_igw),cfl_phys);
+    cfl_phys = fmin(fmin(cfl_sink,cfl_igw),fmin(cfl_phys,cfl_bgc));
     cfl_dt = cfl_phys;
     
     
     ////////////////////////////////
     ///// END CALCULATING CFLS /////
     ////////////////////////////////
-    
-//    if (cfl_dt < 1)
-//    {
-//        fprintf(stderr,"t = %le cfl_u = %le, cfl_w = %le, cfl_y = %le, clf_z = %le, cfl_igw = %le, cfl_sink = %le \n",t/day, cfl_u, cfl_w, cfl_y, cfl_z, cfl_igw, cfl_sink);
-//
-//    }
     
     
     return cfl_dt;
@@ -2593,7 +2909,7 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
     
     // Debugging
-    if (debug)
+    if (debug && t > 0.05)
     {
         // Write iteration data for the file of interest
         constructOutputName(outdir,OUTN_DBDX_CUBIC,-1,n,outfile);
@@ -2603,6 +2919,26 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
         // Write iteration data for the file of interest
         constructOutputName(outdir,OUTN_DBDX_LINEAR,-1,n,outfile);
         if (!writeOutputFile(outfile,db_dx_lin,Nx+1,Nz+1)) return false; // cubic buoyancy gradient
+        
+        // Loop over tracers
+        for (i = 0; i < Ntracs; i ++)
+        {
+            // Write iteration data for this tracer
+            constructOutputName(outdir,OUTN_TRAC,i,n,outfile);
+            if (!writeOutputFile(outfile,phi[i],Nx,Nz)) return false;
+        }
+        
+        // Write iteration data for the residual streamfunction
+        constructOutputName(outdir,OUTN_PSIR,-1,n,outfile);
+        if (!writeOutputFile(outfile,psi_r,Nx+1,Nz+1)) return false;
+        
+        // Write iteration data for the mean streamfunction
+        constructOutputName(outdir,OUTN_PSIM,-1,n,outfile);
+        if (!writeOutputFile(outfile,psi_m,Nx+1,Nz+1)) return false;
+        
+        // Write iteration data for the eddy streamfunction
+        constructOutputName(outdir,OUTN_PSIE,-1,n,outfile);
+        if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
     }
     
     return true;
@@ -2829,6 +3165,8 @@ int main (int argc, char ** argv)
     int j = 0;
     int k = 0;
     int n = 0;
+    int jp = 0;
+    int jz = 0;
     
     // Pointer to buoyancy matrix
     real ** buoy = NULL;
@@ -2870,6 +3208,9 @@ int main (int argc, char ** argv)
     char topogFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tauFile[MAX_PARAMETER_FILENAME_LENGTH];
     char bgcFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char bgcRatesFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char lpFile[MAX_PARAMETER_FILENAME_LENGTH];
+    char lzFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KgmFile[MAX_PARAMETER_FILENAME_LENGTH];
     char KisoFile[MAX_PARAMETER_FILENAME_LENGTH];
     char relaxTracerFile[MAX_PARAMETER_FILENAME_LENGTH];
@@ -2932,12 +3273,14 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"bgcModel","%u",&bgcModel,true);
     setParam(params,paramcntr++,"KT00_sigma","%lf",&KT00_sigma,true);
     
-    // Biogeochemical parameter inputs (3)
-    setParam(params,paramcntr++,"MP","%u",&MP,false);
-    setParam(params,paramcntr++,"MZ","%u",&MZ,false);
-    setParam(params,paramcntr++,"nbgc","%u",&nbgc,false);
+    // Biogeochemical parameter inputs (5)
+    setParam(params,paramcntr++,"MP","%u",&MP,true); // number of phytoplankton size classes
+    setParam(params,paramcntr++,"MZ","%u",&MZ,true); // number of zooplankton size classes
+    setParam(params,paramcntr++,"npbgc","%u",&npbgc,true); // number of bgc parameters
+    setParam(params,paramcntr++,"nallo","%u",&nallo,true); // number of bgc parameters
+    setParam(params,paramcntr++,"idxAllo","%u",&idxAllo,true); // number of bgc parameters
     
-    // Input file names (12)
+    // Input file names (15)
     setParam(params,paramcntr++,"targetResFile","%s",&targetResFile,true);
     setParam(params,paramcntr++,"initFile","%s",initFile,false);
     setParam(params,paramcntr++,"northTracerFile","%s",northTracerFile,false);
@@ -2947,6 +3290,9 @@ int main (int argc, char ** argv)
     setParam(params,paramcntr++,"tlength","%u",&tlength,false);
     setParam(params,paramcntr++,"tauFile","%s",tauFile,true);
     setParam(params,paramcntr++,"bgcFile","%s",bgcFile,true);
+    setParam(params,paramcntr++,"bgcRatesFile","%s",bgcRatesFile,true);
+    setParam(params,paramcntr++,"lpFile","%s",lpFile,true);
+    setParam(params,paramcntr++,"lzFile","%s",lzFile,true);
     setParam(params,paramcntr++,"KgmFile","%s",KgmFile,true);
     setParam(params,paramcntr++,"KisoFile","%s",KisoFile,true);
     setParam(params,paramcntr++,"relaxTracerFile","%s",relaxTracerFile,true);
@@ -2961,6 +3307,9 @@ int main (int argc, char ** argv)
     topogFile[0] = '\0';
     tauFile[0] = '\0';
     bgcFile[0] = '\0';
+    bgcRatesFile[0] = '\0';
+    lpFile[0] = '\0';
+    lzFile[0] = '\0';
     KgmFile[0] = '\0';
     KisoFile[0] = '\0';
     relaxTracerFile[0] = '\0';
@@ -3030,6 +3379,9 @@ int main (int argc, char ** argv)
         (strlen(KisoFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTracerFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(relaxTimeFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(lpFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(lzFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
+        (strlen(bgcRatesFile) > MAX_PARAMETER_FILENAME_LENGTH) ||
         (strlen(bgcFile) > MAX_PARAMETER_FILENAME_LENGTH)           )
     {
         fprintf(stderr,"ERROR: Invalid input parameter values\n");
@@ -3135,13 +3487,31 @@ int main (int argc, char ** argv)
     MATALLOC(phi_flux,Ntracs,Nx);
     VECALLOC(hb_in,Nx+2);
     VECALLOC(tau,Nx+1);
-    VECALLOC(bgc_params,nbgc);
-    
     MATALLOC(Kgm_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kiso_psi_ref,Nx+1,Nz+1);
     MATALLOC(Kdia_psi_ref,Nx+1,Nz+1);
     MATALLOC3(phi_relax,Ntracs,Nx,Nz);
     MATALLOC3(T_relax,Ntracs,Nx,Nz);
+    
+    // BGC parameter arrays
+    MATALLOC(bgcRates,nallo,idxAllo);
+    MATALLOC(theta_p,MP,MZ);
+    MATALLOC(theta_z,MZ,MZ);
+    MATALLOC(GPZ,MP,MZ);
+    MATALLOC(HZZ,MP,MZ);
+    VECALLOC(bgc_params,npbgc);
+    VECALLOC(lpvec,MP);
+    VECALLOC(lzvec,MZ);
+    VECALLOC(UPvec,MP);
+    VECALLOC(GPvec,MP);
+    VECALLOC(GZvec,MZ);
+    VECALLOC(PTvec,MZ);
+    VECALLOC(ZTvec,MZ);
+    VECALLOC(HMvec,MZ);
+    VECALLOC(HPvec,MZ);
+    VECALLOC(MPvec,MP);
+    VECALLOC(MZvec,MZ);
+    
     
     // Grid vectors
     VECALLOC(sigma_phi,Nz);
@@ -3245,17 +3615,20 @@ int main (int argc, char ** argv)
     ////////////////////////////////////////
     
     // Read input matrices and vectors
-    if (  ( (strlen(targetResFile) > 0)   &&  !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
-        ( (strlen(topogFile) > 0)       &&  !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
-        ( (strlen(tauFile) > 0)         &&  !readVector(tauFile,tau,Nx+1,stderr) ) ||
-        ( (strlen(bgcFile) > 0)         &&  !readVector(bgcFile,bgc_params,nbgc,stderr) ) ||
-        ( (strlen(KgmFile) > 0)         &&  !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
-        ( (strlen(KisoFile) > 0)        &&  !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
-        ( (strlen(relaxTracerFile) > 0) &&  !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
-        ( (strlen(northTracerFile) > 0) &&  !readMatrix3(northTracerFile,phi_north,Ntracs,Nx,Nz,stderr) )  ||
-        ( (strlen(southTracerFile) > 0) &&  !readMatrix3(southTracerFile,phi_south,Ntracs,Nx,Nz,stderr) )  ||
-        ( (strlen(fluxFile) > 0)        &&  !readMatrix(fluxFile,phi_flux,Ntracs,Nx,stderr) )  ||
-        ( (strlen(relaxTimeFile) > 0)   &&  !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
+    if (  ( (strlen(targetResFile) > 0)   &&   !readVector(targetResFile,targetRes,Ntracs,stderr) ) ||
+        ( (strlen(topogFile) > 0)         &&   !readVector(topogFile,hb_in,Nx+2,stderr) ) ||
+        ( (strlen(tauFile) > 0)           &&   !readVector(tauFile,tau,Nx+1,stderr) ) ||
+        ( (strlen(bgcFile) > 0)           &&   !readVector(bgcFile,bgc_params,npbgc,stderr) ) ||
+        ( (strlen(lpFile) > 0)            &&   !readVector(lpFile,lpvec,MP,stderr) ) ||
+        ( (strlen(lzFile) > 0)            &&   !readVector(lzFile,lzvec,MZ,stderr) ) ||
+        ( (strlen(bgcRatesFile) > 0)      &&   !readMatrix(bgcRatesFile,bgcRates,nallo,idxAllo,stderr) ) ||
+        ( (strlen(KgmFile) > 0)           &&   !readMatrix(KgmFile,Kgm_psi_ref,Nx+1,Nz+1,stderr) ) ||
+        ( (strlen(KisoFile) > 0)          &&   !readMatrix(KisoFile,Kiso_psi_ref,Nx+1,Nz+1,stderr) )  ||
+        ( (strlen(relaxTracerFile) > 0)   &&   !readMatrix3(relaxTracerFile,phi_relax,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(northTracerFile) > 0)   &&   !readMatrix3(northTracerFile,phi_north,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(southTracerFile) > 0)   &&   !readMatrix3(southTracerFile,phi_south,Ntracs,Nx,Nz,stderr) )  ||
+        ( (strlen(fluxFile) > 0)          &&   !readMatrix(fluxFile,phi_flux,Ntracs,Nx,stderr) )  ||
+        ( (strlen(relaxTimeFile) > 0)     &&   !readMatrix3(relaxTimeFile,T_relax,Ntracs,Nx,Nz,stderr) )  )
     {
         printUsage();
         return 0;
@@ -3636,15 +4009,6 @@ int main (int argc, char ** argv)
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
     // Calculate the meridional pressure gradients
     if (Ly < 0 || Ly == 0)
     {
@@ -3659,7 +4023,6 @@ int main (int argc, char ** argv)
     }
     else
     {
-//        _Ly = 1/Ly;
         _Ly = 1/Ly; // set the gradients to zero since they haven't been extensively tested
         
         // Calculate the density gradient of the northern and southern
@@ -3702,18 +4065,6 @@ int main (int argc, char ** argv)
     }
         
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     // Calculate diapyncal diffusivity file from ksml and kbbl
     for (j = 0; j < Nx; j++)
     {
@@ -3734,6 +4085,28 @@ int main (int argc, char ** argv)
             }
         }
     }
+    
+
+    // Calculate the predator-prey interaction matrices
+    // Z on P grazing
+    int idxPredPrey = bgc_params[17];  // read in index for predator prey length ratio in bgcRates vector
+    real dxg = bgc_params[10];         // read in grazing profile witdh
+    for (jp = 0; jp < MP; jp++)
+    {
+        for (jz = 0; jz < MZ; jz++)
+        {
+            theta_p[jp][jz] = exp( -1*pow( (log10(lpvec[jp]) - log10(bgcRates[jz][idxPredPrey]))/dxg,2) );
+        }
+    }
+    // Z on Z grazing
+    for (jp = 0; jp < MZ; jp++) // use the same indexing variable for zooplankton so there's no variable loading
+    {
+        for (jz = 0; jz < MZ; jz++)
+        {
+            theta_z[jp][jz] = exp( -1*pow( (log10(lzvec[jp]) - log10(bgcRates[jz][idxPredPrey]))/dxg,2) );
+        }
+    }
+    
     
     
     // Write model grid to output files for post-simulation analysis
