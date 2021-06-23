@@ -214,7 +214,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
     %%% Plot the average values %%%
     timelengthstr = lastVal*dt_s/t1year - avgStart*dt_s/t1year;
     titlestr = title_name;
-    figure
+    figure(7)
     if (plot_trac)
         if (var_id == 0 || var_id == 1)
             cmap = cmocean('balance');
@@ -233,7 +233,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             % chose the appropriate colormap and contour vector
             if (var_id == 2)
                 cmap = cmocean('thermal');
-                cvec = 0:2:18;
+                cvec = 0:4:22;
                 clr = 'w';
             elseif (var_id == 3) % nitrogen
                 cmap = cmocean('matter');
@@ -241,7 +241,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
                 clr = 'w';
             elseif (var_id == 4) % phytoplankton
                 cmap = cmocean('speed');
-                cvec = [0.2 0.4 0.9 1.8];
+                cvec = [0.05 0.2 0.4 0.9 1.8];
                 clr = 'k';
             elseif (var_id == 5) % zooplankton
                 cmap = cmocean('amp');
@@ -261,7 +261,8 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             pcolor(XX_tr,ZZ_tr,avgVals);
             hold on
             [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,clr);
-            clabel(C,h,'Color',clr)
+%             [C h] = contour(XX_tr,ZZ_tr,avgVals,round(linspace(min(min(avgVals)),max(max(avgVals)),7),2),'w');
+            clabel(C,h,'Color','w')
             hold off
             shading interp
             c = colorbar; 
@@ -276,7 +277,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
             yticks(-180:20:0)
             yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
-            axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
+            axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -180 0])
             title(titlestr,'interpreter','latex')
         end
     else

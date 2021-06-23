@@ -237,8 +237,8 @@ real ** bot_nflux = NULL;
 
 
 // work arrays for phytoplankton and zooplankton time tendencies
-real ** HZZ = NULL;                      // heterotrophic grazing matrix between prey zooplankton and predator zooplankton
-real ** GPZ = NULL;                      // grazing matrix between phytoplankton and zooplankton
+real ** hetMat = NULL;                      // heterotrophic grazing matrix between prey zooplankton and predator zooplankton
+real ** grazMat = NULL;                      // grazing matrix between phytoplankton and zooplankton
 real * GPvec = NULL;                     // loss of biomass from phytoplankton due to grazing
 real * GZvec = NULL;                     // growth of biomass to zooplankton from grazing
 real * PTvec = NULL;                     // total phytoplankton avaialble to zooplankton vector
@@ -1347,8 +1347,11 @@ void tderiv_relax (const real t, real *** phi, real *** dphi_dt)
 void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt)
 
 {
-    int jj,kk;
-    int ip,iz,pz;
+    int jj = 0;
+    int kk = 0;
+    int ip = 0;
+    int iz = 0;
+    int jz = 0;
     
     // TO DO
     // SIZE DIFFUSION
@@ -1401,320 +1404,190 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real umax = 0;
     real gmax = 0;
     real kn = 0;
+    real mmentis = 0;
     real uptake = 0;
+    real uptot = 0;
     real remin = 0;
+    real sf_flux = 0;
+    
+    real grazing = 0;
     real pf = 0;
-    real zf = 0;
-    real phf = 0;
-    real zhf = 0;
+    real gp = 0;
+    real gz = 0;
+    real gptot = 0;
+    real gztot = 0;
     real gmess = 0;
-    real hmess = 0;
+    
     real pmort = 0;
     real zmort = 0;
-    real tol = 1e-10;
-
+    real dmort = 0;
+    real Dsink = 0;
     
+    real fi = 0;
+    real fo = 0;
+
     // calculate the light in the kth cell
     for (kk = Nz-1; kk >= k; kk --) // integrate from the top down
     {
         ptot = 0;
+        
         // sum the total phytoplankton in the cell
         for (ip = 0; ip < MP; ip ++)
         {
-//            ptot += phi[idx_phyto+ip][j][k];
+            ptot += phi[idx_phyto+ip][j][kk];
 //            ptot = 0;
         }
-        
+
         // calculate the coefficient of light attenuation
-        dz = ZZ_w[j][kk+1] - ZZ_w[j][kk];
+        dz = -(ZZ_w[j][kk+1] - ZZ_w[j][kk]);
         kpar = kw + ptot*kc;
-        IR = I0/(1 + (dz*kpar) ); // integrate vertically
+        IR = I0/(1 - (dz*kpar) ); // integrate vertically
         I0 = IR;
     }
-    
+
     // temperature and light dependence
     tfrac = exp(tr*(T - tref));
-    ifrac = I0/(sqrt( pow(I0,2) + pow(Isurf,2) ) );
-    
-    
-    
-    
+    ifrac = I0/sqrt( pow(I0,2) + pow(Isurf,2) );
+
+//    fprintf(stderr,"ZZ = %f tfrac = %.3e, ifrac %.3e \n",ZZ_phi[j][k],tfrac,ifrac);
+
+
     /*
      /
      / START OF THE BIOGEOCHEMCIAL MODEL EQUATIONS
      /
      */
+
+    //
+    // Build the nutrient uptake profile
+    //
+    dmort = 0;
+    uptot = 0;
+    for (ip = 0; ip < MP; ip++)
+    {
+        kn = bgcRates[ip][idxSat];
+        mmentis = N/(N + kn);
+        umax = bgcRates[ip][idxUptake];
+        P = phi[idx_nitrate+1+ip][j][k];
+        uptake = (umax/day)*tfrac*ifrac*mmentis*P;
+        uptake = uptake*(1-exp(-N)); // limits excess uptake
+        uptot += uptake;
+        UPvec[ip] = uptake;
+        
+        
+        pmort = mpfrac*(umax/day)*P;
+        MPvec[ip] = pmort;
+        dmort += pmort;
+    }
     
     //
-    // Build the effect of grazing on phytoplankton by zooplankton
+    // Build grazing of phytoplankton by zooplankton
     //
-    
-    // Total phytoplankton available to each zooplankton size class
-    for (iz = 0; iz < MZ; iz++)
+    for (iz = 0; iz < MZ; iz ++)
     {
         pf = 0;
         for (ip = 0; ip < MP; ip++)
         {
-            pf += theta_p[ip][iz]*phi[idx_phyto+ip][j][k];
+            P = phi[idx_phyto+ip][j][k];
+            pf += theta_p[ip][iz]*P;        // calculate the total bioavailable phytoplankton
         }
         PTvec[iz] = pf;
     }
     
-    
-    // Calculate grazing for phytoplankton
-    for (iz = 0; iz < MZ; iz++)
+    // calculate the grazing profile
+    for (iz = 0; iz < MZ; iz ++)
     {
-        gmax = bgcRates[iz][idxGrazing]/day;
+        gmax = bgcRates[iz][idxGrazing];
         ZO = phi[idx_zoo+iz][j][k];
         for (ip = 0; ip < MP; ip++)
         {
             P = phi[idx_phyto+ip][j][k];
-            if (P < tol || ZO < tol)
-            {
-                GPZ[ip][iz] = 0;
-            }
-            else
-            {
-                GPZ[ip][iz] = gmax*theta_p[ip][iz]*P*ZO*(1-exp(-(PTvec[iz])))/(kp + PTvec[iz]);
-            }
+            grazing = (gmax/day)*PTvec[ip]/( PTvec[ip]*P + kp  );
+            grazing = grazing*(1-exp(-PTvec[ip]));
+            grazing = grazing*theta_p[ip][iz];
+            grazMat[ip][iz] = grazing*P*ZO;
+//            fprintf(stderr,"ip = %d iz = %d, Gmat = %.3e \n",ip,iz,theta_p[ip][iz]);
         }
     }
     
-    // Calculate the vector that will be used to update time tendencies for phytoplankton grazing
+    // Sum all the grazing calculated previously
+    gptot = 0;
     for (ip = 0; ip < MP; ip++)
     {
-        pf = 0;
-        for (iz = 0; iz < MZ; iz++)
+    gp = 0;
+        for (iz = 0; iz < MZ; iz ++)
         {
-            pf += GPZ[ip][iz];
+            gp += grazMat[ip][iz];
+    
         }
-        GPvec[ip] = pf;
+        GPvec[ip] = gp;
+        gptot += gp;
     }
     
-    gmess = 0;
-    // Calculate the vector that will be used to update time tendencies for zooplankton grazing
-    for (iz = 0; iz < MZ; iz++)
+    
+    // sum growth for Z
+    gztot = 0;
+    for (iz = 0; iz < MZ; iz ++)
     {
-        zf = 0;
+    gz = 0;
         for (ip = 0; ip < MP; ip++)
         {
-            zf += GPZ[ip][iz];
+            gz += eff*grazMat[ip][iz];
+            
         }
-        GZvec[iz] = zf;
-        gmess += zf;
+        GZvec[iz] = gz;
+        gztot += gz;
     }
     
-
-    real adz = 0;
-    for (iz = 0; iz < MZ; iz++)
+    // detritus
+    gmess = gptot - gztot; // enforced to conserve nutrients because of numerical error.
+    remin = (rmax/day)*D;
+    
+    // zooplankton mortality
+    for (iz = 0; iz < MZ; iz ++)
     {
-        adz += GZvec[iz];
+        ztot += phi[idx_zoo+iz][j][k];
     }
     
-    real adp = 0;
-    for (ip = 0; ip < MP; ip++)
+    // calculate the density dependent mortality
+    for (iz = 0; iz < MZ; iz ++)
     {
-        adp += GPvec[ip];
-    }
-    
-    
-    
-    
-    
-    
-    //
-    // Calculate the time tendencies due to heterotrophic grazing
-    //
-    
-    // Total prey zooplankton available to each zooplankton size class
-    for (ip = 0; ip < MP; ip++)
-    {
-        zhf = 0;
-        for (iz = 0; iz < MZ; iz++)
-        {
-            ZO = phi[idx_zoo+iz][j][k];
-            zhf += theta_z[ip][iz]*ZO;
-        }
-        ZTvec[ip] = zhf;
-    }
-    
-    
-    // Calculate the heterotrophic grazing
-    for (iz = 0; iz < MZ; iz++) // predator
-    {
-        gmax = bgcRates[iz][idxGrazing]/day;
         ZO = phi[idx_zoo+iz][j][k];
-        for (pz = 0; pz < MZ; pz++) // prey
-        {
-            P = phi[idx_zoo+pz][j][k]; // use P for prey
-            HZZ[pz][iz] = gmax*theta_z[pz][iz]*P*ZO*(1-exp(-ZTvec[iz]))/(kp + ZTvec[iz]);
-        }
+        zmort = (mztwo/day)*ztot*ZO;
+        MZvec[iz] = zmort;
+        dmort += zmort;
     }
     
-    
-    // Calculate the tendencies of zooplankton grazing on prey zooplankton
-    for (pz = 0; pz < MZ; pz++)
-    {
-        phf = 0;
-        for (iz = 0; iz < MZ; iz++)
-        {
-            phf += HZZ[pz][iz];
-        }
-        HMvec[pz] = phf;
-    }
-    
-    hmess = 0;
-    // Calculate the vector that will be used to update time tendencies for zooplankton
-    // for heterotrophic grazing
-    for (iz = 0; iz < MZ; iz++)
-    {
-        zhf = 0;
-        for (pz = 0; pz < MZ; pz++)
-        {
-            zhf += HZZ[pz][iz];
-        }
-        HPvec[iz] = zhf;
-        hmess += zhf;  // total grazing
-    }
+    // Calculate sinking fluxes
+       if (k == Nz-1) // This is the surface, so there is no flux through the surface.
+       {
+           fi = sf_flux;
+           fo = 0.5*fabs(wsink/day)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+       }
+       else if (k == 0) // there is no flux out of the domain
+       {
+           
+       }
+       else
+       {
+           fi = 0.5*(wsink/day)*(phi[idx_detritus][j][k+1] + phi[idx_detritus][j][k]);
+           fo = 0.5*fabs(wsink/day)*(phi[idx_detritus][j][k] + phi[idx_detritus][j][k-1]);
+       }
+       
+       Dsink = (fi-fo)*_dz_phi[j][k];
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    //
-    // Calculate the nutrient uptake and mortality by phytoplankton
-    //
-    
-    for (ip = 0; ip < MP; ip++)
-    {
-        umax = bgcRates[ip][idxUptake]/day;
-        kn = bgcRates[ip][idxSat];
-        UPvec[ip] = ifrac*tfrac*phi[idx_phyto+ip][j][k]*N*(1-exp(-N))/(N + kn);
-        MPvec[ip] = umax*mpfrac*phi[idx_phyto+ip][j][k];
-        
-    }
-    
-    
-    uptake = 0;
-    pmort = 0;
-    for (ip = 0; ip < MP; ip++)
-    {
-        uptake += UPvec[ip];
-        pmort += MPvec[ip];
-    }
-    
-    
-    
-    
-    
-    //
-    // Calculate the effect of remineralization
-    //
-    remin = (rmax/day)*D;  // rmax updated to units of seconds
-    
-    
-    
-    //
-    // Calculate mortality of zooplankton
-    //
-    for (iz = 0; iz < MZ; iz++)
-    {
-        MZvec[iz] = (mztwo/day)*pow(phi[idx_zoo+iz][j][k],2);
-    }
-    
-    zmort = 0;
-    for (iz = 0; iz < MZ; iz++)
-    {
-        zmort += MZvec[iz];
-    }
-    
-    
-    
-    
-    
-    //
-    // Update the time tendencies for all of the biogeochemical parameters
-    //
-    
-//    real upp = 0;
-//    real gpp = 0;
-//    real mpt = 0;
-//    real gzz = 0;
-//    real hmt = 0;
-//    real hpt = 0;
-//    real mzz = 0;
-//
-//
-    // nutrient
-    dphi_dt[idx_nitrate][j][k] += remin - uptake;
-    
-    // phytoplankton
+    // update all time tendencies
+    dphi_dt[idx_nitrate][j][k] += -uptot + remin;
     for (ip = 0; ip < MP; ip++)
     {
         dphi_dt[idx_phyto+ip][j][k] += UPvec[ip] - GPvec[ip] - MPvec[ip];
     }
-    
-//    for (ip = 0; ip < MP; ip++)
-//    {
-//        upp += UPvec[ip];
-//        gpp += GPvec[ip];
-//        mpt += MPvec[ip];
-//    }
-    
-    // zooplankton
-    for (iz = 0; iz < MZ; iz++)
+    for (iz = 0; iz < MZ; iz ++)
     {
-        dphi_dt[idx_zoo+iz][j][k] += eff*GZvec[iz] - HMvec[iz] + seff*HPvec[iz] - MZvec[iz];
-//        gzz += eff*GZvec[iz];
-//        hmz += HMvec[iz];
-//        hpz += + seff*HPvec[iz];
-//        mzz += MZvec[iz];
+        dphi_dt[idx_zoo+iz][j][k] += GZvec[iz] - MZvec[iz];
     }
-    
-//    for (iz = 0; iz < MZ; iz++)
-//    {
-//        gzz += GZvec[iz];
-//        hmt += HMvec[iz];
-//        hpt += HPvec[iz];
-//        mzz += MZvec[iz];
-//    }
-    
-    // detritus
-    dphi_dt[idx_detritus][j][k] += (1-eff)*gmess + (1-seff)*hmess - remin + pmort + zmort;
-    
-    
-    // check to see if everything is conserved
-//    fprintf(stderr,"uptake total: %.3e -- N = %.3e, P = %.3e \n",upp-uptake,uptake,upp);
-//    real gpr =(eff*gzz)+((1-eff)*gmess) - gpp;
-//    real hpr = (seff*hpt)+((1-seff)*hmess)-hmt;
-//    fprintf(stderr,"grazing total: %.3e -- P = %.3e, Z = %.3e, D = %.3e \n",gpr,-gpp,(eff*gzz),((1-eff)*gmess));
-//    fprintf(stderr,"mixotrophy total: %.3e -- ZM = %.3e, ZP = %.3e, D = %.3e \n",hpr,-hmt,(seff*hpt),((1-seff)*hmess));
-////    fprintf(stderr,"mortality total: %.1e -- P = %.10e, Z = %.3e, D = %.3e \n",(pmort-mpt)+(zmort-mzz),pmort-mpt,zmort-mzz,mztwo/day);
-//    fprintf(stderr," \n");
-//    fprintf(stderr," \n");
-//    fprintf(stderr," \n");
-    
-//    debug = true;
-    
-//    // Print to check
-//    for (ip = 0; ip < MP; ip++)
-//    {
-////        for (iz = 0; iz < MZ; iz++)
-////        {
-//        umax = bgcRates[ip][idxUptake]/day;
-//        kn = bgcRates[ip][idxSat];
-//            fprintf(stderr,"ind = %d, mort = %.3e, mort = %.3e, umax = %.3e, kn = %.3e \n",ip,MZvec[ip],MPvec[ip],umax,remin);
-//            fflush(stderr);
-//            debug = true;
-////        }
-//
-//    }
+    dphi_dt[idx_detritus][j][k] += dmort + gmess - remin + Dsink;
     
 
 }
@@ -2337,7 +2210,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     real cfl_z = 0;;
     real cfl_igw = 0;
     real cfl_sink = 0;
-    real cfl_bgc = 10;
+    real cfl_bgc = 0;
     real u_max = 0;
     real w_dz = 0;
     real w_dz_max = 0;
@@ -2525,6 +2398,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     }
     
     
+    
     // Calculate CFL criteria
     cfl_u = 0.5*dx/u_max;
     cfl_w = 0.5/w_dz_max;
@@ -2535,7 +2409,7 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
 
     // Actual CFL-limted time step
     cfl_phys = fmin(fmin(cfl_u,cfl_w),fmin(cfl_y,cfl_z));
-    cfl_phys = fmin(fmin(cfl_sink,cfl_igw),fmin(cfl_phys,cfl_bgc));
+    cfl_phys = fmin(fmin(cfl_sink,cfl_igw),cfl_phys);
     cfl_dt = cfl_phys;
     
     
@@ -3497,8 +3371,8 @@ int main (int argc, char ** argv)
     MATALLOC(bgcRates,nallo,idxAllo);
     MATALLOC(theta_p,MP,MZ);
     MATALLOC(theta_z,MZ,MZ);
-    MATALLOC(GPZ,MP,MZ);
-    MATALLOC(HZZ,MP,MZ);
+    MATALLOC(grazMat,MP,MZ);
+    MATALLOC(hetMat,MP,MZ);
     VECALLOC(bgc_params,npbgc);
     VECALLOC(lpvec,MP);
     VECALLOC(lzvec,MZ);

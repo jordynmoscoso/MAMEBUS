@@ -257,8 +257,8 @@ ncase = 1;
     %%% Store the image in the movie buffer  
     xlabel('x (km)');    
     ylabel('z (km)','Rotation',0);        
-    set(gca,'XTick',(0:Lx/5:Lx)/1000);
-    set(gca,'YTick',-H:H/5:0);
+%     set(gca,'XTick',(0:Lx/5:Lx)/1000);
+%     set(gca,'YTick',-H:H/5:0);
 %     title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
     
     nextframe = getframe(gcf);    

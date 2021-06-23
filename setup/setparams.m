@@ -12,7 +12,7 @@
 %%% the run files will be written. N.B. a directory called 'run_name' will
 %%% be created within local_home_dir to house the files.
 %%%
-function setparams (local_home_dir,run_name)  
+function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)  
   %%% Convenience scripts used in this function
   addpath ../utils; % cmocean.m should be downloaded here
   model_code_dir = '../code';
@@ -22,7 +22,7 @@ function setparams (local_home_dir,run_name)
   paramTypes;
   
   %%% Biogeochemistry
-  modeltype = BGC_NPZD; % BGC_NONE (physical model only)
+%   modeltype = BGC_ROEM; % BGC_NONE (physical model only)
                         % BGC_NPZD (size structured NPZD model)
                         % BGC_ROEM (reduced order ecosystem model)
   if (modeltype > 2)
@@ -31,11 +31,11 @@ function setparams (local_home_dir,run_name)
   end
   
   %%% Plot the setup figures
-  plotfigs = false;
+  plotfigs = true;
   
   %%% If set true, set up this run for the cluster
   %%% This may need tuning for individual systems
-  use_cluster = false;
+%   use_cluster = true;
   use_intel = false;
   use_pbs = use_cluster;
 %   cluster_home_dir = 'CLUSTER_DIRECTORY';
@@ -65,7 +65,7 @@ function setparams (local_home_dir,run_name)
   endTime = 20*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = .1*t1day;
+  outputFreq = 10*t1day;
     
   %%%%%%%%%%%%%%%%%%%%%%%% Domain dimensions %%%%%%%%%%%%%%%%%%%%%%%%%%%%
   m1km = 1000; %%% Meters in 1 km    
@@ -73,12 +73,13 @@ function setparams (local_home_dir,run_name)
   H = 3000; %%% Depth of domain including mixed layers
   
   %%%%%%%%%%%%%%%%%%%% Scalar parameter definitions %%%%%%%%%%%%%%%%%%%%%
-  tau0 = -0.025; %%% Northward wind stress (N m^{-2})
+  tau0 = -0.1; %%% Northward wind stress (N m^{-2})
   shelfdepth = 50; %%% Depth of shelf on western boundary
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
   Kiso0 = 2*Kgm0; %%% Reference isopycnal
+%   Kiso0 = 1000;
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
   Hsml = 25; %%% Surface mixed layer thickness
   Hbbl = 30; %%% Bottom boundary layer thickness
@@ -104,7 +105,7 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%% Define the topography %%%%%%%%%%%%%%%%%%%%%%%%
   Xtopog = 290*m1km;
   Ltopog = 30*m1km;
-  shelfdepth = 50;
+  shelfdepth = 25;
   Htopog = H-shelfdepth;
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
@@ -170,8 +171,8 @@ function setparams (local_home_dir,run_name)
   % RESIZE BGC INIT
   % ADD ZETA TO BGC PARAMS
   % READ IN ALLOMETRIC COEFFICIENTS AND CALCULATE THINGS IN MODEL.
-  MP = 1;
-  MZ = 1;
+%   MP = 2;
+%   MZ = 2;
   
   % Generate the BGC parameters and initial conditions
   [bgc_params, bgc_init, bgctracs, lp, lz, NP, NZ, bgcRates, nAllo, idxAllo] = ...
@@ -237,7 +238,7 @@ function setparams (local_home_dir,run_name)
   phi_init(IDX_VVEL,:,:) = reshape(vvel_init,[1 Nx Nz]);
   phi_init(IDX_BUOY,:,:) = reshape(buoy_init,[1 Nx Nz]);  
   
-  if (modeltype == 1)
+  if (modeltype > 0)
       IDX_NIT = IDX_BUOY+1;
       for ii = 1:Nbgc
         phi_init(IDX_NIT+ii-1,:,:) = reshape(bgc_init(:,:,ii), [1 Nx Nz]);
@@ -277,7 +278,7 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   %%% Create the profile of wind stress
-  tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/4)) );
+  tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/16)) );
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -330,6 +331,17 @@ function setparams (local_home_dir,run_name)
   T_relax_all(IDX_UVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
   T_relax_all(IDX_VVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
   T_relax_all(IDX_BUOY,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);  
+  
+  
+ %%% If there is a biogeochemcial model, relax the nutrient concentration
+   if (modeltype > 0)
+      IDX_NIT = IDX_BUOY+1;
+      phi_relax_all(IDX_NIT,:,:) = reshape(bgc_init(:,:,1), [1 Nx Nz]);
+      T_relax_nit = -ones(Nx,Nz);
+      T_relax_nit(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
+      T_relax_nit(XX_tr>=L_relax) = -1;
+      T_relax_all(IDX_BUOY+1,:,:) = reshape(T_relax_nit,[1 Nx Nz]);  
+  end
   
   %%% Store the files
   relaxTracerFile = 'relaxTracer.dat';
@@ -480,20 +492,19 @@ function setparams (local_home_dir,run_name)
   
   % Isopycnal diffusivity
   figure(fignum);
-  subplot(1,2,1)
+  D1 = subplot(1,2,1);
   pcolor(XX_psi,ZZ_psi,Kiso)
   title('Isopycnal Diffusivity, \kappa_{iso}')
-  colormap(difmap)
+  colormap(D1,difmap)
   shading interp
   colorbar
   xlabel('Distance (km)')
   
   % Buoyancy diffusivity
-  figure(fignum);
-  subplot(1,2,2)
+  D2 = subplot(1,2,2);
   pcolor(XX_psi,ZZ_psi,Kgm)
   title('Gent/McWilliams Diffusivity, \kappa_{gm}')
-  colormap(difmap)
+  colormap(D2,difmap)
   shading interp
   colorbar
   xlabel('Distance (km)')
@@ -502,19 +513,27 @@ function setparams (local_home_dir,run_name)
   % Initial buoyancy
   bmap = cmocean('thermal');
   figure(fignum);
+  TA = subplot(1,3,1);
   [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
   clabel(C,h)
-  colormap(bmap)
+  colormap(TA,bmap)
   title('Initial Buoyancy')
   colorbar
   
+  subplot(1,3,2)
+  plot(xx_psi,tau,'LineWidth',3)
+  
+  subplot(1,3,3)
+  plot(xx_psi(2:end),(tau(2:end) - tau(1:end-1))./dx,'--','LineWidth',2)
+  fignum = fignum+1;
   
   % Initial phytoplankton concentration
   pmap = cmocean('speed');
   cmap = cmocean('matter');
   figure(fignum);
   A = subplot(1,2,1);
-  pcolor(XX_tr,ZZ_tr,squeeze(phi_init(4,:,:)));
+  [C h] = contourf(XX_tr,ZZ_tr,squeeze(phi_init(4,:,:)),[0:4:30]);
+  clabel(C,h,'Color','w')
   title('Initial nitrate concentration')
   shading interp
   colormap(A, cmap)
@@ -527,6 +546,8 @@ function setparams (local_home_dir,run_name)
   colormap(B,pmap)
   axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
   colorbar
+  
+  
 
   end
   

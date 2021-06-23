@@ -47,12 +47,12 @@ switch modeltype
 
         %%% Create a vector to hold all of the size classes
         minp = 0.5;
-        maxz = 2000;
+        maxz = 300;
         minz = exp(log(minp./loptCoeff)./loptExp); % micrometers
         maxp = floor(loptCoeff*(maxz).^loptExp);
 
         if MP == 1
-            lp = [minp].';
+            lp = minp.';
             NP = 1;
         else
             lp = (logspace(log10(minp),log10(maxp),MP)).';
@@ -60,7 +60,7 @@ switch modeltype
         end
 
         if MZ == 1
-            lz = [minz].';
+            lz = minz.';
             NZ = 1;
         else
             lz = (logspace(log10(minz),log10(maxz),MZ)).';

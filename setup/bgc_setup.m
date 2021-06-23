@@ -32,7 +32,7 @@ seff = 0.3; % self grazing efficiency
 kp = 3; % mmol N/m^3
 bl = 0.5;
 al = 0.65;
-delta_x = 0.3; % width of grazing profile
+delta_x = 0.1; % width of grazing profile
 idxAllo = 4;
 pdia = 1e-9;
 
@@ -58,11 +58,11 @@ nbgc = length(params);
 
 
 %%% Create initial conditions
-Pcline = 75;
-Pmax = 0.1; % mmol/m3
-Dmax = 0;
+Pcline = 200;
+Pmax = 0.01; % mmol/m3
+Dmax = 0.0001;
 
-euph_init = Pmax*(tanh(ZZ_tr/Pcline))+0.1;
+euph_init = Pmax*(tanh(ZZ_tr/Pcline))+Pmax;
 
 %%% Initial nitrate profile (Hyperbolic)
 Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
@@ -83,5 +83,5 @@ for ii = 1:NZ
 end
 
 % detritus
-bgc_init(:,:,ind) = Dmax*zeros(Nx,Nz);
+bgc_init(:,:,ind) = Dmax*ones(Nx,Nz);
 end
