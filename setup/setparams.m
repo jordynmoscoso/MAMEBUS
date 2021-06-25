@@ -78,8 +78,8 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
-  Kiso0 = 2*Kgm0; %%% Reference isopycnal
-%   Kiso0 = 1000;
+%   Kiso0 = 2*Kgm0; %%% Reference isopycnal
+  Kiso0 = Kgm0;
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
   Hsml = 25; %%% Surface mixed layer thickness
   Hbbl = 30; %%% Bottom boundary layer thickness
@@ -101,6 +101,8 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   %%% Viscosities (empirically determined from a reference simulation)
   nu_h = 10*dx/10000;
   nu_v = 0.1*(H/Nz)/100;
+%   nu_h = 0;
+%   nu_v = 0;
 
   %%%%%%%%%%%%%%%%%%%%%%%% Define the topography %%%%%%%%%%%%%%%%%%%%%%%%
   Xtopog = 290*m1km;
@@ -279,6 +281,10 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
  
   %%% Create the profile of wind stress
   tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/16)) );
+%   tau = tau0*((sech((Lx/2 - xx_psi)/(Lx/8)).^2));
+ 
+  
+  
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -522,9 +528,11 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   
   subplot(1,3,2)
   plot(xx_psi,tau,'LineWidth',3)
+  title('Wind Stress')
   
   subplot(1,3,3)
   plot(xx_psi(2:end),(tau(2:end) - tau(1:end-1))./dx,'--','LineWidth',2)
+  title('Wind Stress Curl')
   fignum = fignum+1;
   
   % Initial phytoplankton concentration

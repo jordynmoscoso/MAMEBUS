@@ -885,12 +885,13 @@ void calcSlopes (     const real        t,
                     cff = 1.0/dA_psi[j][k];
                     if (k == Nz-1)
                     {
-                        // The Shchepetkin/McWilliams 2003 paper says to do this but it seems to be causing an error. So we'll use the linear calculation for the surface.
+                        // Use a linear calculation for the surface.
                         db_dx[j][k] = 0.5 * ( (buoy[j][k]-buoy[j-1][k])*_dx + (buoy[j][k-1]-buoy[j-1][k-1])*_dx );
                         db_dx[j][k] -= (ZZ_w[j][k]-ZZ_w[j-1][k])*_dx * db_dz[j][k];
                     }
                     else
                     {
+                        // Calculate the buoyancy gradient using the cubic spline interpolation
                         db_dx[j][k] = -(FC[j][k] - FC[j][k-1] + FX[j-1][k] - FX[j][k])*cff;
                     }
                 }
@@ -1764,27 +1765,29 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
     calcPressure(t,buoy);
     
     // Calculate the tendency due to the coriolis force and add to the pressure term
-    for (j = 0; j < Nx; j++)
+    for (j = 1; j < Nx; j++)
     {
         for (k = 0; k < Nz; k++)
         {
             du_dt[j][k] = f0*vvel[j][k] - BPx[j][k];
             dv_dt[j][k] = -f0*uvel[j][k] - BPy[j][k];
             
-            if (j == 0)
+            if (j == 1)
             {
                 du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dx;
                 dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dx;
             }
-            else if (j == Nx)
+            else if (j == Nx-1) // Should these have sizes of (Nx+1) x (Nz)?
             {
                 du_dt[j][k] += nu_h*(uvel[j-1][k]-uvel[j][k])/dxsq;
                 dv_dt[j][k] += nu_h*(vvel[j-1][k]-vvel[j][k])/dxsq;
+//                du_dt[j][k] += nu_h*(uvel[j-1][k]-2*uvel[j][k])/dxsq;
+//                dv_dt[j][k] += nu_h*(uvel[j-1][k]-2*vvel[j][k])/dxsq;
             }
             else
             {
                 du_dt[j][k] += nu_h*(uvel[j+1][k]-2*uvel[j][k]+uvel[j-1][k])/dxsq;
-                dv_dt[j][k] += nu_h*(vvel[j+1][k]-2*vvel[j][k]+uvel[j-1][k])/dxsq;
+                dv_dt[j][k] += nu_h*(vvel[j+1][k]-2*vvel[j][k]+vvel[j-1][k])/dxsq;
             }
             
             if (k == 0)
@@ -1792,7 +1795,7 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 du_dt[j][k] += nu_v*(uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
                 dv_dt[j][k] += nu_v*(vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
             }
-            else if (k == Nz)
+            else if (k == Nz-1)
             {
                 du_dt[j][k] += nu_v*(uvel[j][k-1]-uvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
                 dv_dt[j][k] += nu_v*(vvel[j][k-1]-vvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
@@ -1828,8 +1831,9 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
         
     }
     
-    for (k = 0; k < Nz; k++) // u,v tendencies are zero at the western wall
+    for (k = 0; k < Nz; k++)
     {
+        // u,v tendencies are zero at the western edge of the domain
         du_dt[0][k] = 0;
         dv_dt[0][k] = 0;
     }

@@ -220,12 +220,23 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             cmap = cmocean('balance');
             pcolor(XX_tr,ZZ_tr,avgVals)
 %             shading interp
-            h = colorbar; 
-            colormap(cmap)
-            h.TickLabelInterpreter = 'latex';
+            c = colorbar; 
+            colormap(cmap);
+            c.TickLabelInterpreter = 'latex';
+            set(gca,'TickLabelInterpreter','latex')
+            set(gca,'FontSize',fsplt)
+            ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
+            xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+%             set(gcf,'Position',[100 100 724 654])
+            xticks(0:50e3:400e3)
+            xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
             maxspeed = 0.01;
             minval = max(max(max(avgVals)),maxspeed);
             minval = abs(min(min(min(avgVals)),-minval));
+%             yticks(-180:20:0)
+%             yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
+%             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -180 0])
+%             minval = 0.35;
             caxis([-minval minval]);
             title(titlestr,'interpreter','latex')
             shading interp
@@ -261,7 +272,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             pcolor(XX_tr,ZZ_tr,avgVals);
             hold on
             [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,clr);
-%             [C h] = contour(XX_tr,ZZ_tr,avgVals,round(linspace(min(min(avgVals)),max(max(avgVals)),7),2),'w');
             clabel(C,h,'Color','w')
             hold off
             shading interp
