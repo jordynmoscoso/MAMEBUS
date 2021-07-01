@@ -78,8 +78,8 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
-%   Kiso0 = 2*Kgm0; %%% Reference isopycnal
-  Kiso0 = Kgm0;
+  Kiso0 = 2*Kgm0; %%% Reference isopycnal
+%   Kiso0 = Kgm0;
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
   Hsml = 25; %%% Surface mixed layer thickness
   Hbbl = 30; %%% Bottom boundary layer thickness
@@ -106,7 +106,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
 
   %%%%%%%%%%%%%%%%%%%%%%%% Define the topography %%%%%%%%%%%%%%%%%%%%%%%%
   Xtopog = 290*m1km;
-  Ltopog = 30*m1km;
+  Ltopog = 45*m1km;
   shelfdepth = 25;
   Htopog = H-shelfdepth;
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
@@ -134,7 +134,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   disp(['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))])
-  disp(['Max Topographic Slope : ' num2str(min(hb_slope))])
+  disp(['Max Topographic Slope : ' num2str(max(abs(hb_slope)))])
   
   
   %%% Calculate grid stiffness  

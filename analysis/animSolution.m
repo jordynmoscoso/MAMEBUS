@@ -142,6 +142,7 @@ ncase = 1;
   %%% Tracks whether we should still read data
   stillReading = true;
   counter = 1;
+  n0 = 350;
   n = n0;
   
   % Determines whether or not to make a movie and writes a new file to
@@ -239,14 +240,16 @@ ncase = 1;
 
       %%% Plot the streamfunction
       psi_r_lim = psi;
-      limval = 2;
-      psi_r_lim = min(psi_r_lim,limval);
-      psi_r_lim = max(psi_r_lim,-limval);
+      limval = 300;
+      min(min(psi))
+      max(max(psi))
+%       psi_r_lim = min(psi_r_lim,-limval);
+%       psi_r_lim = max(psi_r_lim,limval);
 %       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
-      figure(1)
+      figure(107)
       pcolor(XX_psi,ZZ_psi,psi_r_lim);
       shading interp;     
-      colormap redblue;
+      colormap(cmocean('balance'));
       h=colorbar;        
       caxis([-limval limval]);
       set(h,'FontSize',18);
@@ -259,7 +262,7 @@ ncase = 1;
     ylabel('z (km)','Rotation',0);        
 %     set(gca,'XTick',(0:Lx/5:Lx)/1000);
 %     set(gca,'YTick',-H:H/5:0);
-%     title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
+    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 

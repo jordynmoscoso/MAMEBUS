@@ -1777,12 +1777,11 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                 du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dx;
                 dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dx;
             }
-            else if (j == Nx-1) // Should these have sizes of (Nx+1) x (Nz)?
+            else if (j == Nx-1)
             {
+                
                 du_dt[j][k] += nu_h*(uvel[j-1][k]-uvel[j][k])/dxsq;
                 dv_dt[j][k] += nu_h*(vvel[j-1][k]-vvel[j][k])/dxsq;
-//                du_dt[j][k] += nu_h*(uvel[j-1][k]-2*uvel[j][k])/dxsq;
-//                dv_dt[j][k] += nu_h*(uvel[j-1][k]-2*vvel[j][k])/dxsq;
             }
             else
             {
@@ -1792,13 +1791,22 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             
             if (k == 0)
             {
-                du_dt[j][k] += nu_v*(uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-                dv_dt[j][k] += nu_v*(vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+                du_dt[j][k] += nu_v * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz)
+                                    * (uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+                dv_dt[j][k] += nu_v * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz)
+                                    * (vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+//                if (j == Nx-1)
+//                {
+////                    fprintf(stderr,"%f %f %f %f %d \n",ZZ_u[j][k+1],ZZ_u[j][k],ZZ_psi[j][k+1],ZZ_psi[j][k],k);
+//                    fprintf(stderr,"%f %f %f %f %d \n",uvel[j][k+1],uvel[j][k],vvel[j][k+1],vvel[j][k],k);
+//                }
             }
             else if (k == Nz-1)
             {
-                du_dt[j][k] += nu_v*(uvel[j][k-1]-uvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-                dv_dt[j][k] += nu_v*(vvel[j][k-1]-vvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+                du_dt[j][k] += nu_v * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz)
+                                    * (uvel[j][k-1]-uvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
+                dv_dt[j][k] += nu_v * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz)
+                                    * (vvel[j][k-1]-vvel[j][k])/((ZZ_u[j][k]-ZZ_u[j][k-1])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
             }
             else
             {
@@ -2787,7 +2795,7 @@ bool writeModelState (const int t, const int n, real *** phi, char * outdir)
     if (!writeOutputFile(outfile,psi_e,Nx+1,Nz+1)) return false;
     
     // Debugging
-    if (debug && t > 0.05)
+    if (debug && t > 0.1)
     {
         // Write iteration data for the file of interest
         constructOutputName(outdir,OUTN_DBDX_CUBIC,-1,n,outfile);
