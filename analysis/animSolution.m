@@ -19,7 +19,6 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
  
   %%% Load convenience functions
   addpath ../utils;
-  addpath ./redblue
 
   
   %%%%%%%%%%%%%%%%%%%%%
@@ -56,6 +55,8 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
   [endTime endTime_found] = readparam(params_file,'endTime','%lf'); 
   [restart restart_found] = readparam(params_file,'restart','%d');
   [n0 n0_found] = readparam(params_file,'startIdx','%u');
+  
+
 
   %%% Default is that we're not picking up from a previous simulation
   if (~restart_found)
@@ -67,6 +68,10 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     n0 = 0;
   end
   
+  t1year = 365*86400; %%% Seconds in one year
+  t1day = 86400;
+  
+  
   %%% If the start time isn't specified then it may be specified implicitly
   %%% by the pickup file
   if (~startTime_found)
@@ -77,9 +82,19 @@ function M = animSolution (local_home_dir,run_name,plot_trac,var_id,...
     end
   end
   
+  % shows the last number of years for this run
+%   if yrshow > 0
+%     startTime = endTime - yrshow*t1year;
+%       
+%   end
+      
+%   
+%   t1day = 60*60*24;
+%   startTime = 350*dt_s;
+%   n0 = 350;
+  
   %%% For convenience
-  t1year = 365*86400; %%% Seconds in one year
-  t1day = 86400;
+
   
   %%% If user is plotting nitrate, indicate what to plot
 %   if (var_id == 2 && plot_trac)
@@ -143,6 +158,7 @@ ncase = 1;
   %%% Tracks whether we should still read data
   stillReading = true;
   counter = 1;
+
   n = n0;
   
   % Determines whether or not to make a movie and writes a new file to
@@ -202,6 +218,16 @@ ncase = 1;
 %       caxis([0 20]);
 %       axis([0 1 -1 0]);
 
+          otherwise 
+%           [C h] = contourf(XX_tr/1000,ZZ_tr,phi,0:0.5:10);
+          pcolor(XX_tr/1000,ZZ_tr,phi);
+          shading interp
+%           set(gca, 'CLim', [0, 1]);
+            colormap(cmocean('speed',20));
+          h=colorbar;
+          title(['BGC, t=', num2str(t/t1year)]);          
+%       caxis([0 20]);
+          axis([min(min(XX_tr/1000)) max(max(XX_tr/1000)) -300 0]);
       end
 %       clabel(C,h,'Color','w');  
 %       set(h,'ShowText','on'); 
@@ -230,16 +256,19 @@ ncase = 1;
 
       %%% Plot the streamfunction
       psi_r_lim = psi;
-      limval = 2;
+      limval = 1.5;
+%       min(min(psi))
+%       max(max(psi))
       psi_r_lim = min(psi_r_lim,limval);
       psi_r_lim = max(psi_r_lim,-limval);
-%       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:limval/40:limval,'EdgeColor','k');  
-      figure(1)
+%       [C h] = contourf(XX_psi,ZZ_psi,psi_r_lim,-limval:0.05:0,'EdgeColor','k');  
+      figure(107)
       pcolor(XX_psi,ZZ_psi,psi_r_lim);
       shading interp;     
-      colormap redblue;
+      colormap(cmocean('balance'));
       h=colorbar;        
       caxis([-limval limval]);
+%       caxis([-1.5 0])
       set(h,'FontSize',18);
 
     end
@@ -248,10 +277,9 @@ ncase = 1;
     %%% Store the image in the movie buffer  
     xlabel('x (km)');    
     ylabel('z (km)','Rotation',0);        
-    axis tight;
-    set(gca,'XTick',(0:Lx/5:Lx)/1000);
-    set(gca,'YTick',-H:H/5:0);
-%     title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
+%     set(gca,'XTick',(0:Lx/5:Lx)/1000);
+%     set(gca,'YTick',-H:H/5:0);
+    title(strcat(['t=',num2str(round(t/t1day)),' days (',num2str(round(t/t1year)),' yr)', ' mmol N/m^3']));           
     
     nextframe = getframe(gcf);    
     M(counter) = nextframe; 

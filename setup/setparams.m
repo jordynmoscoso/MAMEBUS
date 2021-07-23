@@ -12,32 +12,38 @@
 %%% the run files will be written. N.B. a directory called 'run_name' will
 %%% be created within local_home_dir to house the files.
 %%%
-function setparams (local_home_dir,run_name)  
+function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)  
   %%% Convenience scripts used in this function
   addpath ../utils; % cmocean.m should be downloaded here
   model_code_dir = '../code';
+  data_dir = '../utils'; 
  
   %%% Load globally-defined constants
   paramTypes;
   
-  % User defined choices:
-  modeltype = BGC_NPZD; % BGC_NONE (physical model only) or BGC_NPZD (NPZD model)
-  if (modeltype > 1)
-    modeltype = BGC_NONE; %%% This automatically defaults so that the model runs without biogeochemistry
+  %%% Biogeochemistry
+%   modeltype = BGC_ROEM; % BGC_NONE (physical model only)
+                        % BGC_NPZD (size structured NPZD model)
+                        % BGC_ROEM (reduced order ecosystem model)
+  if (modeltype > 2)
+    disp('Parameter: modeltype undefined, no bgc defined')
+    modeltype = BGC_NONE; %%% Defaults to run wihtout bgc
   end
+  
+%   BGC_NPZD
   
   %%% Plot the setup figures
   plotfigs = true;
   
   %%% If set true, set up this run for the cluster
   %%% This may need tuning for individual systems
-  use_cluster = false;
+%   use_cluster = true;
   use_intel = false;
   use_pbs = use_cluster;
   cluster_home_dir = 'CLUSTER_DIRECTORY';
   uname = 'USERNAME';
   cluster_addr = 'CLUSTER-ADDRESS';
-  
+
   %%% Run directory
   run_name = strtrim(run_name);  
   exec_name = 'mamebus.exe';      
@@ -48,39 +54,39 @@ function setparams (local_home_dir,run_name)
   %%% To store parameters  
   PARAMS = {};
   
-  %%% Time parameters
+  %%%%%%%%%%%%%%%%%%%%%%%%%%% Time parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
   t1day = 86400; %%% Seconds in 1 day
   t1year = 365*t1day; %%% Seconds in 1 year
-  endTime = 20*t1year;
+  endTime = 30*t1year;
   restart = false;
   startIdx = 15;
-  outputFreq = 1*t1day;
+  outputFreq = 10*t1day;
     
-  %%% Domain dimensions
+  %%%%%%%%%%%%%%%%%%%%%%%% Domain dimensions %%%%%%%%%%%%%%%%%%%%%%%%%%%%
   m1km = 1000; %%% Meters in 1 km    
   Lx = 400*m1km; %%% Computational domain width
   H = 3000; %%% Depth of domain including mixed layers
   
-  %%% Scalar parameter definitions 
-  tau0 = -0.025; %%% Northward wind stress (N m^{-2})
-%   tau0 = 0;
+  %%%%%%%%%%%%%%%%%%%% Scalar parameter definitions %%%%%%%%%%%%%%%%%%%%%
+  tau0 = -0.075; %%% Northward wind stress (N m^{-2})
   shelfdepth = 50; %%% Depth of shelf on western boundary
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
   Kgm0 = 1200; %%% Reference GM diffusivity
-  Kiso0 = 1000; %%% Reference isopycnal
+  Kiso0 = 2*Kgm0; %%% Reference isopycnal
+%   Kiso0 = Kgm0;
   Kdia0 = 1e-5; %%% Reference diapycnal diffusivity  
-  Hsml = 50; %%% Surface mixed layer thickness
-  Hbbl = 40; %%% Bottom boundary layer thickness
+  Hsml = 25; %%% Surface mixed layer thickness
+  Hbbl = 30; %%% Bottom boundary layer thickness
   r_bbl = 1e-3; %%% Bottom boundary layer drag coefficient
 
-  %%% Grid parameters
+  %%%%%%%%%%%%%%%%%%%%%%%%%%% Grid parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
   h_c = 250; %%% Sigma coordinate surface layer thickness parameter (must be > 0)
   theta_s = 9; %%% Sigma coordinate surface stretching parameter (must be in [0,10])
   theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
-  %%% Grids  
-  Nx = 32; %%% Number of latitudinal grid points
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Grids %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  Nx = 64; %%% Number of latitudinal grid points
   Nz = Nx; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
@@ -88,24 +94,13 @@ function setparams (local_home_dir,run_name)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
 
   %%% Viscosities (empirically determined from a reference simulation)
-  nu_h = 10*dx/10000;
-  nu_v = 0.1*(H/Nz)/100;
-  
-  
-  
-  %%% For plotting figures of setup
-  fignum = 1;
+  nu_h = 10*(dx/10000).^2;
+  nu_v = 0.1*((H/Nz)/100).^2;
 
-  
-  disp(['Shelf Depth: ', num2str(shelfdepth)])
-  if shelfdepth < Hsml + Hbbl
-      disp('Full depth mixed layer on the shelf')
-  end
-
-  %%% Define the topography
+  %%%%%%%%%%%%%%%%%%%%%%%% Define the topography %%%%%%%%%%%%%%%%%%%%%%%%
   Xtopog = 290*m1km;
   Ltopog = 30*m1km;
-  shelfdepth = 50;
+  shelfdepth = 35;
   Htopog = H-shelfdepth;
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
@@ -118,6 +113,13 @@ function setparams (local_home_dir,run_name)
   [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
                     = genGrids(Nx,Nz,Lx,h_c,theta_s,theta_b,hb_tr,hb_psi); 
   slopeidx = max((hb_psi>Htopog/2));
+  
+  
+  %%%%%%%%%%%%%%%%% Statements to read out to the user %%%%%%%%%%%%%%%%%
+  disp(['Shelf Depth: ', num2str(shelfdepth)])
+  if shelfdepth < Hsml + Hbbl
+      disp('Full depth mixed layer on the shelf')
+  end
   disp(['slopeidx = ',num2str(slopeidx)])
   disp(['Vertical grid spacing at (',num2str(XX_psi(1,1)),',',num2str(ZZ_psi(1,1)),'): ',num2str(ZZ_psi(1,2)-ZZ_psi(1,1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(1,end)),',',num2str(ZZ_psi(1,end)),'): ',num2str(ZZ_psi(1,end)-ZZ_psi(1,end-1))])
@@ -125,7 +127,7 @@ function setparams (local_home_dir,run_name)
   disp(['Vertical grid spacing at (',num2str(XX_psi(end,end)),',',num2str(ZZ_psi(end,end)),'): ',num2str(ZZ_psi(end,end)-ZZ_psi(end,end-1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,1)),',',num2str(ZZ_psi(slopeidx,1)),'): ',num2str(ZZ_psi(slopeidx,2)-ZZ_psi(slopeidx,1))])
   disp(['Vertical grid spacing at (',num2str(XX_psi(slopeidx,end)),',',num2str(ZZ_psi(slopeidx,end)),'): ',num2str(ZZ_psi(slopeidx,end)-ZZ_psi(slopeidx,end-1))])
-  disp(['Max Topographic Slope : ' num2str(min(hb_slope))])
+  disp(['Max Topographic Slope : ' num2str(max(abs(hb_slope)))])
   
   
   %%% Calculate grid stiffness  
@@ -133,7 +135,7 @@ function setparams (local_home_dir,run_name)
   disp(['Grid stiffness: ' num2str(max(max(rx1)))]  )
   
   
-  %%% Define parameter
+  %%%%%%%%%%%%%%%%%%%%%%%%%% Define parameters %%%%%%%%%%%%%%%%%%%%%%%%%%
   PARAMS = addParameter(PARAMS,'Nx',Nx,PARM_INT);
   PARAMS = addParameter(PARAMS,'Nz',Nz,PARM_INT);  
   PARAMS = addParameter(PARAMS,'Lx',Lx,PARM_REALF);
@@ -153,47 +155,56 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'r_bbl',r_bbl,PARM_REALF);
   PARAMS = addParameter(PARAMS,'nu_h',nu_h,PARM_REALF);
   PARAMS = addParameter(PARAMS,'nu_v',nu_v,PARM_REALF);
-  
-  
-  
-  %%%%%%%%%%%%%%%%%%%%%
-  %%%%% BGC Model %%%%%
-  %%%%%%%%%%%%%%%%%%%%%
-  
-  if modeltype
-      MP = 1; MZ = 1; MD = 1; MN = 1;
-      Nbgc = MP + MZ + MD + MN;
-  else
-      MP = 0; MZ = 0; MD = 0;
-      Nbgc = 0;
-  end
-  
-  PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
   PARAMS = addParameter(PARAMS,'pressureScheme',PRESSURE_CUBIC,PARM_INT);
-  PARAMS = addParameter(PARAMS,'MP',MP,PARM_INT);
-  PARAMS = addParameter(PARAMS,'MZ',MZ,PARM_INT);
+  PARAMS = addParameter(PARAMS,'bgcModel',modeltype,PARM_INT);
   
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% BGC Model %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  % Generate the BGC parameters and initial conditions
+  [bgc_params, bgc_init, bgctracs, lp, lz, NP, NZ, bgcRates, nAllo, idxAllo] = ...
+                            bgc_setup(ZZ_tr,Nx,Nz,modeltype,MP,MZ,data_dir);
+  if modeltype == 0
+      NP = 0; NZ = 0;
+  end
+                        
   % Calculate the number of tracers
   Nphys = 3; %%% Number of physical tracers (u-velocity, v-velocity and buoyancy)
+  Nbgc = NP + NZ + 2; %%% The number of P and Z classes, plus one nutrient and one detritus
   Ntracs = Nphys + Nbgc; %%% Number of tracers (physical plus bgc plus any other user-defined tracers)
   
-  % Get the BGC parameters and initial conditions
-  [bgc_params, bgc_init, nbgc] = bgc_setup(ZZ_tr,Nx,Nz);
   
-  % Write the biogeochemistry to file
+  % Write the biogeochemistry to file and add paramters
   bgcFile = 'bgcFile.dat';
+  lpFile = 'lpFile.dat';
+  lzFile = 'lzFile.dat';
+  bgcRatesFile = 'bgcRatesFile.dat';
+  
+  % data files (vectors)
   writeDataFile(fullfile(local_run_dir,bgcFile),bgc_params);
+  writeDataFile(fullfile(local_run_dir,lpFile),lp);
+  writeDataFile(fullfile(local_run_dir,lzFile),lz);
+  writeDataFile(fullfile(local_run_dir,bgcRatesFile),bgcRates);
+  
+  % parameters
+  PARAMS = addParameter(PARAMS,'lpFile',lpFile,PARM_STR); 
+  PARAMS = addParameter(PARAMS,'lzFile',lzFile,PARM_STR);
+  PARAMS = addParameter(PARAMS,'bgcRatesFile',bgcRatesFile,PARM_STR);
+  PARAMS = addParameter(PARAMS,'MP',NP,PARM_INT);
+  PARAMS = addParameter(PARAMS,'MZ',NZ,PARM_INT);
   PARAMS = addParameter(PARAMS,'bgcFile',bgcFile,PARM_STR);
   PARAMS = addParameter(PARAMS,'Ntracs',Ntracs,PARM_INT);
-  PARAMS = addParameter(PARAMS,'nbgc',nbgc,PARM_INT);
+  PARAMS = addParameter(PARAMS,'npbgc',bgctracs,PARM_INT);
+  PARAMS = addParameter(PARAMS,'nallo',nAllo,PARM_INT);
+  PARAMS = addParameter(PARAMS,'idxAllo',idxAllo,PARM_INT);
   
   
   
   
-  
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  %%%%% Tracer initial conditions %%%%%
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%%%%%%%%%%%%%%%%%%%% Tracer initial conditions %%%%%%%%%%%%%%%%%%%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
   %%% To store all tracers
   phi_init = zeros(Ntracs,Nx,Nz);
@@ -214,10 +225,12 @@ function setparams (local_home_dir,run_name)
   phi_init(IDX_VVEL,:,:) = reshape(vvel_init,[1 Nx Nz]);
   phi_init(IDX_BUOY,:,:) = reshape(buoy_init,[1 Nx Nz]);  
   
-  if (modeltype == 1)
-      phi_init(Nphys+1:Nphys+Nbgc,:,:) = reshape(bgc_init,[Nbgc Nx Nz]);
+  if (modeltype > 0)
+      IDX_NIT = IDX_BUOY+1;
+      for ii = 1:Nbgc
+        phi_init(IDX_NIT+ii-1,:,:) = reshape(bgc_init(:,:,ii), [1 Nx Nz]);
+      end
   end
-  
 
   Nphys
   Nbgc
@@ -252,7 +265,11 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
  
   %%% Create the profile of wind stress
-  tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/4)) );
+  tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/16)) );
+%   tau = tau0*((sech((Lx/2 - xx_psi)/(Lx/8)).^2));
+  
+  
+  
   tlength = length(tau);
   
   tauFile = 'tau.dat';  
@@ -260,7 +277,7 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
   
-
+  
   
   
   
@@ -273,7 +290,7 @@ function setparams (local_home_dir,run_name)
   %%% Buoyancy relaxation parameters
   L_relax = 50*m1km;  
   T_relax_max = 30*t1day; %%% Fastest relaxation time
-
+  
   %%% Relax to initial buoyancy at the western boundary
   uvel_relax = -ones(size(uvel_init));
   vvel_relax = -ones(size(vvel_init));
@@ -305,6 +322,17 @@ function setparams (local_home_dir,run_name)
   T_relax_all(IDX_UVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
   T_relax_all(IDX_VVEL,:,:) = reshape(T_relax_veloc,[1 Nx Nz]);
   T_relax_all(IDX_BUOY,:,:) = reshape(T_relax_buoy,[1 Nx Nz]);  
+  
+  
+ %%% If there is a biogeochemcial model, relax the nutrient concentration
+   if (modeltype > 0)
+      IDX_NIT = IDX_BUOY+1;
+      phi_relax_all(IDX_NIT,:,:) = reshape(bgc_init(:,:,1), [1 Nx Nz]);
+      T_relax_nit = -ones(Nx,Nz);
+      T_relax_nit(XX_tr<L_relax) = 1 ./ (1/T_relax_max * (1 - XX_tr(XX_tr<L_relax) / L_relax));
+      T_relax_nit(XX_tr>=L_relax) = -1;
+      T_relax_all(IDX_BUOY+1,:,:) = reshape(T_relax_nit,[1 Nx Nz]);  
+  end
   
   %%% Store the files
   relaxTracerFile = 'relaxTracer.dat';
@@ -370,7 +398,7 @@ function setparams (local_home_dir,run_name)
   H_int(H_int < 0) = 0;
   Hmax = max(H_int);
   
-  lambda = 0.25; % tuning parameter for KGM diffusivity
+  lambda = 0.0625; % tuning parameter for KGM diffusivity
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
         Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
@@ -393,7 +421,7 @@ function setparams (local_home_dir,run_name)
   Hmax = max(H_int);
   
   Kiso = Kiso0*ones(Nx+1,Nz+1);
-  lambda = 0.25; % tuning parameter for Kiso diffusivity
+%   lambda = 0.25; % tuning parameter for Kiso diffusivity
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
         Kiso(jj,kk) = Kiso(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
@@ -441,15 +469,10 @@ function setparams (local_home_dir,run_name)
 
   
   
-  
-  %%% 
-  %%% The following is for visualization purposes and can be commented out.
-  %%% Plot some figures to show some initial values
-  %%%
-  
-  % Wind Stress Profile
-  
+ 
 
+  %%% For plotting figures of setup
+  fignum = 1;
   
   if(plotfigs)
   
@@ -460,20 +483,19 @@ function setparams (local_home_dir,run_name)
   
   % Isopycnal diffusivity
   figure(fignum);
-  subplot(1,2,1)
+  D1 = subplot(1,2,1);
   pcolor(XX_psi,ZZ_psi,Kiso)
   title('Isopycnal Diffusivity, \kappa_{iso}')
-  colormap(difmap)
+  colormap(D1,difmap)
   shading interp
   colorbar
   xlabel('Distance (km)')
   
   % Buoyancy diffusivity
-  figure(fignum);
-  subplot(1,2,2)
+  D2 = subplot(1,2,2);
   pcolor(XX_psi,ZZ_psi,Kgm)
   title('Gent/McWilliams Diffusivity, \kappa_{gm}')
-  colormap(difmap)
+  colormap(D2,difmap)
   shading interp
   colorbar
   xlabel('Distance (km)')
@@ -482,19 +504,29 @@ function setparams (local_home_dir,run_name)
   % Initial buoyancy
   bmap = cmocean('thermal');
   figure(fignum);
+  TA = subplot(1,3,1);
   [C, h] = contourf(XX_tr,ZZ_tr,buoy_init,0:2:20);
   clabel(C,h)
-  colormap(bmap)
+  colormap(TA,bmap)
   title('Initial Buoyancy')
   colorbar
   
+  subplot(1,3,2)
+  plot(xx_psi,tau,'LineWidth',3)
+  title('Wind Stress')
+  
+  subplot(1,3,3)
+  plot(xx_psi(2:end),(tau(2:end) - tau(1:end-1))./dx,'--','LineWidth',2)
+  title('Wind Stress Curl')
+  fignum = fignum+1;
   
   % Initial phytoplankton concentration
   pmap = cmocean('speed');
   cmap = cmocean('matter');
   figure(fignum);
   A = subplot(1,2,1);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,1));
+  [C h] = contourf(XX_tr,ZZ_tr,squeeze(phi_init(4,:,:)),[0:4:30]);
+  clabel(C,h,'Color','w')
   title('Initial nitrate concentration')
   shading interp
   colormap(A, cmap)
@@ -502,11 +534,13 @@ function setparams (local_home_dir,run_name)
   colorbar
   
   B = subplot(1,2,2);
-  pcolor(XX_tr,ZZ_tr,bgc_init(:,:,2));
+  pcolor(XX_tr,ZZ_tr,squeeze(phi_init(5,:,:)));
   title('Initial phytoplankton with grid')
   colormap(B,pmap)
   axis([min(min(XX_tr)) max(max(XX_tr)) -180 0])
   colorbar
+  
+  
 
   end
   

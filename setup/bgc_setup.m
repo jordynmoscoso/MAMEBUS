@@ -8,11 +8,8 @@
 %%%
 
 
-function [params, bgc_init, nbgc] = bgc_setup(ZZ_tr,Nx,Nz)
+function [params, bgc_init, nbgc, lp, lz, NP, NZ, bgcRates, nallo, idxAllo] = bgc_setup(ZZ_tr,Nx,Nz,modeltype,MP,MZ,data_dir)
 
-% length parameters
-lp = 5; % micrometers
-lz = 10; 
 
 % light and temperature parameters
 qsw = 340; % W/m^2
@@ -24,21 +21,26 @@ r = 0.05;  % temperature dependence
 % phytoplankton parameters
 au = 2.6; %1/d
 bu = -0.45;
-umax = au*lp^bu; % maximum uptake
 kn = 0.1; % mmol N/m^3
 mp = 0.2; % mortality as a fraction of uptake
 
 % zooplankton parameters
 ag = 26;
 bg = -0.4;
-gmax = ag*lz^bg; % maximum grazing rate
-lambda = 1.0/3.0; % grazing efficiency
+eff = 0.3; % grazing efficiency
+seff = 0.3; % self grazing efficiency
 kp = 3; % mmol N/m^3
-delta_x = 0.25; % width of grazing profile
+bl = 0.5;
+al = 0.65;
+delta_x = 0.1; % width of grazing profile
+idxAllo = 4;
+pdia = 1e-9;
 
-ap = 0.65;
-bp = 0.56;
-preyopt = ap*lz^bp; %optimal predator prey length
+%%% Depending on the model type, return size grid and the data grid. 
+[lp, lz, NP, NZ, bgcRates, idxUptake, idxSat, idxGrazing, idxPredPrey, zeta] ...
+    = buildSizeGrid(modeltype,MP,MZ,delta_x,data_dir, au, bu, kn, ag, bg, al, bl ,eff);
+
+nallo = max(NP,NZ);
 
 % detrital parameters
 r_remin = 0.04; % 1/d
@@ -46,10 +48,11 @@ wsink = 10; % m/d
 
 
 %%% save all parameters
-params = [lp, lz, qsw, kw, kc, Tref, r, ...
-            umax, kn, mp, ...
-            gmax, lambda, kp, delta_x, preyopt, ...
-            r_remin, wsink];
+params = [qsw, kw, kc, Tref, r, ... % physical parameters
+            mp, pdia, ... % singular phytoplankton parameters
+            eff, seff, kp, delta_x, zeta ... % singular zooplankton parameters
+            r_remin, wsink ... % detritus parameters
+            idxUptake, idxSat, idxGrazing, idxPredPrey]; % indices for allometric parameters
         
 nbgc = length(params);
 
@@ -57,17 +60,28 @@ nbgc = length(params);
 %%% Create initial conditions
 Pcline = 200;
 Pmax = 0.1; % mmol/m3
-Dmax = 0;
+Dmax = 0.001;
 
-euph_init = Pmax*(tanh(ZZ_tr/Pcline))+0.1;
+euph_init = Pmax*(tanh(ZZ_tr/Pcline))+Pmax;
 
 %%% Initial nitrate profile (Hyperbolic)
 Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
 Ncline = 80; % Approximate guess of the depth of the nutracline
 
+ind = 1;
+% nutrients
+bgc_init(:,:,ind) = -Nmax*tanh(ZZ_tr/Ncline); ind = ind+1;
 
-bgc_init(:,:,1) = -Nmax*tanh(ZZ_tr/Ncline);
-bgc_init(:,:,2) = euph_init;
-bgc_init(:,:,3) = 0.1*euph_init;
-bgc_init(:,:,4) = Dmax*zeros(Nx,Nz);
+% phytoplankton
+for ii = 1:NP
+    bgc_init(:,:,ind) = euph_init; ind = ind+1;
+end
+
+%zooplankton
+for ii = 1:NZ
+    bgc_init(:,:,ind) = 0.1*euph_init; ind = ind +1;
+end
+
+% detritus
+bgc_init(:,:,ind) = Dmax*ones(Nx,Nz);
 end
