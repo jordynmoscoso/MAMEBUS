@@ -2424,6 +2424,12 @@ real tderiv_adv_diff (const real t, real *** phi, real *** dphi_dt)
     cfl_phys = fmin(fmin(cfl_sink,cfl_igw),cfl_phys);
     cfl_dt = cfl_phys;
     
+    if ( cfl_phys > 60*60*24 )
+    {
+        fprintf(stderr,"!!: Large timestep detected (> 1 day), printing cfl_dt \n");
+        fprintf(stderr,"cfl_u = %f, cfl_w = %f, cfl_y = %f \n", cfl_u, cfl_w, cfl_y);
+        fprintf(stderr,"cfl_z = %f, cfl_sink = %f, cfl_igw = %f \n", cfl_z, cfl_sink, cfl_igw);
+    }
     
     ////////////////////////////////
     ///// END CALCULATING CFLS /////
@@ -4358,6 +4364,13 @@ int main (int argc, char ** argv)
             targetReached = true;
         }
         
+        
+        if (t > tmax || dt > 60*60*24)
+        {
+            fprintf(stderr,"ERROR: maximum time exceeded OR cfl_dt > 1 day \n");
+            printUsage();
+            return 0;
+        }
         
         // Copy the next iteration from phi_out back to phi_in,
         // ready for the next time step
