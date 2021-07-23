@@ -1774,8 +1774,8 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
             
             if (j == 1)
             {
-                du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dx;
-                dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dx;
+                du_dt[j][k] += nu_h*(uvel[j+1][k]-uvel[j][k])/dxsq;
+                dv_dt[j][k] += nu_h*(vvel[j+1][k]-vvel[j][k])/dxsq;
             }
             else if (j == Nx-1)
             {

@@ -30,6 +30,8 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
     modeltype = BGC_NONE; %%% Defaults to run wihtout bgc
   end
   
+%   BGC_NPZD
+  
   %%% Plot the setup figures
   plotfigs = true;
   
@@ -38,17 +40,10 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
 %   use_cluster = true;
   use_intel = false;
   use_pbs = use_cluster;
-%   cluster_home_dir = 'CLUSTER_DIRECTORY';
-%   uname = 'USERNAME';
-%   cluster_addr = 'CLUSTER-ADDRESS';
+  cluster_home_dir = 'CLUSTER_DIRECTORY';
+  uname = 'USERNAME';
+  cluster_addr = 'CLUSTER-ADDRESS';
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%% DELETE THIS %%%%%%%%%%%%%%%%%%%%%%%%%%%
-  cluster_home_dir = '/data3/jmoscoso/MAMEBUS/runs';
-  uname = 'jmoscoso';
-  cluster_addr = 'caolila.atmos.ucla.edu';
-%%%%%%%%%%%%%%%%%%%%%%%%%%% DELETE THIS %%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-  
   %%% Run directory
   run_name = strtrim(run_name);  
   exec_name = 'mamebus.exe';      
@@ -62,7 +57,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   %%%%%%%%%%%%%%%%%%%%%%%%%%% Time parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%
   t1day = 86400; %%% Seconds in 1 day
   t1year = 365*t1day; %%% Seconds in 1 year
-  endTime = 20*t1year;
+  endTime = 30*t1year;
   restart = false;
   startIdx = 15;
   outputFreq = 10*t1day;
@@ -73,7 +68,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   H = 3000; %%% Depth of domain including mixed layers
   
   %%%%%%%%%%%%%%%%%%%% Scalar parameter definitions %%%%%%%%%%%%%%%%%%%%%
-  tau0 = -0.1; %%% Northward wind stress (N m^{-2})
+  tau0 = -0.075; %%% Northward wind stress (N m^{-2})
   shelfdepth = 50; %%% Depth of shelf on western boundary
   rho0 = 1025; %%% Reference density
   f0 = 1e-4; %%% Coriolis parameter (CCS)
@@ -91,7 +86,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   theta_b = 4; %%% Sigma coordinage bottom stretching parameter (must be in [0,4])
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Grids %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  Nx = 32; %%% Number of latitudinal grid points
+  Nx = 64; %%% Number of latitudinal grid points
   Nz = Nx; %%% Number of vertical grid points
   dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
   xx_psi = 0:dx:Lx; %%% Streamfunction latitudinal grid point locations
@@ -99,15 +94,13 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   xx_topog = [-dx/2 xx_tr Lx+dx/2]; %%% Topography needs "ghost" points to define bottom slope
 
   %%% Viscosities (empirically determined from a reference simulation)
-  nu_h = 10*dx/10000;
-  nu_v = 0.1*(H/Nz)/100;
-%   nu_h = 0;
-%   nu_v = 0;
+  nu_h = 10*(dx/10000).^2;
+  nu_v = 0.1*((H/Nz)/100).^2;
 
   %%%%%%%%%%%%%%%%%%%%%%%% Define the topography %%%%%%%%%%%%%%%%%%%%%%%%
   Xtopog = 290*m1km;
-  Ltopog = 45*m1km;
-  shelfdepth = 25;
+  Ltopog = 30*m1km;
+  shelfdepth = 35;
   Htopog = H-shelfdepth;
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  
@@ -169,13 +162,6 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% BGC Model %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   
-  % TO DO HERE
-  % RESIZE BGC INIT
-  % ADD ZETA TO BGC PARAMS
-  % READ IN ALLOMETRIC COEFFICIENTS AND CALCULATE THINGS IN MODEL.
-%   MP = 2;
-%   MZ = 2;
-  
   % Generate the BGC parameters and initial conditions
   [bgc_params, bgc_init, bgctracs, lp, lz, NP, NZ, bgcRates, nAllo, idxAllo] = ...
                             bgc_setup(ZZ_tr,Nx,Nz,modeltype,MP,MZ,data_dir);
@@ -212,7 +198,6 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   PARAMS = addParameter(PARAMS,'npbgc',bgctracs,PARM_INT);
   PARAMS = addParameter(PARAMS,'nallo',nAllo,PARM_INT);
   PARAMS = addParameter(PARAMS,'idxAllo',idxAllo,PARM_INT);
-  
   
   
   
@@ -282,7 +267,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   %%% Create the profile of wind stress
   tau = tau0*( tanh(((Lx)-xx_psi)/(Lx/16)) );
 %   tau = tau0*((sech((Lx/2 - xx_psi)/(Lx/8)).^2));
- 
+  
   
   
   tlength = length(tau);
@@ -292,7 +277,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   PARAMS = addParameter(PARAMS,'tlength',tlength,PARM_INT);
   PARAMS = addParameter(PARAMS,'tauFile',tauFile,PARM_STR); 
   
-
+  
   
   
   
@@ -305,7 +290,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   %%% Buoyancy relaxation parameters
   L_relax = 50*m1km;  
   T_relax_max = 30*t1day; %%% Fastest relaxation time
-
+  
   %%% Relax to initial buoyancy at the western boundary
   uvel_relax = -ones(size(uvel_init));
   vvel_relax = -ones(size(vvel_init));
@@ -413,7 +398,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   H_int(H_int < 0) = 0;
   Hmax = max(H_int);
   
-  lambda = 0.25; % tuning parameter for KGM diffusivity
+  lambda = 0.0625; % tuning parameter for KGM diffusivity
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
         Kgm(jj,kk) = Kgm(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;
@@ -436,7 +421,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   Hmax = max(H_int);
   
   Kiso = Kiso0*ones(Nx+1,Nz+1);
-  lambda = 0.25; % tuning parameter for Kiso diffusivity
+%   lambda = 0.25; % tuning parameter for Kiso diffusivity
   for jj = 1:Nx+1
       for kk = 1:Nz+1 
         Kiso(jj,kk) = Kiso(jj,kk)*H_int(jj)*exp(ZZ_psi(jj,kk)/(lambda*Hmax))/Hmax;

@@ -59,8 +59,8 @@ nbgc = length(params);
 
 %%% Create initial conditions
 Pcline = 200;
-Pmax = 0.01; % mmol/m3
-Dmax = 0.0001;
+Pmax = 0.1; % mmol/m3
+Dmax = 0.001;
 
 euph_init = Pmax*(tanh(ZZ_tr/Pcline))+Pmax;
 

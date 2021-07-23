@@ -294,7 +294,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
     else
         cmap = cmocean('balance');
         psi_r_lim = avgVals;
-        limval = 300;
+        limval = 1;
         psi_r_lim = min(psi_r_lim,limval);
         psi_r_lim = max(psi_r_lim,-limval);
         pcolor(XX_psi,ZZ_psi,psi_r_lim)
