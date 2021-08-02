@@ -1582,14 +1582,28 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     dphi_dt[idx_nitrate][j][k] += -uptot + remin;
     for (ip = 0; ip < MP; ip++)
     {
-        dphi_dt[idx_phyto+ip][j][k] += UPvec[ip] - GPvec[ip] - MPvec[ip];
+        if (phi[idx_phyto+ip][j][k] < 1e-8) // set a minimum value for phytoplankton
+        {
+            phi[idx_phyto+ip][j][k] < 1e-8;
+        }
+        else // if this is above the value, then update the time tendencies
+        {
+            dphi_dt[idx_phyto+ip][j][k] += UPvec[ip] - GPvec[ip] - MPvec[ip];
+        }
+        
     }
     for (iz = 0; iz < MZ; iz ++)
     {
-        dphi_dt[idx_zoo+iz][j][k] += GZvec[iz] - MZvec[iz];
+        if (phi[idx_zoo+iz][j][k] < 1e-9)  // set a minimum value for zooplankton (an order of magnitude smaller than P)
+        {
+            phi[idx_zoo+iz][j][k] = 1e-9;
+        }
+        else // update time tendencies if it is
+        {
+            dphi_dt[idx_zoo+iz][j][k] += GZvec[iz] - MZvec[iz];
+        }
     }
     dphi_dt[idx_detritus][j][k] += dmort + gmess - remin + Dsink;
-    
 
 }
 
@@ -1795,11 +1809,6 @@ void tderiv_mom (const real t, real *** phi, real *** dphi_dt)
                                     * (uvel[j][k+1]-uvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
                 dv_dt[j][k] += nu_v * SQUARE(ZZ_psi[j][k+1]-ZZ_psi[j][k])/SQUARE(Lz/Nz)
                                     * (vvel[j][k+1]-vvel[j][k])/((ZZ_u[j][k+1]-ZZ_u[j][k])*(ZZ_psi[j][k+1]-ZZ_psi[j][k]));
-//                if (j == Nx-1)
-//                {
-////                    fprintf(stderr,"%f %f %f %f %d \n",ZZ_u[j][k+1],ZZ_u[j][k],ZZ_psi[j][k+1],ZZ_psi[j][k],k);
-//                    fprintf(stderr,"%f %f %f %f %d \n",uvel[j][k+1],uvel[j][k],vvel[j][k+1],vvel[j][k],k);
-//                }
             }
             else if (k == Nz-1)
             {
