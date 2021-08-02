@@ -8,7 +8,7 @@
 %%%
 
 
-function [params, bgc_init, nbgc, lp, lz, NP, NZ, bgcRates, nallo, idxAllo] = bgc_setup(ZZ_tr,Nx,Nz,modeltype,MP,MZ,data_dir)
+function [params, bgc_init, nbgc, lp, lz, NP, NZ, bgcRates, nallo, idxAllo] = bgc_setup(XX_tr,ZZ_tr,Lx,Nx,Nz,modeltype,MP,MZ,data_dir)
 
 
 % light and temperature parameters
@@ -59,8 +59,16 @@ nbgc = length(params);
 
 %%% Create initial conditions
 Pcline = 200;
-Pmax = 0.1; % mmol/m3
+Pmax = 2.5/MP; % mmol/m3
 Dmax = 0.001;
+
+%%% Initial temperature
+Hexp = 90; 
+Nmin = 2*XX_tr/Lx;
+Nmax = 30;
+Hsml = 10;
+Ninit =  Nmin-Nmax*tanh((ZZ_tr + Hsml)./Hexp);
+Ninit(Ninit < 0) = 0;
 
 euph_init = Pmax*(tanh(ZZ_tr/Pcline))+Pmax;
 
@@ -70,7 +78,7 @@ Ncline = 80; % Approximate guess of the depth of the nutracline
 
 ind = 1;
 % nutrients
-bgc_init(:,:,ind) = -Nmax*tanh(ZZ_tr/Ncline); ind = ind+1;
+bgc_init(:,:,ind) = Ninit; ind = ind+1;
 
 % phytoplankton
 for ii = 1:NP

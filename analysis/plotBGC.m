@@ -22,7 +22,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     idx_size = 1;       % plots concentration weighted size
     idx_nums = 2;       % plots number of size classes present above a certain threshold value, tol
     
-    tol = 1e-2;         % tolerance for the concentration for number of size classes. 
+    tol = 1e-3;         % tolerance for the concentration for number of size classes. 
     
 
     %%%%%%%%%%%%%%%%%%%%%
