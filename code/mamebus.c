@@ -853,8 +853,8 @@ void calcSlopes (     const real        t,
                     }
                 }
 
-                hrx[0][k] = 1.5*(rhos[1][k] - rhos[0][k]) - 0.5*hrx[1][k];
-                hrx[Nx-1][k] = 1.5*(rhos[Nx-1][k] - rhos[Nx-2][k]) - 0.5*hrx[Nx-2][k];
+                hrx[0][k] = 1.5*(buoy[1][k] - buoy[0][k]) - 0.5*hrx[1][k];
+                hrx[Nx-1][k] = 1.5*(buoy[Nx-1][k] - buoy[Nx-2][k]) - 0.5*hrx[Nx-2][k];
 
                 // Test extending the boundary only
 //                hrx[0][k] = hrx[1][k];
@@ -1998,7 +1998,7 @@ void do_adv_diff (  const real    t,
                 case ADVECTION_CENTERED:
                 {
                     // Hyperbolic fluxes
-                    HHx[j][k] = u_r[j][k] * 0.5*(phi[j][k]+phi[j+1][k]);
+                    HHx[j][k] = u_r[j][k] * 0.5*(phi[j-1][k]+phi[j][k]);
                     
                     // Parabolic fluxes
                     if ( is_buoy && (!use_sml || (z < -Hsml)) && (!use_bbl || (z > -hb_psi[j]+Hbbl)) )
