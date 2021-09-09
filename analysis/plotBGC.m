@@ -5,7 +5,7 @@
 %
 %
 
-function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home_dir,run_name,bgc_id,avgTime,plot_type,plot_roem)
+function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home_dir,run_name,bgc_id,avgTime,plot_type,plot_roem,overlay)
     %%% Load convenience functions
     addpath ../utils;
     
@@ -22,7 +22,11 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     idx_size = 1;       % plots concentration weighted size
     idx_nums = 2;       % plots number of size classes present above a certain threshold value, tol
     
-    tol = 1e-3;         % tolerance for the concentration for number of size classes. 
+    tol = 1e-2;         % tolerance for the concentration for number of size classes. 
+    
+    overlay_trac = 0;
+    overlay_b = 1;
+    overlay_n = 2;
     
 
     %%%%%%%%%%%%%%%%%%%%%
@@ -138,8 +142,13 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     
     %%%%%%%%% CODE TO COMPARE ROEM TO A SIMILAR RUN IN SSEM
     if plot_roem
-        ref_run = '~/Desktop/prelim-runs/med-0.3'; 
-        run_name2 = 'med-0.3';
+        % assumes a standard labeling for ROEM and SSEM
+        vals = split(run_name,'_');
+
+%         ref_run = char(strcat('~/Desktop/PhysTests-Su21/0802/runs/ssem_dx_',(vals(3)),'_',vals(4),'_',(vals(5)))); 
+%         run_name2 = char(strcat('ssem_dx_',(vals(3)),'_',vals(4),'_',(vals(5))));
+        ref_run = char('~/Desktop/PhysTests-Su21/0802/runs/ssem_dx_0.3_tau_0.075');
+        run_name2 = char('ssem_dx_0.3_tau_0.075');
         params_file2 = fullfile(ref_run,[run_name2,'_in']); 
         [NPs NP_found] = readparam(params_file2,'MP','%u');
         [NZs NZ_found] = readparam(params_file2,'MZ','%u');
@@ -180,12 +189,14 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
             inds2 = 2:2+NPs-1;
             disp('Plotting Phytoplankton')
             cmap = cmocean('speed');
+            Ntracs = NP;
         elseif (bgc_id == idx_zoo)
             disp('Plotting Zooplankton')
             title_name = 'Zooplankton (mmol N/m$^3$)';
             tol = 1e-6; % uptate tolerance if zooplankton
             cmap = cmocean('dense');
             inds2 = 2+NPs:2+NPs+NZs-1;
+            Ntracs = NZ;
         elseif (bgc_id == idx_det)
             title_name = 'Detritus (mmol N/m$^3$)';
             inds2 = 2+NPs+NZs;
@@ -198,8 +209,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
         end
         inds2 = inds2+2;
     end
-    
-    %     data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
     
 
     
@@ -245,9 +254,9 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     avgVals = zeros(Nx,Nz,Ntracs);
     ssemVals = zeros(Nx,Nz,length(inds));
     
-    PMAT = zeros(Nx,Nz,NP);
+    PMAT = zeros(Nx,Nz,Ntracs);
     lxvec = zeros(Nx,1);
-    PLTMAT = zeros(Nx,NP);
+    PLTMAT = zeros(Nx,Ntracs);
     
 %     lastVal = min(lastVal2,lastVal);
     
@@ -291,8 +300,13 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                 dev = totVals;
                 dev(dev <= tol) = 1;
                 pltVals = zeros(Nx,Nz);
+                if bgc_id == idx_phyto
+                    ll = lp;
+                elseif bgc_id == idx_zoo
+                    ll = lz;
+                end
                 for ii = 1:Ntracs
-                   pltVals = pltVals + avgVals(:,:,ii).*lp(ii)./dev; 
+                   pltVals = pltVals + avgVals(:,:,ii).*ll(ii)./dev; 
                 end
                 pltVals = pltVals.*arevals;
             end
@@ -307,7 +321,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     %             disp([ZZ_tr(ind,ii), -hb_tr(ii)])
                 lxvec(ii) = XX_tr(ii,1);
                 if -hb_tr(ii) > H_ref
-                    PLTMAT(ii,:) = NaN*ones(1,NP);
+                    PLTMAT(ii,:) = NaN*ones(1,Ntracs);
                     if plot_roem
                         PLTSSEM(ii,:) = NaN*ones(1,NPs);
                     end
@@ -332,8 +346,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                 
                 for ii = 1:NUMP
                     SSEMMAT(:,ii) = sum( PLTSSEM(:,sind(1,ii):sind(2,ii)), 2);
-%                     P = PLTSSEM(end,:)';
-%                     sz = sum(lpssem(sind(1,ii):sind(2,ii)).*P(sind(1,ii):sind(2,ii))./sum(P(sind(1,ii):sind(2,ii))));
                 end
             end
         else
@@ -346,10 +358,10 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
             pltVals = squeeze(pltVals);
         end
 
-        nlines = 4;
+        nlines = 5;
         if bgc_id == idx_phyto
             minval = 0.05;
-            contvec = [0.01 0.1 0.2 0.5 0.8 1.2];
+            contvec = [0.01 0.025 0.1 0.2 0.5 0.8 1.2];
             cmax = 1.5;
         else
             minval = 0.01;
@@ -362,12 +374,25 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
         dp = -75;
         figure(100); clf;
 
+        % load in buoyancy
+        if overlay == overlay_b
+            idx_buoy = 2;
+            ocont = 0:2:22;
+        elseif (overlay == overlay_n) 
+            idx_buoy = 3;
+            ocont = [0 1 2, 4 6 10 10:5:30];
+        else
+            idx_buoy = 3+NP+NZ+1;
+            ocont = [0:100:300 300:200:600 600:500:4500];
+        end
+        data_file = fullfile(dirpath,['TRAC',num2str(idx_buoy),'_n=',num2str(n),'.dat']);
+        buoy_ref = readOutputFile(data_file,Nx,Nz);  
+    
         if plot_type == idx_size
-
             A = subplot(1,3,1);
             pcolor(XX_tr,ZZ_tr,totVals);
             hold on
-            [C h] = contour(XX_tr,ZZ_tr,totVals,round(contvec,2),'k');
+            [C h] = contour(XX_tr,ZZ_tr,totVals,round(contvec,2),'k'); % plankton values
             plot(xx_psi,-hb_psi,'k')
             hold off
             shading interp
@@ -429,7 +454,11 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                 pcolor(XX_tr,ZZ_tr,pltVals)
                 shading interp
                 hold on
-                [C h] = contour(XX_tr,ZZ_tr,totVals,round(contvec,2),'k');
+                if overlay > 0
+                    [C h] = contour(XX_tr,ZZ_tr,buoy_ref,ocont,'k');  % buoyancy
+                else
+                    [C h] = contour(XX_tr,ZZ_tr,totVals,round(contvec,2),'k'); % plankton values
+                end
                 plot(xx_psi,-hb_psi,'k')
                 hold off
                 shading interp
@@ -443,43 +472,54 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                 xticks(0:50e3:400e3)
                 ylabel('Depth (m)','interpreter','latex')
                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})  
-%                 title(['Phytoplankton Concentration (mmol N/m$^3$), t = ', num2str(round((n-n0)*dt_s./t1year,2)) ' years'],'interpreter','latex') 
-                title(['Phytoplankton Concentration (mmol N/m$^3$), t = ', num2str(20) ' years'],'interpreter','latex')
-                set(gca,'FontSize',24,'TickLabelInterpreter','latex')
+                title(['Concentration (mmol N/m$^3$), $\Delta\ell$ = 0.4, $\tau_{max}$ = 0.1, t = ', num2str(round((n-n0)*dt_s./t1year,2)) ' years'],'interpreter','latex') 
+                set(gca,'FontSize',28,'TickLabelInterpreter','latex')
 
                 rnd = 2;
                 B = subplot(2,1,2);
+                PLTMAT = log10(PLTMAT);
                 hold on
-%                 for ii = 1:NP
-%                    plot(lxvec,PLTMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
+                for ii = 1:NP
+                   plot(lxvec,(PLTMAT(:,ii)),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
                    
-%                 end
+                end
                 
                 for ii = 1:NP
 %                    plot(lxvec,PLTMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
-                   plot(lxvec,SSEMMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
+%                    plot(lxvec,SSEMMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
 %                     plot(lxvec,SSEMMAT(:,ii),'--','LineWidth',1,'Color',cmap(round(ii*255/NP),:))
                 end
                 
-                plot(lxvec,PLTMAT(:,1),'--','LineWidth',1,'Color',cmap(round(1*255/NP),:))
-                   plot(lxvec,PLTMAT(:,2)*0.8,'--','LineWidth',1,'Color',cmap(round(2*255/NP),:))
-                   plot(lxvec,PLTMAT(:,3)*1.6,'--','LineWidth',1,'Color',cmap(round(3*255/NP),:))
                 hold off
-%                 lp = log10(lp);
-%                 lz = log10(lz);
                 if bgc_id == idx_phyto
-                    leg = legend(['P1: $\log_{10}(\ell_p) =$ ' num2str(round(log10(lp(1)),rnd))],['P2: $\log_{10}(\ell_p) =$ ' num2str(round(log10(lp(2)),rnd))],['P3: $\log_{10}(\ell_p) =$ ' num2str(round(log10(lp(3)),rnd))],['P4: $\log_{10}(\ell_p) =$ ' num2str(round(log10(lp(4)),rnd))],'Location','northwest');
-                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) 0 0.8])
+                    legstr = {};
+                    for ii = 1:Ntracs
+                        legstr{ii} = ['P',num2str(ii),': log$_{10}$($\ell_p$) = ',num2str(round(log10(lp(ii)),2))];
+                    end
+                    C = 'P';
+                    leg = legend(legstr,'Location','southeast');
+                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -3 0.5])
+%                     axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 max(max((PLTMAT)))])
                 else
-                    leg = legend(['Z1: $\log_{10}(\ell_z) =$ ' num2str(round(log10(lz(1)),rnd))],['Z2: $\log_{10}(\ell_z) =$ ' num2str(round(log10(lz(2)),rnd))],['Z3: $\log_{10}(\ell_z) =$ ' num2str(round(log10(lz(3)),rnd))],['Z4: $\log_{10}(\ell_z) =$ ' num2str(round(log10(lz(4)),rnd))],'Location','northwest');
-                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) 0 0.1])
+                    legstr = {};
+                    for ii = 1:Ntracs
+                        legstr{ii} = ['Z',num2str(ii),': log$_{10}$($\ell_z$) = ',num2str(round(lz(ii),2))];
+                    end
+                    C = 'Z';
+                    
+                    leg = legend(legstr,'Location','northwest');
+                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 0.5])
+%                     axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 max(max((PLTMAT)))])
                 end
-                set(leg,'Interpreter','latex')
-                ylabel('Concentration (mmol N/m$^3$)','interpreter','latex')
-                set(gca,'FontSize',24,'TickLabelInterpreter','latex')
+                
+                ylabel(['log$_{10}$(',C,') (log$_{10}$(mmol N/m$^3$))'],'interpreter','latex')
+                set(gca,'FontSize',28,'TickLabelInterpreter','latex')
                 xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
                 xticks(0:50e3:400e3)
                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})   
+                set(leg,'Interpreter','latex','FontSize',21)
+%                 figure(101)
+%                 plot(lxvec,log10(PLTMAT*lp./sum(PLTMAT,2)))
 
             else
                 if bgc_id == idx_phyto
@@ -509,13 +549,14 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                 ylabel('Size log10(ESD)','interpreter','latex')
                 title(['Phytoplankton Distribution at ', num2str(H_ref), 'm depth'],'interpreter','latex')
                 set(gca,'FontSize',24,'TickLabelInterpreter','latex')
+%                 max(max(PLTMAT))
             end
 
 
 
         else
             if (bgc_id == idx_nitrate)
-               contvec = [1 5 10 15 20]; 
+               contvec = [1 2 3 5 10 15 20]; 
             end
             pcolor(XX_tr,ZZ_tr,pltVals)
             shading interp

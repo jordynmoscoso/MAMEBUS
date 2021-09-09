@@ -15,7 +15,7 @@ function [params, bgc_init, nbgc, lp, lz, NP, NZ, bgcRates, nallo, idxAllo] = bg
 qsw = 340; % W/m^2
 kw = 0.04; % light attenuation of water
 kc = 0.01; % light attenuation of phytoplankton (nitrogen units)
-Tref = 20; % deg C
+Tref = 10; % deg C
 r = 0.05;  % temperature dependence
 
 % phytoplankton parameters
@@ -62,19 +62,16 @@ Pcline = 200;
 Pmax = 2.5/MP; % mmol/m3
 Dmax = 0.001;
 
-%%% Initial temperature
-Hexp = 90; 
+%%% Initial Nitrate
+Hexp = 180; 
 Nmin = 2*XX_tr/Lx;
 Nmax = 30;
-Hsml = 10;
+Hsml = 25;
 Ninit =  Nmin-Nmax*tanh((ZZ_tr + Hsml)./Hexp);
 Ninit(Ninit < 0) = 0;
 
 euph_init = Pmax*(tanh(ZZ_tr/Pcline))+Pmax;
 
-%%% Initial nitrate profile (Hyperbolic)
-Nmax = 30; %%% Maximum concentration of nutrient at the ocean bed
-Ncline = 80; % Approximate guess of the depth of the nutracline
 
 ind = 1;
 % nutrients

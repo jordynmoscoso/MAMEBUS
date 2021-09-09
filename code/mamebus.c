@@ -1584,7 +1584,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     {
         if (phi[idx_phyto+ip][j][k] < 1e-8) // set a minimum value for phytoplankton
         {
-            phi[idx_phyto+ip][j][k] < 1e-8;
+            phi[idx_phyto+ip][j][k] = 1e-8;
         }
         else // if this is above the value, then update the time tendencies
         {
