@@ -242,34 +242,56 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             title(titlestr,'interpreter','latex')
             shading interp
         else % plot tracers 
-            % chose the appropriate colormap and contour vector
-            if (var_id == 2)
-                cmap = cmocean('thermal');
-                cvec = 0:4:22;
-                clr = 'w';
-            elseif (var_id == 3) % nitrogen
-                cmap = cmocean('matter');
-                cvec = [1 6.5 12.1 17.6 23.1];
-                clr = 'w';
-            elseif (var_id == 4) % phytoplankton
-                cmap = cmocean('speed');
-                cvec = [0.05 0.2 0.4 0.9 1.8];
-                clr = 'k';
-            elseif (var_id == 5) % zooplankton
-                cmap = cmocean('amp');
-                cvec = 5;
-                clr = 'w';
-            elseif (var_id == 6) % detritus
-                cmap = cmocean('turbid');
-                cvec = 5;
-                clr = 'k';
+            
+            if modeltype == 0
+                if (var_id == 2)
+                    cmap = cmocean('thermal');
+                    cvec = 0:4:22;
+                    minval = 0;
+                    maxval = 22;
+                    clr = 'w';
+                elseif (var_id == 3) 
+                    cmap = cmocean('deep');
+                    cvec = [-4000:500:-1000 -1000:200:-100 -100:50:0];
+                    minval = -1000;
+                    maxval = 0;
+                    clr = 'w';
+                end
             else
-                disp('Not explicitly chosen yet')
-                cmap = cmocean('speed');
-                cvec = [0.2 0.4 0.9 1.8];
-                clr = 'k';
+                if (var_id == 2)
+                    cmap = cmocean('thermal');
+                    cvec = 0:4:22;
+                    minval = 0;
+                    maxval = 22;
+                    clr = 'w';
+                elseif (var_id == 3) % nitrogen
+                    cmap = cmocean('matter');
+                    cvec = [1 6.5 12.1 17.6 23.1];
+                    minval = 0;
+                    maxval = 30;
+                    clr = 'w';
+                elseif (var_id == 4) % phytoplankton
+                    cmap = cmocean('speed');
+                    cvec = [0.05 0.2 0.4 0.9 1.8];
+                    clr = 'k';
+                elseif (var_id == 5) % zooplankton
+                    cmap = cmocean('amp');
+                    cvec = 5;
+                    clr = 'w';
+                elseif (var_id == 6) % detritus
+                    cmap = cmocean('turbid');
+                    cvec = 5;
+                    clr = 'k';
+                else
+                    disp('Not explicitly chosen yet')
+                    cmap = cmocean('deep');
+                    cvec = [-4000:500:-1000 -1000:200:-400 -400:100:-100 -100:50:0];
+                    minval = -1000;
+                    maxval = 0;
+                    clr = 'w';
+                end
             end
-                
+            
             pcolor(XX_tr,ZZ_tr,avgVals);
             hold on
             [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,clr);
@@ -290,11 +312,12 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -180 0])
             title(titlestr,'interpreter','latex')
+            caxis([minval maxval])
         end
     else
-        cmap = cmocean('balance');
+        cmap = cmocean('balance',20);
         psi_r_lim = avgVals;
-        limval = 1;
+        limval = 1.1;
         psi_r_lim = min(psi_r_lim,limval);
         psi_r_lim = max(psi_r_lim,-limval);
         pcolor(XX_psi,ZZ_psi,psi_r_lim)
@@ -311,7 +334,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
         title(titlestr,'interpreter','latex')
 %         caxis([min(min(psi_r_lim)) max(max(psi_r_lim))])
         caxis([-limval limval])
-        axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -H 0])
+        axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -1500 0])
     end
    
         hold on
