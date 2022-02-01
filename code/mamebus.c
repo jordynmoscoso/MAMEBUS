@@ -1411,6 +1411,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real remin = 0;
     real sf_flux = 0;
     
+    // placeholders for grazing
     real grazing = 0;
     real pf = 0;
     real gp = 0;
@@ -1418,6 +1419,15 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     real gptot = 0;
     real gztot = 0;
     real gmess = 0;
+    
+    // placeholder for heterotrophic grazing
+    real selfgrazing = 0;
+    real zf = 0;
+    real sp = 0;
+    real sz = 0;
+    real sptot = 0;
+    real sztot = 0;
+    real smess = 0;
     
     real pmort = 0;
     real zmort = 0;
@@ -1436,7 +1446,6 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
         for (ip = 0; ip < MP; ip ++)
         {
             ptot += phi[idx_phyto+ip][j][kk];
-//            ptot = 0;
         }
 
         // calculate the coefficient of light attenuation
@@ -1449,8 +1458,6 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     // temperature and light dependence
     tfrac = exp(tr*(T - tref));
     ifrac = I0/sqrt( pow(I0,2) + pow(Isurf,2) );
-
-//    fprintf(stderr,"ZZ = %f tfrac = %.3e, ifrac %.3e \n",ZZ_phi[j][k],tfrac,ifrac);
 
 
     /*
@@ -1503,11 +1510,10 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
         for (ip = 0; ip < MP; ip++)
         {
             P = phi[idx_phyto+ip][j][k];
-            grazing = (gmax/day)*PTvec[ip]/( PTvec[ip]*P + kp  );
-            grazing = grazing*(1-exp(-PTvec[ip]));
+            grazing = (gmax/day)*PTvec[iz]/( PTvec[iz]*P + kp  );
+            grazing = grazing*(1-exp(-PTvec[iz]));
             grazing = grazing*theta_p[ip][iz];
             grazMat[ip][iz] = grazing*P*ZO;
-//            fprintf(stderr,"ip = %d iz = %d, Gmat = %.3e \n",ip,iz,theta_p[ip][iz]);
         }
     }
     
@@ -1515,7 +1521,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     gptot = 0;
     for (ip = 0; ip < MP; ip++)
     {
-    gp = 0;
+        gp = 0;
         for (iz = 0; iz < MZ; iz ++)
         {
             gp += grazMat[ip][iz];
@@ -1530,7 +1536,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     gztot = 0;
     for (iz = 0; iz < MZ; iz ++)
     {
-    gz = 0;
+        gz = 0;
         for (ip = 0; ip < MP; ip++)
         {
             gz += eff*grazMat[ip][iz];
@@ -1540,8 +1546,68 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
         gztot += gz;
     }
     
+    //
+    // Build heterotrophic grazing
+    //
+    for (iz = 0; iz < MZ; iz ++)
+    {
+        zf = 0;
+        for (jz = 0; jz < MZ; jz++)
+        {
+            ZO = phi[idx_zoo+jz][j][k];
+            zf += theta_z[jz][iz]*ZO;        // calculate the total bioavailable phytoplankton
+        }
+        ZTvec[iz] = zf;
+    }
+    
+    
+    // calculate the heterotrophic grazing profile
+    for (iz = 0; iz < MZ; iz ++)
+    {
+        gmax = bgcRates[iz][idxGrazing];
+        ZO = phi[idx_zoo+iz][j][k];
+        for (jz = 0; jz < MZ; jz++)
+        {
+            P = phi[idx_zoo+jz][j][k];  // use P for prey in this loop
+            selfgrazing = (gmax/day)*ZTvec[iz]/( ZTvec[iz]*P + kp  );
+            selfgrazing = selfgrazing*(1-exp(-ZTvec[iz]));
+            selfgrazing = selfgrazing*theta_z[jz][iz];
+            hetMat[jz][iz] = selfgrazing*P*ZO;
+        }
+    }
+    
+    // Sum all the heterotrophic grazing calculated previously
+    sptot = 0;
+    for (jz = 0; jz < MZ; jz++)
+    {
+        sp = 0;
+        for (iz = 0; iz < MZ; iz ++)
+        {
+            sp += hetMat[jz][iz];
+    
+        }
+        HMvec[jz] = sp; // loss due to grazing
+        sptot += sp;
+    }
+    
+    // sum growth for Z due to heterotrophic grazing
+    sztot = 0;
+    for (iz = 0; iz < MZ; iz ++)
+    {
+        sz = 0;
+        for (jz = 0; jz < MZ; jz++)
+        {
+            sz += seff*hetMat[jz][iz];
+            
+        }
+        HPvec[iz] = gz; // growth due to self grazing
+        sztot += gz;
+    }
+    
+    
     // detritus
     gmess = gptot - gztot; // enforced to conserve nutrients because of numerical error.
+    smess = sptot - sztot;
     remin = (rmax/day)*D;
     
     // zooplankton mortality
@@ -1555,6 +1621,7 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     {
         ZO = phi[idx_zoo+iz][j][k];
         zmort = (mztwo/day)*ztot*ZO;
+        zmort += (0.1/day)*ZO;
         MZvec[iz] = zmort;
         dmort += zmort;
     }
@@ -1579,7 +1646,14 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
     
     
     // update all time tendencies
-    dphi_dt[idx_nitrate][j][k] += -uptot + remin;
+    if (phi[idx_nitrate][j][k] < 1e-2)
+    {
+        phi[idx_nitrate][j][k] == 1e-2;
+    }
+    else
+    {
+        dphi_dt[idx_nitrate][j][k] += -uptot + remin;
+    }
     for (ip = 0; ip < MP; ip++)
     {
         if (phi[idx_phyto+ip][j][k] < 1e-8) // set a minimum value for phytoplankton
@@ -1600,10 +1674,10 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
         }
         else // update time tendencies if it is
         {
-            dphi_dt[idx_zoo+iz][j][k] += GZvec[iz] - MZvec[iz];
+            dphi_dt[idx_zoo+iz][j][k] += GZvec[iz] - MZvec[iz] - HMvec[iz] + HPvec[ip];
         }
     }
-    dphi_dt[idx_detritus][j][k] += dmort + gmess - remin + Dsink;
+    dphi_dt[idx_detritus][j][k] += dmort + gmess + smess - remin + Dsink;
 
 }
 
@@ -1629,57 +1703,43 @@ void npzd(const real t, const int j, const int k, real *** phi, real *** dphi_dt
  */
 void doSizeDiffusion(const real t, const int j, const int k, real *** phi, real *** dphi_dt)
 {
-//    int ip, iz;
-//    real pdia = bgc_params[6];         // size diffusion parameter
-//    real dxp = 0;                      // Difference in size for plus one
-//    real dxm = 0;                      // Difference in size for minus one
-//    real dp = 0;                       // Coefficient for plus one
-//    real dc = 0;                       // Coefficient for center
-//    real dm = 0;                       // Coefficient for minus one
-//    real PP = 0;                       // P plus one
-//    real PC = 0;                       // P center
-//    real PM = 0;                       // P minuns one
-//
-//    // calculate the indexes for phytoplankton
-//    int idx_phyto = idx_nitrate+1;
-//    int idx_zoo = idx_nitrate+MP+1;
-//    int idx_detritus = idx_nitrate+MP+MZ+1;
-//
-//
-//    // Calculate the effect of size diffusion
-//    for (ip = 0; ip < MP; ip++)
-//    {
-//        if (ip == 0) // boundary conditions
-//        {
-//            PP = phi[idx_phyto+ip+1][j][k];
-//            dphi_dt[idx_phyto+ip][j][k] += PP;
-//        }
-//        else if (ip == MP-1)
-//        {
-//            PM = phi[idx_phyto+ip-1][j][k];
-//            dphi_dt[idx_phyto+ip][j][k] += PM;
-//        }
-//        else
-//        {
-//            PP = phi[idx_phyto+ip+1][j][k];
-//            PC = phi[idx_phyto+ip][j][k];
-//            PM = phi[idx_phyto+ip-1][j][k];
-//
-//            // calculate the distances in size space for size diffusion
-//            dxp = log10(lpvec[ip+1]) - log10(lpvec[ip]);
-//            dxm = log10(lpvec[ip]) - log10(lpvec[ip-1]);
-//
-//            dm = pdia/(pow(dxm,2));
-//            dc = -pdia*( 1/(dxp+dxm) + 1/(pow(dxm,2)) );
-//            dp = pdia/(dxp*dxm);
-//
-//            dphi_dt[idx_phyto+ip][j][k] += (dp*PP + dc*PC + dm*PM);
-//        }
-//    }
-//
-//
-//
+    int ip, iz;
+    int idx_phyto = idx_nitrate+1;
+    int idx_zoo = idx_nitrate+MP+1;
+    real pdia = bgc_params[6];         // size diffusion parameter
+    real dxp = 0;                      // Difference in size for plus one
+    real dxm = 0;                      // Difference in size for minus one
     
+    // Calculate size diffusion for phytoplankton
+    for (ip = 1; ip < MP-1; ip++)
+    {
+        dxm = 1.0/(log10(lpvec[ip]) - log10(lpvec[ip-1]));
+        dxp = 1.0/(log10(lpvec[ip+1]) - log10(lpvec[ip]));
+        
+        dphi_dt[idx_phyto+ip][j][k] += (pdia/day)*(dxm*dxm*phi[idx_phyto+ip-1][j][k]
+                                          - (dxm*dxp + dxm*dxm)*phi[idx_phyto+ip][j][k]
+                                          + dxp*dxm*phi[idx_phyto+ip+1][j][k]);
+    }
+    
+    // implement boundary conditions
+    dphi_dt[idx_phyto][j][k] += (pdia/day)*phi[idx_phyto+1][j][k];
+    dphi_dt[idx_phyto+MP-1][j][k] = (pdia/day)*phi[idx_phyto+MP-2][j][k];
+    
+    
+    // Calculate size diffusion for zooplankton
+    for (iz = 1; iz < MZ-1; iz++)
+    {
+        dxm = 1.0/(log10(lzvec[iz]) - log10(lzvec[iz-1]));
+        dxp = 1.0/(log10(lzvec[iz+1]) - log10(lzvec[iz]));
+        
+        dphi_dt[idx_zoo+iz][j][k] += (pdia/day)*(dxm*dxm*phi[idx_zoo+iz-1][j][k]
+                                          - (dxm*dxp + dxm*dxm)*phi[idx_zoo+iz][j][k]
+                                          + dxp*dxm*phi[idx_zoo+iz+1][j][k]);
+    }
+    
+    // implement boundary conditions
+    dphi_dt[idx_zoo][j][k] += (pdia/day)*phi[idx_zoo+1][j][k];
+    dphi_dt[idx_zoo+MZ-1][j][k] = (pdia/day)*phi[idx_zoo+MZ-2][j][k];
     
     
 }
@@ -4374,7 +4434,7 @@ int main (int argc, char ** argv)
         }
         
         
-        if (t > tmax || dt > 60*60*24)
+        if ( (t > tmax) || (dt > 60*60*24) )
         {
             fprintf(stderr,"ERROR: maximum time exceeded OR cfl_dt > 1 day \n");
             printUsage();

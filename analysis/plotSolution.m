@@ -14,7 +14,7 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
+function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,ZZ_w,avgVals,hb_psi,xx_psi] = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
 
     %%% Load convenience functions
     addpath ../utils;
@@ -112,6 +112,8 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
         end
     end
     
+%     lastVal = 299;
+    
     %%% Pick out the last N value in the saved files. 
     outputFrac = dt_s/t1year;
     yearLength = 1/outputFrac; % Count the number of N values in one year.
@@ -156,11 +158,11 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
         end
     else
         if (var_id == 0)
-            title_name = 'Residual Streamfunction';
+            title_name = 'Residual Streamfunction (m$^2$/s)';
         elseif (var_id == 1)
-            title_name = 'Mean Streamfunction';
+            title_name = 'Mean Streamfunction (m$^2$/s)';
         else 
-            title_name = 'Eddy Streamfunction';
+            title_name = 'Eddy Streamfunction (m$^2$/s)';
         end
     end
         
@@ -177,6 +179,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
         avgVals = zeros(Nx+1,Nz+1);
     end
     
+
     
     %%% Averaging loop
     ndt = lastVal - avgStart + 1; % add one to account for Matlab Indexing
@@ -199,7 +202,6 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
           phi = readOutputFile (data_file,Nx+1,Nz+1);
         end
         
-
         avgVals = avgVals + phi;
     end
     avgVals = avgVals/ndt;
@@ -260,9 +262,9 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
             else
                 if (var_id == 2)
                     cmap = cmocean('thermal');
-                    cvec = 0:4:22;
-                    minval = 0;
-                    maxval = 22;
+                    cvec = 0:2:16;
+                    minval = 4;
+                    maxval = 18;
                     clr = 'w';
                 elseif (var_id == 3) % nitrogen
                     cmap = cmocean('matter');
@@ -291,37 +293,43 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
                     clr = 'w';
                 end
             end
-            
+            fs = 32;
             pcolor(XX_tr,ZZ_tr,avgVals);
             hold on
             [C h] = contour(XX_tr,ZZ_tr,avgVals,cvec,clr);
-            clabel(C,h,'Color','w')
+            clabel(C,h,'Color','w','FontSize',20,'interpreter','latex')
             hold off
             shading interp
             c = colorbar; 
             colormap(cmap);
             c.TickLabelInterpreter = 'latex';
             set(gca,'TickLabelInterpreter','latex')
-            set(gca,'FontSize',fsplt)
+            set(gca,'FontSize',32)
             ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
 %             set(gcf,'Position',[100 100 724 654])
             xticks(0:50e3:400e3)
             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
-            yticks(-180:20:0)
-            yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
-            axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -180 0])
+%             yticks(-180:20:0)
+%             yticklabels({'-180' '-160' '-140' '-120' '-100' '-80' '-60' '-40' '-20' '0'})
+            axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -500 0])
             title(titlestr,'interpreter','latex')
             caxis([minval maxval])
         end
     else
-        cmap = cmocean('balance',20);
+        fs = 32; fsplt = fs;
+        clf;
+        cmap = cmocean('balance',30);
         psi_r_lim = avgVals;
-        limval = 1.1;
+        limval = 0.5;
         psi_r_lim = min(psi_r_lim,limval);
         psi_r_lim = max(psi_r_lim,-limval);
         pcolor(XX_psi,ZZ_psi,psi_r_lim)
         shading interp
+        hold on 
+%         [D h] = contourf(XX_psi,ZZ_psi,psi_r_lim );
+%         h.LevelList
+%         clabel(D,h,'Color','k','FontSize',20,'interpreter','latex')
         c = colorbar; 
         colormap(cmap);
         c.TickLabelInterpreter = 'latex';
@@ -329,12 +337,14 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotSolution (local
         set(gca,'FontSize',fsplt)
         ylabel('Depth (m) ','FontSize',fs,'interpreter','latex')
         xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
-        xticks(0:50e3:400e3)
-        xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
+%         xticks(-200e3:100e3:400e3)
+        xticks(50e3:50e3:400e3)
+        xticklabels({'350' '300' '250' '200' '150' '100' '50'})
+%         xticklabels({'' ''  '400' '300' '200' '100' '0'})
         title(titlestr,'interpreter','latex')
 %         caxis([min(min(psi_r_lim)) max(max(psi_r_lim))])
         caxis([-limval limval])
-        axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -1500 0])
+        axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -500 0])
     end
    
         hold on

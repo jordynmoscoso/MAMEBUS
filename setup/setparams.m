@@ -100,7 +100,7 @@ function setparams (local_home_dir,run_name,use_cluster,modeltype,MP,MZ)
   %%%%%%%%%%%%%%%%%%%%%%%% Define the topography %%%%%%%%%%%%%%%%%%%%%%%%
   Xtopog = 290*m1km;
   Ltopog = 30*m1km;
-  shelfdepth = 35;
+//  shelfdepth = 35;
   Htopog = H-shelfdepth;
   hb = H - Htopog*0.5*(1+tanh((xx_topog-Xtopog)/(Ltopog)));
   hb_psi = 0.5*(hb(1:end-1)+hb(2:end));  

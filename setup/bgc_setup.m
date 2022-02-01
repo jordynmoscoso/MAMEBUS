@@ -8,31 +8,30 @@
 %%%
 
 
-function [params, bgc_init, nbgc, lp, lz, NP, NZ, bgcRates, nallo, idxAllo] = bgc_setup(XX_tr,ZZ_tr,Lx,Nx,Nz,modeltype,MP,MZ,data_dir)
-
+function [params, bgc_init, bgc_restore, nbgc, lp, lz, NP, NZ, bgcRates, nallo, idxAllo] = bgc_setup(XX_tr,ZZ_tr,Lx,Nx,Nz,modeltype,MP,MZ,data_dir,dx,nexp,nsml,nmax)
 
 % light and temperature parameters
 qsw = 340; % W/m^2
 kw = 0.04; % light attenuation of water
 kc = 0.01; % light attenuation of phytoplankton (nitrogen units)
-Tref = 10; % deg C
+Tref = 18; % deg C (same as tmax)
 r = 0.05;  % temperature dependence
 
 % phytoplankton parameters
 au = 2.6; %1/d
 bu = -0.45;
 kn = 0.1; % mmol N/m^3
-mp = 0.2; % mortality as a fraction of uptake
+mp = 0.02; % mortality as a fraction of uptake
 
 % zooplankton parameters
 ag = 26;
 bg = -0.4;
-eff = 0.3; % grazing efficiency
-seff = 0.3; % self grazing efficiency
+eff = 1.0/3.0; % grazing efficiency
+seff = 1.0/3.0; % self grazing efficiency
 kp = 3; % mmol N/m^3
-bl = 0.5;
+bl = 0.56;
 al = 0.65;
-delta_x = 0.1; % width of grazing profile
+delta_x = dx; % width of grazing profile
 idxAllo = 4;
 pdia = 1e-9;
 
@@ -58,15 +57,16 @@ nbgc = length(params);
 
 
 %%% Create initial conditions
-Pcline = 200;
+Pcline = 180;
 Pmax = 2.5/MP; % mmol/m3
 Dmax = 0.001;
 
 %%% Initial Nitrate
-Hexp = 180; 
+% Hexp = 120;
+Hexp = nexp;
 Nmin = 2*XX_tr/Lx;
-Nmax = 30;
-Hsml = 25;
+Nmax = nmax;
+Hsml = nsml;
 Ninit =  Nmin-Nmax*tanh((ZZ_tr + Hsml)./Hexp);
 Ninit(Ninit < 0) = 0;
 
@@ -89,4 +89,15 @@ end
 
 % detritus
 bgc_init(:,:,ind) = Dmax*ones(Nx,Nz);
+
+
+% restoring Nitrate
+% Hexp = nexp;
+% Nmin = 2*XX_tr/Lx;
+% Nmax = 30;
+% Hsml = 25;
+Nrestore =  Nmin-Nmax*tanh((ZZ_tr + Hsml)./Hexp);
+Nrestore(Nrestore < 0) = 0;
+
+bgc_restore(:,:,1) = Nrestore;
 end
