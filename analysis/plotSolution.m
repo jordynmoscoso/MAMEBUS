@@ -14,7 +14,7 @@
 %%% var_id Specifies the tracer number to plot (if plot_trac is true) or
 %%% the streamfunction to plot (if plot_trac is false).
 %%%
-function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,ZZ_w,avgVals,hb_psi,xx_psi] = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
+function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,ZZ_w,ZZ_u,avgVals,hb_psi,xx_psi] = plotSolution (local_home_dir,run_name,plot_trac,var_id,avgTime)
 
     %%% Load convenience functions
     addpath ../utils;

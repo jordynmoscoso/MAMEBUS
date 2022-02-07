@@ -855,10 +855,6 @@ void calcSlopes (     const real        t,
 
                 hrx[0][k] = 1.5*(buoy[1][k] - buoy[0][k]) - 0.5*hrx[1][k];
                 hrx[Nx-1][k] = 1.5*(buoy[Nx-1][k] - buoy[Nx-2][k]) - 0.5*hrx[Nx-2][k];
-
-                // Test extending the boundary only
-//                hrx[0][k] = hrx[1][k];
-//                hrx[Nx-1][k] = hrx[Nx-2][k];
             }
 
 
@@ -871,7 +867,7 @@ void calcSlopes (     const real        t,
                                       - OneFifth * ( ( hrx[j][k] - hrx[j-1][k] )*( ZZ_phi[j][k] - ZZ_phi[j-1][k]
                                                 - OneTwelfth * ( hzx[j][k] + hzx[j-1][k] ) )
                                             - (hzx[j][k] - hzx[j-1][k])*( buoy[j][k] - buoy[j-1][k]
-                                                - OneTwelfth * ( hrx[j][k] - hrx[j-1][k] ) ) ) );
+                                                - OneTwelfth * ( hrx[j][k] + hrx[j-1][k] ) ) ) );
                 }
             }
 
