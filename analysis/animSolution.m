@@ -206,15 +206,14 @@ ncase = 1;
           caxis([-maxspeed maxspeed]);
           shading interp
         case 2 %%% Buoyancy (temperature)
-          size(XX_tr)
-          size(phi)
 %           [C h] = contourf(XX_tr/1000,ZZ_tr,phi,0:0.5:10);
           pcolor(XX_tr/1000,ZZ_tr,phi);
           shading interp
           set(gca, 'CLim', [0, 20]);
             colormap(cmocean('thermal',20));
           h=colorbar;
-          title('Potential temp. (^oC)');          
+          title('Potential temp. (^oC)');   
+          axis([min(min(XX_tr/1000)) max(max(XX_tr/1000)) -300 0]);
 %       caxis([0 20]);
 %       axis([0 1 -1 0]);
 

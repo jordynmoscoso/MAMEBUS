@@ -5,11 +5,12 @@
 %
 %
 
-function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home_dir,run_name,bgc_id,avgTime,plot_type,plot_roem,overlay)
+function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,PLTMAT,hb_psi,xx_psi,lp,lz] = plotBGC (local_home_dir,run_name,bgc_id,avgTime,plot_type,plot_roem,overlay)
     %%% Load convenience functions
     addpath ../utils;
+    addpath ~/Desktop/SSEM/utils
     
-    fs = 22; % control the size of the font here.
+    fs = 32; % control the size of the font here.
     fsplt = fs;
     
     % index values and plot types
@@ -22,12 +23,13 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     idx_size = 1;       % plots concentration weighted size
     idx_nums = 2;       % plots number of size classes present above a certain threshold value, tol
     
-    tol = 1e-2;         % tolerance for the concentration for number of size classes. 
+    tol = 0.01;         % tolerance for the concentration for number of size classes. 
     
     overlay_trac = 0;
     overlay_b = 1;
     overlay_n = 2;
     
+    dp = -100;
 
     %%%%%%%%%%%%%%%%%%%%%
     %%%%% VARIABLES %%%%%
@@ -61,6 +63,8 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     [h_c h_c_found] = readparam(params_file,'h_c','%le');
     [theta_s theta_s_found] = readparam(params_file,'theta_s','%lf');
     [theta_b theta_b_found] = readparam(params_file,'theta_b','%lf');
+    [Hbbl hbbl_found] = readparam(params_file,'Hbbl','%lf');
+    [Hsml hsml_found] = readparam(params_file,'Hsml','%lf');
 
     %%% Read bottom topography
     hb = readDataFile (params_file,dirpath,'topogFile',Nx+2,1,H*ones(Nx+2,1));
@@ -99,6 +103,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
 
     dx = Lx/Nx; %%% Latitudinal grid spacing (in meters)
     xx_psi = 0:dx:Lx;
+    xx_tr = 0.5*(xx_psi(2:end) + xx_psi(1:end-1));
 
     %%% Generate full sigma-coordinate grids
     [XX_tr,ZZ_tr,XX_psi,ZZ_psi,XX_u,ZZ_u,XX_w,ZZ_w] ...
@@ -124,6 +129,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
             end
         end
     end
+
     
     %%% Pick out the last N value in the saved files. 
     outputFrac = dt_s/t1year;
@@ -147,8 +153,8 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
 
 %         ref_run = char(strcat('~/Desktop/PhysTests-Su21/0802/runs/ssem_dx_',(vals(3)),'_',vals(4),'_',(vals(5)))); 
 %         run_name2 = char(strcat('ssem_dx_',(vals(3)),'_',vals(4),'_',(vals(5))));
-        ref_run = char('~/Desktop/PhysTests-Su21/0802/runs/ssem_dx_0.3_tau_0.075');
-        run_name2 = char('ssem_dx_0.3_tau_0.075');
+        ref_run = char('/Volumes/CIRCE/jmoscoso/zonal-gradients-paper/data/11322/ssem/ssem_NP_25_tau_0.05_Nx_60_dx_0.3');
+        run_name2 = char('ssem_NP_25_tau_0.05_Nx_60_dx_0.3');
         params_file2 = fullfile(ref_run,[run_name2,'_in']); 
         [NPs NP_found] = readparam(params_file2,'MP','%u');
         [NZs NZ_found] = readparam(params_file2,'MZ','%u');
@@ -180,12 +186,12 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
         end
         
         if (bgc_id == idx_nitrate)
-            title_name = 'Nitrate (mmol/m$^3$)';
+            title_name = 'Nitrate ($\mu$M)';
             inds2 = 1;
             disp('Plotting Nitrate')
             cmap = cmocean('matter');
         elseif (bgc_id == idx_phyto)
-            title_name = 'Phytoplankton (mg Chl/m$^3$)';
+            title_name = 'Phytoplankton (mmol N/m$^3$)';
             inds2 = 2:2+NPs-1;
             disp('Plotting Phytoplankton')
             cmap = cmocean('speed');
@@ -215,12 +221,12 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     
     % based on the bgc_id, determine the plotting tile and calculate the correct indices
     if (bgc_id == idx_nitrate)
-        title_name = 'Nitrate (mmol/m$^3$)';
+        title_name = 'Nitrate (mmol N/m$^3$)';
         inds = 1;
         disp('Plotting Nitrate')
         cmap = cmocean('matter');
     elseif (bgc_id == idx_phyto)
-        title_name = 'Phytoplankton (mg Chl/m$^3$)';
+        title_name = 'Phytoplankton (mmol N/m$^3$)';
         inds = 2:2+NP-1;
         disp('Plotting Phytoplankton')
         cmap = cmocean('speed');
@@ -237,7 +243,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
         cmap = cmocean('turbid');
     else
         disp('Default to Nutrient')
-        title_name = 'Nitrate (mmol/m$^3$)';
+        title_name = 'Nitrate (mmol N/m$^3$)';
         inds = 1;
     end
     
@@ -257,6 +263,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
     PMAT = zeros(Nx,Nz,Ntracs);
     lxvec = zeros(Nx,1);
     PLTMAT = zeros(Nx,Ntracs);
+    NVEC = zeros(Nx,1);
     
 %     lastVal = min(lastVal2,lastVal);
     
@@ -273,6 +280,7 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
 %     ndt = lastVal - avgStart + 1; % add one to account for Matlab Indexing
 %     for n = 1:2*365
     n = lastVal;
+%     n = 2
         ndt = 1;
             for var_id = inds
                 data_file = fullfile(dirpath,['TRAC',num2str(var_id),'_n=',num2str(n),'.dat']);
@@ -280,7 +288,10 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
 %                 avgVals(:,:,var_id+1-min(inds)) = avgVals(:,:,var_id+1-min(inds)) + phi;
                 avgVals(:,:,var_id+1-min(inds)) = phi;
                 
-
+                if bgc_id > 0
+                    n_file = fullfile(dirpath,['TRAC',num2str(3),'_n=',num2str(n),'.dat']);
+                    nmat = readOutputFile(n_file,Nx,Nz);    
+                end
                 
                 % load in all of the plankton into a matrix
                 if plot_type == idx_nums
@@ -295,10 +306,16 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
             if (bgc_id == idx_nitrate || bgc_id == idx_det)
                 pltVals = totVals;
             else
-                arevals = sum(avgVals >= tol,3);
-                arevals = (arevals >= tol);
+                if bgc_id == idx_zoo
+                    inttol = 1e-8;
+                else
+                    inttol = 1e-4;
+                end
+                    
+                arevals = sum(avgVals >= inttol,3);
+                arevals = (arevals >= inttol);
                 dev = totVals;
-                dev(dev <= tol) = 1;
+                dev(dev <= inttol) = 1;
                 pltVals = zeros(Nx,Nz);
                 if bgc_id == idx_phyto
                     ll = lp;
@@ -309,24 +326,64 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                    pltVals = pltVals + avgVals(:,:,ii).*ll(ii)./dev; 
                 end
                 pltVals = pltVals.*arevals;
+                
+%                 % plot the peaks based on concentration.
+%                 pltpeaks = zeros(Nx,Nz);
+%                 smpeaks = zeros(Nx,Nz);
+%                 lgpeaks = zeros(Nx,Nz);
+%                 for ii = 1:Nx
+%                     disp(ii)
+%                     for jj = 1:Nz
+%                         if abs(ZZ_tr(ii,jj)) < 110
+%                             [npeaks,inds] = countPeaks(avgVals(ii,jj,:),1e-3);
+%                             
+%                             
+%                             %satisfy some tolerance
+%                             for ip = 1:npeaks
+%                                 ptemp = max(avgVals(ii,jj,inds(1,ip):inds(2,ip)));
+% %                                 disp([inds(1,ip) inds(2,ip) max(ptemp)])
+%                                 if ptemp >= 0.25
+%                                     pltpeaks(ii,jj) = pltpeaks(ii,jj) + 1;
+%                                 end
+%                                 
+%                                 if ptemp >= 0.1
+%                                     smpeaks(ii,jj) = smpeaks(ii,jj) + 1;
+%                                 end
+%                                 
+%                                 if ptemp >= 0.5
+%                                     lgpeaks(ii,jj) = lgpeaks(ii,jj) + 1;
+%                                 end
+% %                                 disp([npeaks ptemp])
+% %                                 pause
+%                             end
+%                         end
+%                     end
+%                 end
+                
+                
             end
         elseif plot_type == idx_nums
             % reference depth
-            H_ref = -20; %m
+            H_ref = -Hsml/2; %m
 
 
             % Organize data
             for ii = 1:Nx
                 [~,ind] = min(abs(H_ref - ZZ_tr(:,ii)));
+                if ind == Nz
+                    ind = ind-1;
+                end
     %             disp([ZZ_tr(ind,ii), -hb_tr(ii)])
                 lxvec(ii) = XX_tr(ii,1);
                 if -hb_tr(ii) > H_ref
+                    NVEC(ii) = NaN;
                     PLTMAT(ii,:) = NaN*ones(1,Ntracs);
                     if plot_roem
                         PLTSSEM(ii,:) = NaN*ones(1,NPs);
                     end
                 else
-                    PLTMAT(ii,:) = squeeze(PMAT(ii,ind,:));
+                    NVEC(ii) = squeeze(mean(nmat(ii,ind:Nz),2));
+                    PLTMAT(ii,:) = squeeze(mean(PMAT(ii,ind:Nz,:),2));
                     if plot_roem
                         PLTSSEM(ii,:) = squeeze(ssemVals(ii,ind,:));
                     end
@@ -348,6 +405,23 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                     SSEMMAT(:,ii) = sum( PLTSSEM(:,sind(1,ii):sind(2,ii)), 2);
                 end
             end
+            
+            
+            
+            
+            CWS = zeros(Nx,1);
+            ext = NP-5;
+%             lp(ext)
+            for ii = 1:Nx
+                val = 0;
+                ptot = sum(PLTMAT(ii,1:ext),2);
+                for ip = 1:ext
+                    val = val + PLTMAT(ii,ip)*lp(ip);
+                end
+%                 val/ptot
+                CWS(ii) = val;
+%                 CWS(ii) = sum(PLTMAT(ii,:),2);
+            end
         else
             % plot the total nutrient concentration
             if (bgc_id == idx_phyto || bgc_id == idx_zoo)
@@ -361,92 +435,178 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
         nlines = 5;
         if bgc_id == idx_phyto
             minval = 0.05;
-            contvec = [0.01 0.025 0.1 0.2 0.5 0.8 1.2];
-            cmax = 1.5;
+%             contvec = [0.1 0.5 1 1.5 2 2.5 3 4];
+            contvec = [0.2 0.4 0.6 0.9 1 1.5 2];
+            cmax = 8;
         else
             minval = 0.01;
-            contvec = 0.1*[0.01 0.1 0.2 0.5 0.8 1.2];
+            contvec = [0.001 0.01 0.05 0.2 0.5 1];
             cmax = .08;
         end
         dN = (max(max(totVals)) - minval)/nlines;
 %         contvec = minval:dN:max(max(totVals));
+        idx_buoy = 2;
+        data_file = fullfile(dirpath,['TRAC',num2str(idx_buoy),'_n=',num2str(n),'.dat']);
+        buoy_ref = readOutputFile(data_file,Nx,Nz); 
         
-        dp = -75;
-        figure(100); clf;
+        
+        F = figure(100); clf;
 
         % load in buoyancy
         if overlay == overlay_b
             idx_buoy = 2;
             ocont = 0:2:22;
+            contmat = buoy_ref;
         elseif (overlay == overlay_n) 
             idx_buoy = 3;
             ocont = [0 1 2, 4 6 10 10:5:30];
+            contmat = nmat;
+        elseif (overlay == overlay_trac)
+            ocont = contvec;
+            contmat = totVals;
         else
             idx_buoy = 3+NP+NZ+1;
             ocont = [0:100:300 300:200:600 600:500:4500];
         end
-        data_file = fullfile(dirpath,['TRAC',num2str(idx_buoy),'_n=',num2str(n),'.dat']);
-        buoy_ref = readOutputFile(data_file,Nx,Nz);  
+         
     
         if plot_type == idx_size
-            A = subplot(1,3,1);
-            pcolor(XX_tr,ZZ_tr,totVals);
+%             fs = 24;
+%             A = subplot(1,2,1);
+%             pcolor(XX_tr,ZZ_tr,totVals);
+%             hold on
+%             [C h] = contour(XX_tr,ZZ_tr,contmat,round(ocont,2),'k'); % plankton values
+%             plot(xx_psi,-hb_psi,'k')
+%             hold off
+%             shading interp
+%             a = colorbar;
+%             caxis([min(min(totVals)) max(max(totVals))])
+%             a.TickLabelInterpreter = 'latex';
+%             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) dp 0])
+%             colormap(A,cmap)
+%             clabel(C,h,'Color','k','FontSize',16,'interpreter','latex')
+%             title('Total Concentration','interpreter','latex')
+%             ylabel('Depth (m)','interpreter','latex')
+% %             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+%             xticks(0:100e3:400e3)
+%             xticklabels({'400' '300' '200' '100' '0'})
+%             set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
+
+            pltVals(pltVals == 0) = NaN;
+%             B = subplot(1,2,2);
+            pcolor(XX_tr,ZZ_tr,log10(pltVals))
             hold on
-            [C h] = contour(XX_tr,ZZ_tr,totVals,round(contvec,2),'k'); % plankton values
             plot(xx_psi,-hb_psi,'k')
             hold off
             shading interp
             a = colorbar;
             a.TickLabelInterpreter = 'latex';
-            axis([min(min(XX_tr))+100e3 max(max(XX_tr)) dp 0])
-            colormap(A,cmap)
-            clabel(C,h,'Color','k')
-            title('Total Concentration','interpreter','latex')
-            ylabel('Depth (m)','interpreter','latex')
-    %         xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
-            xticks(0:50e3:400e3)
-            xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
-            set(gca,'FontSize',24,'TickLabelInterpreter','latex')
-
-
-            B = subplot(1,3,3);
-            pcolor(XX_tr,ZZ_tr,(log10(pltVals)))
-            hold on
-            plot(xx_psi,-hb_psi,'k')
-            hold off
-            shading flat
-            a = colorbar;
-            a.TickLabelInterpreter = 'latex';
-            axis([min(min(XX_tr))+100e3 max(max(XX_tr)) dp 0])
-            caxis([min(log10(lp)) 0.6])
-            colormap(B,cmocean('rain'));
-    %         xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
-            xticks(0:50e3:400e3)
-            xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
-            title('Average Size (concentration weighted)','interpreter','latex')
-            set(gca,'FontSize',24,'TickLabelInterpreter','latex')
-
-
-            sumbool = avgVals > tol;
-            C = subplot(1,3,2);
-            pcolor(XX_tr,ZZ_tr,totVals);
-            hold on
-            [D h] = contour(XX_tr,ZZ_tr,sum(sumbool,3),0:4,'k');
-            clabel(D,h,'Color','k')
-            plot(xx_psi,-hb_psi,'k')
-            hold off
-            shading interp
-            a = colorbar;
-            a.TickLabelInterpreter = 'latex';
-            axis([min(min(XX_tr))+100e3 max(max(XX_tr)) dp 0])
-            colormap(C,cmap);
-            caxis([0 max(max(totVals))])
+            axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -150 0])
+            caxis([0 1.5])
+            colormap(cmocean('deep',30));
             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
             xticks(0:50e3:400e3)
             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
-            title('Number of Classes Present','interpreter','latex')
-            set(gca,'FontSize',24,'TickLabelInterpreter','latex')
+%             xticks(0:100e3:400e3)
+            ylabel('Depth (m)','interpreter','latex')
+%             xticklabels({'400' '300' '200' '100' '0'})
+            title('Average Size','interpreter','latex')
+            set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
 
+
+%             sumbool = avgVals > tol;
+%             C = subplot(1,3,2);
+%             pcolor(XX_tr,ZZ_tr,totVals);
+%             hold on
+%             [D h] = contour(XX_tr,ZZ_tr,sum(sumbool,3),0:7,'k');
+%             clabel(D,h,'Color','k','FontSize',16,'interpreter','latex')
+%             plot(xx_psi,-hb_psi,'k')
+%             hold off
+%             shading interp
+%             a = colorbar;
+%             a.TickLabelInterpreter = 'latex';
+%             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) dp 0])
+%             colormap(C,cmap);
+%             caxis([0 max(max(totVals))])
+%             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+% %             xticks(0:50e3:400e3)
+% %             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
+%             xticks(0:100e3:400e3)
+%             xticklabels({'400' '300' '200' '100' '0'})
+%             title('Number of Classes','interpreter','latex')
+%             set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
+
+            
+            PLTMAT = pltVals;
+            
+%             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%             figure(101); clf;
+%             A = subplot(1,3,2);
+%             pcolor(XX_tr,ZZ_tr,pltpeaks);
+%             hold on
+%             [D h] = contour(XX_tr,ZZ_tr,pltpeaks,0:7,'k');
+%             clabel(D,h,'Color','k','FontSize',16,'interpreter','latex')
+%             plot(xx_psi,-hb_psi,'k')
+%             hold off
+%             shading flat
+%             a = colorbar;
+%             a.TickLabelInterpreter = 'latex';
+%             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) dp 0])
+%             colormap(A,cmocean('amp',20));
+%             caxis([0 3])
+%             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+% %             xticks(0:50e3:400e3)
+% %             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
+%             xticks(0:100e3:400e3)
+%             xticklabels({'400' '300' '200' '100' '0'})
+%             title('Number of Classes','interpreter','latex')
+%             set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
+%             
+%             B = subplot(1,3,1);
+%             pcolor(XX_tr,ZZ_tr,smpeaks);
+%             hold on
+%             [D h] = contour(XX_tr,ZZ_tr,smpeaks,0:7,'k');
+%             clabel(D,h,'Color','k','FontSize',16,'interpreter','latex')
+%             plot(xx_psi,-hb_psi,'k')
+%             hold off
+%             shading flat
+%             a = colorbar;
+%             a.TickLabelInterpreter = 'latex';
+%             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) dp 0])
+%             colormap(B,cmocean('amp',20));
+%             caxis([0 3])
+%             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+% %             xticks(0:50e3:400e3)
+% %             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
+%             xticks(0:100e3:400e3)
+%             xticklabels({'400' '300' '200' '100' '0'})
+%             title('Number of Classes','interpreter','latex')
+%             set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
+%             
+%             C = subplot(1,3,3);
+%             pcolor(XX_tr,ZZ_tr,lgpeaks);
+%             hold on
+%             [D h] = contour(XX_tr,ZZ_tr,lgpeaks,0:7,'k');
+%             clabel(D,h,'Color','k','FontSize',16,'interpreter','latex')
+%             plot(xx_psi,-hb_psi,'k')
+%             hold off
+%             shading flat
+%             a = colorbar;
+%             a.TickLabelInterpreter = 'latex';
+%             axis([min(min(XX_tr))+50e3 max(max(XX_tr)) dp 0])
+%             colormap(C,cmocean('amp',20));
+%             caxis([0 3])
+%             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+% %             xticks(0:50e3:400e3)
+% %             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})
+%             xticks(0:100e3:400e3)
+%             xticklabels({'400' '300' '200' '100' '0'})
+%             title('Number of Classes','interpreter','latex')
+%             set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
+%             
+%             mdpeaks = pltpeaks;
+%             save('size_tau0.05.mat','smpeaks','mdpeaks','lgpeaks','-v7.3')
+            
         elseif plot_type == idx_nums
     %         C = subplot(1,2,1);
             if plot_roem
@@ -472,34 +632,36 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                 xticks(0:50e3:400e3)
                 ylabel('Depth (m)','interpreter','latex')
                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})  
-                title(['Concentration (mmol N/m$^3$), $\Delta\ell$ = 0.4, $\tau_{max}$ = 0.1, t = ', num2str(round((n-n0)*dt_s./t1year,2)) ' years'],'interpreter','latex') 
-                set(gca,'FontSize',28,'TickLabelInterpreter','latex')
+                title(['[P] (mmol N/m$^3$), $\Delta\ell$ = 0.3, $\tau_{max}$ = 0.05'],'interpreter','latex') 
+                set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
 
+                
                 rnd = 2;
                 B = subplot(2,1,2);
-                PLTMAT = log10(PLTMAT);
+%                 PLTMAT = log10(PLTMAT);
                 hold on
                 for ii = 1:NP
                    plot(lxvec,(PLTMAT(:,ii)),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
                    
                 end
                 
-                for ii = 1:NP
-%                    plot(lxvec,PLTMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
-%                    plot(lxvec,SSEMMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
-%                     plot(lxvec,SSEMMAT(:,ii),'--','LineWidth',1,'Color',cmap(round(ii*255/NP),:))
-                end
+%                 for ii = 1:NP
+% %                    plot(lxvec,PLTMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
+% %                    plot(lxvec,SSEMMAT(:,ii),'LineWidth',3,'Color',cmap(round(ii*255/NP),:))
+%                     plot(lxvec,(SSEMMAT(:,ii)),'--','LineWidth',2,'Color',cmap(round(ii*255/NP),:))
+%                 end
                 
                 hold off
                 if bgc_id == idx_phyto
                     legstr = {};
-                    for ii = 1:Ntracs
+                    for ii = 1:Ntracs-3
                         legstr{ii} = ['P',num2str(ii),': log$_{10}$($\ell_p$) = ',num2str(round(log10(lp(ii)),2))];
+%                         legstr{ii} = ['P',num2str(ii),': ',num2str(round(log10(lp(ii)),2))];
                     end
                     C = 'P';
-                    leg = legend(legstr,'Location','southeast');
-                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -3 0.5])
-%                     axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 max(max((PLTMAT)))])
+                    leg = legend(legstr,'Location','northwest');
+%                     axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -3 1.75])
+                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) 0 max(max((PLTMAT)))])
                 else
                     legstr = {};
                     for ii = 1:Ntracs
@@ -508,74 +670,109 @@ function [XX_tr,ZZ_tr,XX_psi,ZZ_psi,avgVals,hb_psi,xx_psi] = plotBGC (local_home
                     C = 'Z';
                     
                     leg = legend(legstr,'Location','northwest');
-                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 0.5])
-%                     axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 max(max((PLTMAT)))])
+%                     axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -4 0.5])
+                    axis([min(min(XX_tr))+100e3 max(max(XX_tr)) 0 max(max((PLTMAT)))])
                 end
                 
-                ylabel(['log$_{10}$(',C,') (log$_{10}$(mmol N/m$^3$))'],'interpreter','latex')
-                set(gca,'FontSize',28,'TickLabelInterpreter','latex')
+                ylabel(['log$_{10}$(',C,') (mmol N/m$^3$)'],'interpreter','latex')
+                set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
                 xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
                 xticks(0:50e3:400e3)
                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})   
-                set(leg,'Interpreter','latex','FontSize',21)
+                set(leg,'Interpreter','latex','FontSize',16)
 %                 figure(101)
 %                 plot(lxvec,log10(PLTMAT*lp./sum(PLTMAT,2)))
 
             else
+%                 NA = subplot(2,1,1);
+% 
+%                 nmap = cmocean('dense');
+%                 plot(xx_tr,NVEC,'LineWidth',4,'Color',nmap(180,:))
+%                 xticks(0:50e3:400e3)
+%                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})   
+% %                 xlabel('Distance From Coast (km)','FontSize',28,'interpreter','latex')
+%                 title('Depth Averaged Nitrate (mmol N/m$^2$)','interpreter','latex')
+%                 ylabel(' mmol N/m$^2$','FontSize',28,'interpreter','latex')
+%                 axis([min(min(XX_tr))+100e3 max(max(XX_tr)) 0 6.1])
+%                 set(gca,'FontSize',28,'TickLabelInterpreter','latex')
+                
+%                 a = 106/16*0.08;
+                  a = 1;
+%                 A = figure(100);
                 if bgc_id == idx_phyto
                     [LX,LP] = ndgrid(lxvec,log10(lp));
                 else
                     [LX,LP] = ndgrid(lxvec,log10(lz));
                 end
-                pcolor(LX,LP,PLTMAT)
+                pcolor(LX,LP,PLTMAT.*a)
                 hold on
-                [C h] = contour(LX,LP,PLTMAT,contvec,'k');
+%                 [C h] = contour(LX,LP,PLTMAT.*a,contvec.*a,'k');
+                [C h] = contour(LX,LP,PLTMAT.*a,[0.01 0.1 1],'k');
                 hold off
-                clabel(C,h,'Color','k')
+                clabel(C,h,'Color','k','FontSize',16,'interpreter','latex')
                 shading interp
                 a = colorbar;
                 a.TickLabelInterpreter = 'latex';
-                axis([min(min(XX_tr))+100e3 max(max(XX_tr)) min(min((LP))) max(max((LP)))])
+                axis([min(min(XX_tr))+100e3 max(max(XX_tr)) min(min((LP))) 1.5])
                 if bgc_id == idx_phyto
-                    colormap(cmocean('speed',20));
+                    colormap(cmocean('speed',30));
                 else
                     colormap(cmocean('dense',20));
                 end
         %         caxis([0 max(max(max(PLTMAT)),0.35)])
                 caxis([0 cmax])
-                xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
+%                 xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
                 xticks(0:50e3:400e3)
                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})        
-                ylabel('Size log10(ESD)','interpreter','latex')
-                title(['Phytoplankton Distribution at ', num2str(H_ref), 'm depth'],'interpreter','latex')
-                set(gca,'FontSize',24,'TickLabelInterpreter','latex')
+                ylabel('log$_{10}$(ESD)','interpreter','latex')
+                title('Sml Averaged Phytoplankton (mmol N/m$^2$)','interpreter','latex')
+                set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
+                xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
 %                 max(max(PLTMAT))
+
+%                 B = subplot(3,1,3);
+%                 plot(xx_tr,log10(CWS),'LineWidth',4,'Color',cmap(180,:))
+%                 xticks(0:50e3:400e3)
+%                 xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})   
+%                 xlabel('Distance From Coast (km)','FontSize',28,'interpreter','latex')
+%                 title('Concentration Weighted Size (log$_{10}(\mu$m))','interpreter','latex')
+%                 ylabel('$\log_{10}$(ESD)','FontSize',28,'interpreter','latex')
+%                 axis([min(min(XX_tr))+100e3 max(max(XX_tr)) -1 1])
+%                 set(gca,'FontSize',28,'TickLabelInterpreter','latex')
+
+
             end
 
 
 
         else
+%             cff = 106/16*0.08;
+            cff = 1;
             if (bgc_id == idx_nitrate)
-               contvec = [1 2 3 5 10 15 20]; 
+%                contvec = [1 2 3 5 10 15 20]; 
+                contvec = [1 6.5 12.1 17.6 23.1];
+            elseif (bgc_id == idx_det)
+                contvec = [0.01 0.1 0.25 0.5 1 1.5 2];
             end
-            pcolor(XX_tr,ZZ_tr,pltVals)
+            pcolor(XX_tr,ZZ_tr,(pltVals.*cff))
             shading interp
             hold on
-            [C h] = contour(XX_tr,ZZ_tr,totVals,round(contvec,2),'k');
+            [C h] = contour(XX_tr,ZZ_tr,contmat,[0 round(ocont,3)],'k');
             plot(xx_psi,-hb_psi,'k')
             hold off
             shading interp
             a = colorbar;
             a.TickLabelInterpreter = 'latex';
-            axis([min(min(XX_tr))+100e3 max(max(XX_tr)) dp 0])
+            axis([min(min(XX_tr))+50e3 max(max(XX_tr)) -150 0])
             colormap(cmap)
-            clabel(C,h,'Color','k')
+            caxis([0 8])
+            clabel(C,h,'Color','k','FontSize',16,'interpreter','latex')
             xlabel('Distance From Coast (km)','FontSize',fs,'interpreter','latex')
             xticks(0:50e3:400e3)
             ylabel('Depth (m)','interpreter','latex')
             xticklabels({'400' '350' '300' '250' '200' '150' '100' '50' '0'})  
-            title('Total Phytoplankton Concentration (mmol N/m$^3$)','interpreter','latex') 
-            set(gca,'FontSize',24,'TickLabelInterpreter','latex')
+            title(title_name,'interpreter','latex') 
+            set(gca,'FontSize',fs,'TickLabelInterpreter','latex')
         end
         drawnow;
 
